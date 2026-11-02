@@ -1,0 +1,34 @@
+# Flutter/Dart build artifacts
+.dart_tool/
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+
+# Build outputs
+build/
+android/app/debug
+android/app/profile
+android/app/release
+ios/Flutter/.last_build_id
+ios/Pods/
+*.xcworkspace/
+*.xcodeproj/
+
+# Platform generated files
+android/
+ios/
+linux/
+macos/
+windows/
+web/
+
+# Symbolication and obfuscation
+app.*.symbols
+app.*.map.json
+
+# Test and coverage
+coverage/
+*.log

@@ -1,0 +1,2228 @@
+​
+openapi: 3.0.3
+
+info:
+  title: Church Management API
+  description: >
+    REST API for church administration, user management, announcements,
+    halls, bookings, events, cemetery services, and user-based certificate
+    storage. Authentication uses JWT bearer tokens. The backend must enforce
+    role-based authorization and resource ownership.
+  version: 1.9.0
+
+servers:
+  - url: https://example.com/api
+    description: Production server
+  - url: http://localhost:3000/api
+    description: Local development server
+
+tags:
+  - name: Authentication
+  - name: Users
+  - name: Churches
+  - name: Announcements
+  - name: Halls
+  - name: Bookings
+  - name: Events
+  - name: Cemetery
+  - name: Certificates
+
+security:
+  - BearerAuth: []
+
+paths:
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email already registered
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Exchange a refresh token for a new access + refresh pair
+      description: >
+        Rotates the refresh token: the presented token is revoked and a new
+        access + refresh pair is returned. Reusing a revoked or expired refresh
+        token returns 401.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: New token pair issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke a single refresh token
+      description: Idempotent. Revokes the presented refresh token (one session).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '204':
+          description: Refresh token revoked
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/forgot-password:
+    post:
+      tags: [Authentication]
+      summary: Request a password reset
+      description: >
+        Always returns 200 to avoid account enumeration. If the email is
+        registered, a single-use reset token is delivered out of band.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '200':
+          description: Request accepted (regardless of whether the email exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/reset-password:
+    post:
+      tags: [Authentication]
+      summary: Set a new password using a reset token
+      description: >
+        Validates the single-use reset token and updates the password. All of
+        the user's refresh tokens are revoked, forcing re-login everywhere.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/verify-email:
+    post:
+      tags: [Authentication]
+      summary: Verify an email address
+      description: Consumes a single-use verification token and marks the email verified.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+      responses:
+        '200':
+          description: Email verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/resend-verification:
+    post:
+      tags: [Authentication]
+      summary: Resend an email verification token
+      description: >
+        Always returns 200 to avoid account enumeration. If the email is
+        registered and not yet verified, a new verification token is sent.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendVerificationRequest'
+      responses:
+        '200':
+          description: Request accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /users/logout-all:
+    post:
+      tags: [Users]
+      summary: Revoke all refresh tokens for the current user
+      description: Logs the authenticated user out of all devices/sessions.
+      responses:
+        '204':
+          description: All refresh tokens revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      description: Requires church_admin or super_admin permissions.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: churchId
+          in: query
+          schema:
+            type: string
+        - name: role
+          in: query
+          schema:
+            $ref: '#/components/schemas/UserRole'
+      responses:
+        '200':
+          description: Users retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get the current user's profile
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      tags: [Users]
+      summary: Update the current user's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileUpdateRequest'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/{userId}/role:
+    patch:
+      tags: [Users]
+      summary: Update a user's role
+      description: Requires super_admin permissions.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRoleRequest'
+      responses:
+        '200':
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /churches:
+    get:
+      tags: [Churches]
+      summary: List churches
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Churches retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChurchListItem'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Churches]
+      summary: Create a church
+      description: Requires super_admin permissions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChurchRequest'
+      responses:
+        '201':
+          description: Church created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Church'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /churches/{churchId}:
+    get:
+      tags: [Churches]
+      summary: Get church details
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+      responses:
+        '200':
+          description: Church details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Church'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Churches]
+      summary: Update a church
+      description: Requires church_admin for this church or super_admin.
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChurchRequest'
+      responses:
+        '200':
+          description: Church updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Church'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Churches]
+      summary: Delete a church
+      description: Requires super_admin permissions.
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+      responses:
+        '204':
+          description: Church deleted
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /churches/{churchId}/announcements:
+    get:
+      tags: [Announcements]
+      summary: List church announcements
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Announcements retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Announcement'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Announcements]
+      summary: Create an announcement
+      description: Requires church_admin for this church or super_admin.
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementRequest'
+      responses:
+        '201':
+          description: Announcement created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /announcements/{announcementId}:
+    put:
+      tags: [Announcements]
+      summary: Update an announcement
+      parameters:
+        - $ref: '#/components/parameters/AnnouncementId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementUpdateRequest'
+      responses:
+        '200':
+          description: Announcement updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Announcements]
+      summary: Delete an announcement
+      parameters:
+        - $ref: '#/components/parameters/AnnouncementId'
+      responses:
+        '204':
+          description: Announcement deleted
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /churches/{churchId}/halls:
+    get:
+      tags: [Halls]
+      summary: List church halls
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Halls retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Hall'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Halls]
+      summary: Create a hall
+      description: Requires church_admin for this church or super_admin.
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HallRequest'
+      responses:
+        '201':
+          description: Hall created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hall'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /halls/{hallId}:
+    get:
+      tags: [Halls]
+      summary: Get hall details
+      parameters:
+        - $ref: '#/components/parameters/HallId'
+      responses:
+        '200':
+          description: Hall details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hall'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Halls]
+      summary: Update a hall
+      parameters:
+        - $ref: '#/components/parameters/HallId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HallUpdateRequest'
+      responses:
+        '200':
+          description: Hall updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hall'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Halls]
+      summary: Delete a hall
+      parameters:
+        - $ref: '#/components/parameters/HallId'
+      responses:
+        '204':
+          description: Hall deleted
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /churches/{churchId}/bookings:
+    get:
+      tags: [Bookings]
+      summary: List bookings for a church
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/BookingStatus'
+      responses:
+        '200':
+          description: Bookings retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Booking'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Bookings]
+      summary: Create a booking
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+      responses:
+        '201':
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Hall already booked for an overlapping time range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /bookings:
+    get:
+      tags: [Bookings]
+      summary: List the current user's bookings
+      description: >
+        Returns bookings created by the authenticated user across all churches.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/BookingStatus'
+      responses:
+        '200':
+          description: Bookings retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Booking'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /bookings/{bookingId}:
+    get:
+      tags: [Bookings]
+      summary: Get booking details
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: Booking details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /bookings/{bookingId}/status:
+    patch:
+      tags: [Bookings]
+      summary: Update booking status
+      description: Requires church_admin for the booking's church or super_admin.
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingStatusUpdateRequest'
+      responses:
+        '200':
+          description: Booking status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /bookings/{bookingId}/cancel:
+    patch:
+      tags: [Bookings]
+      summary: Cancel a booking
+      description: The booking owner or an authorized church administrator may cancel.
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequest'
+      responses:
+        '200':
+          description: Booking cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /churches/{churchId}/events:
+    get:
+      tags: [Events]
+      summary: List church events
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Events retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Events]
+      summary: Create an event
+      description: Requires church_admin for this church or super_admin.
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventRequest'
+      responses:
+        '201':
+          description: Event created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /events/{eventId}:
+    get:
+      tags: [Events]
+      summary: Get event details
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Event details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Events]
+      summary: Update an event
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventRequest'
+      responses:
+        '200':
+          description: Event updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Events]
+      summary: Delete an event
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '204':
+          description: Event deleted
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /events/{eventId}/register:
+    post:
+      tags: [Events]
+      summary: Register for an event
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventRegistrationRequest'
+      responses:
+        '201':
+          description: Registration created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventRegistration'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Already registered or event registration unavailable
+
+  /events/{eventId}/registrations:
+    get:
+      tags: [Events]
+      summary: List registrations for an event
+      description: >
+        Returns attendee registrations for the event. Requires church_admin for
+        the event's church or super_admin.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Registrations retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EventRegistration'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /churches/{churchId}/cemetery-plots:
+    get:
+      tags: [Cemetery]
+      summary: List cemetery plots
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/CemeteryPlotStatus'
+      responses:
+        '200':
+          description: Cemetery plots retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CemeteryPlot'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Cemetery]
+      summary: Create a cemetery plot
+      description: Requires church_admin for this church or super_admin.
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CemeteryPlotCreate'
+      responses:
+        '201':
+          description: Cemetery plot created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CemeteryPlot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Plot identifier already exists
+
+  /cemetery-plots/{plotId}:
+    put:
+      tags: [Cemetery]
+      summary: Update a cemetery plot
+      description: Requires church_admin for the plot's church or super_admin.
+      parameters:
+        - name: plotId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CemeteryPlotUpdate'
+      responses:
+        '200':
+          description: Cemetery plot updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CemeteryPlot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Plot identifier already exists
+    delete:
+      tags: [Cemetery]
+      summary: Delete a cemetery plot
+      description: Requires church_admin for the plot's church or super_admin.
+      parameters:
+        - name: plotId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Cemetery plot deleted
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /churches/{churchId}/cemetery-service-requests:
+    get:
+      tags: [Cemetery]
+      summary: List cemetery service requests
+      description: Regular users may only view their own requests.
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/CemeteryRequestStatus'
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/CemeteryServiceType'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Cemetery service requests retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CemeteryServiceRequest'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Cemetery]
+      summary: Submit a cemetery service request
+      parameters:
+        - $ref: '#/components/parameters/ChurchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CemeteryServiceRequestCreate'
+      responses:
+        '201':
+          description: Service request submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CemeteryServiceRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Requested plot is not available
+
+  /cemetery-service-requests/{requestId}:
+    get:
+      tags: [Cemetery]
+      summary: Get a cemetery service request
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Service request details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CemeteryServiceRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /cemetery-service-requests/{requestId}/status:
+    patch:
+      tags: [Cemetery]
+      summary: Update cemetery service request status
+      description: Requires church_admin for the request's church or super_admin.
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CemeteryRequestStatusUpdate'
+      responses:
+        '200':
+          description: Request status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CemeteryServiceRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/{userId}/certificates:
+    get:
+      tags: [Certificates]
+      summary: List certificates for a user
+      description: >
+        Returns certificate metadata for the specified user. A regular user
+        may list only their own certificates. An authorized administrator may
+        list certificates for users they are permitted to manage.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: type
+          in: query
+          description: Filter certificates by type.
+          schema:
+            $ref: '#/components/schemas/CertificateType'
+      responses:
+        '200':
+          description: Certificates retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Certificate'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [Certificates]
+      summary: Upload a certificate for a user
+      description: >
+        Upload a PDF certificate associated with the userId in the path.
+        Regular users may upload only for themselves. An authorized
+        administrator may upload for another user according to backend
+        permissions. The backend must verify the target user, validate the
+        file content and size, and store the file securely.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CertificateUploadRequest'
+            encoding:
+              file:
+                contentType: application/pdf
+      responses:
+        '201':
+          description: Certificate uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: Uploaded file exceeds the configured size limit
+        '415':
+          description: Unsupported file type; PDF is required
+        '409':
+          description: Certificate number conflicts with an existing certificate
+
+  /certificates/{certificateId}/download:
+    get:
+      tags: [Certificates]
+      summary: Download a certificate
+      description: >
+        Downloads the stored PDF. The certificate owner or an administrator
+        authorized to access that user's certificates may download the file.
+        The backend must verify ownership and permissions before returning it.
+      parameters:
+        - $ref: '#/components/parameters/CertificateId'
+      responses:
+        '200':
+          description: Certificate PDF
+          headers:
+            Content-Disposition:
+              description: Suggested filename for the downloaded file
+              schema:
+                type: string
+                example: 'attachment; filename="certificate.pdf"'
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ChurchId:
+      name: churchId
+      in: path
+      required: true
+      description: Unique identifier of the church
+      schema:
+        type: string
+
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: Unique identifier of the user
+      schema:
+        type: string
+
+    AnnouncementId:
+      name: announcementId
+      in: path
+      required: true
+      schema:
+        type: string
+
+    HallId:
+      name: hallId
+      in: path
+      required: true
+      schema:
+        type: string
+
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      schema:
+        type: string
+
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema:
+        type: string
+
+    CertificateId:
+      name: certificateId
+      in: path
+      required: true
+      description: Unique identifier of the certificate
+      schema:
+        type: string
+
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    Search:
+      name: search
+      in: query
+      required: false
+      description: >
+        Case-insensitive text filter applied to the most relevant text fields
+        of the listed resource.
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request or validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Authentication is required or the token is invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: The authenticated user does not have permission
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: The requested resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        phone:
+          type: string
+        unit:
+          type: string
+        churchId:
+          type: string
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    AuthResponse:
+      type: object
+      required: [accessToken, user]
+      properties:
+        accessToken:
+          type: string
+          description: Short-lived JWT access token
+        refreshToken:
+          type: string
+          description: Opaque, revocable refresh token (rotated on /auth/refresh)
+        expiresIn:
+          type: integer
+          description: Access-token lifetime in seconds
+        token:
+          type: string
+          deprecated: true
+          description: Deprecated alias of accessToken, retained for compatibility
+        user:
+          $ref: '#/components/schemas/User'
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    LogoutRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          description: Single-use password reset token
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+
+    VerifyEmailRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: Single-use email verification token
+
+    ResendVerificationRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
+    UserRole:
+      type: string
+      enum:
+        - user
+        - priest
+        - associate_priest
+        - church_admin
+        - super_admin
+
+    User:
+      type: object
+      required: [id, name, email, role, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        profilePic:
+          type: string
+          format: uri
+          nullable: true
+        role:
+          $ref: '#/components/schemas/UserRole'
+        churchId:
+          type: string
+          nullable: true
+        emailVerified:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    UserProfileUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        profilePic:
+          type: string
+          format: uri
+          nullable: true
+
+    UpdateUserRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: '#/components/schemas/UserRole'
+
+    PriestDetails:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        profilePic:
+          type: string
+          format: uri
+          nullable: true
+
+    ChurchRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        logo:
+          type: string
+          format: uri
+        priest:
+          $ref: '#/components/schemas/PriestDetails'
+        associatePriest:
+          $ref: '#/components/schemas/PriestDetails'
+
+    Church:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        logo:
+          type: string
+          format: uri
+        priest:
+          $ref: '#/components/schemas/PriestDetails'
+        associatePriest:
+          $ref: '#/components/schemas/PriestDetails'
+        createdAt:
+          type: string
+          format: date-time
+
+    ChurchListItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        logo:
+          type: string
+          format: uri
+
+    AnnouncementRequest:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        image:
+          type: string
+          format: uri
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AnnouncementUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        image:
+          type: string
+          format: uri
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    Announcement:
+      type: object
+      required: [id, churchId, title, content]
+      properties:
+        id:
+          type: string
+        churchId:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        image:
+          type: string
+          format: uri
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    HallRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        capacity:
+          type: integer
+          minimum: 1
+        location:
+          type: string
+        images:
+          type: array
+          description: Image URLs for the hall; no API-defined item-count limit.
+          items:
+            type: string
+            format: uri
+        amenities:
+          type: array
+          items:
+            type: string
+        price:
+          type: number
+          minimum: 0
+
+    HallUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        capacity:
+          type: integer
+          minimum: 1
+        location:
+          type: string
+        images:
+          type: array
+          description: Image URLs for the hall; no API-defined item-count limit.
+          items:
+            type: string
+            format: uri
+        amenities:
+          type: array
+          items:
+            type: string
+        price:
+          type: number
+          minimum: 0
+
+    Hall:
+      type: object
+      required: [id, churchId, name]
+      properties:
+        id:
+          type: string
+        churchId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        capacity:
+          type: integer
+        location:
+          type: string
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+        amenities:
+          type: array
+          items:
+            type: string
+        price:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    BookingStatus:
+      type: string
+      enum:
+        - pending
+        - approved
+        - rejected
+        - cancelled
+        - completed
+
+    BookingRequest:
+      type: object
+      required: [hallId, startDate, endDate]
+      properties:
+        hallId:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        purpose:
+          type: string
+        notes:
+          type: string
+
+    BookingStatusUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        adminNotes:
+          type: string
+
+    CancelBookingRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+
+    Booking:
+      type: object
+      required: [id, churchId, hallId, userId, startDate, endDate, status]
+      properties:
+        id:
+          type: string
+        churchId:
+          type: string
+        hallId:
+          type: string
+        userId:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        purpose:
+          type: string
+        notes:
+          type: string
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        adminNotes:
+          type: string
+        cancellationReason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    EventRequest:
+      type: object
+      required: [title, startDate]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        image:
+          type: string
+          format: uri
+        capacity:
+          type: integer
+          minimum: 1
+        registrationRequired:
+          type: boolean
+          default: false
+
+    Event:
+      type: object
+      required: [id, churchId, title, startDate]
+      properties:
+        id:
+          type: string
+        churchId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        image:
+          type: string
+          format: uri
+        capacity:
+          type: integer
+        registrationRequired:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    EventRegistrationRequest:
+      type: object
+      properties:
+        attendeeName:
+          type: string
+        attendeeEmail:
+          type: string
+          format: email
+        attendeePhone:
+          type: string
+        notes:
+          type: string
+
+    EventRegistration:
+      type: object
+      required: [id, eventId]
+      properties:
+        id:
+          type: string
+        eventId:
+          type: string
+        userId:
+          type: string
+          nullable: true
+        attendeeName:
+          type: string
+        attendeeEmail:
+          type: string
+          format: email
+        attendeePhone:
+          type: string
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CemeteryServiceType:
+      type: string
+      enum:
+        - burial
+        - plot_reservation
+        - grave_maintenance
+        - memorial_service
+        - other
+
+    CemeteryRequestStatus:
+      type: string
+      enum:
+        - pending
+        - approved
+        - rejected
+        - scheduled
+        - completed
+        - cancelled
+
+    CemeteryPlotStatus:
+      type: string
+      enum:
+        - available
+        - reserved
+        - occupied
+        - unavailable
+
+    CemeteryPlotCreate:
+      type: object
+      required: [plotNumber]
+      properties:
+        plotNumber:
+          type: string
+        section:
+          type: string
+        locationDescription:
+          type: string
+        status:
+          $ref: '#/components/schemas/CemeteryPlotStatus'
+        notes:
+          type: string
+
+    CemeteryPlotUpdate:
+      type: object
+      description: >
+        Update a cemetery plot. All fields are optional; only provided fields
+        are changed.
+      properties:
+        plotNumber:
+          type: string
+        section:
+          type: string
+        locationDescription:
+          type: string
+        status:
+          $ref: '#/components/schemas/CemeteryPlotStatus'
+        notes:
+          type: string
+
+    CemeteryPlot:
+      type: object
+      required: [id, churchId, plotNumber, status]
+      properties:
+        id:
+          type: string
+        churchId:
+          type: string
+        plotNumber:
+          type: string
+        section:
+          type: string
+        locationDescription:
+          type: string
+        status:
+          $ref: '#/components/schemas/CemeteryPlotStatus'
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CemeteryServiceRequestCreate:
+      type: object
+      required: [type, fullName, contactPhone, description]
+      properties:
+        type:
+          $ref: '#/components/schemas/CemeteryServiceType'
+        fullName:
+          type: string
+        contactPhone:
+          type: string
+        contactEmail:
+          type: string
+          format: email
+        deceasedName:
+          type: string
+        requestedDate:
+          type: string
+          format: date-time
+        plotId:
+          type: string
+          description: Required by the backend when the request type needs a plot.
+        description:
+          type: string
+        notes:
+          type: string
+
+    CemeteryServiceRequest:
+      type: object
+      required: [id, churchId, userId, type, status, fullName]
+      properties:
+        id:
+          type: string
+        churchId:
+          type: string
+        userId:
+          type: string
+        type:
+          $ref: '#/components/schemas/CemeteryServiceType'
+        status:
+          $ref: '#/components/schemas/CemeteryRequestStatus'
+        fullName:
+          type: string
+        contactPhone:
+          type: string
+        contactEmail:
+          type: string
+          format: email
+        deceasedName:
+          type: string
+        requestedDate:
+          type: string
+          format: date-time
+        plotId:
+          type: string
+          nullable: true
+        description:
+          type: string
+        notes:
+          type: string
+        adminNotes:
+          type: string
+        scheduledDate:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CemeteryRequestStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/CemeteryRequestStatus'
+        adminNotes:
+          type: string
+        scheduledDate:
+          type: string
+          format: date-time
+          nullable: true
+
+    CertificateType:
+      type: string
+      description: Category of certificate uploaded for a user.
+      enum:
+        - baptism
+        - confirmation
+        - marriage
+        - first_communion
+        - death
+        - other
+
+    CertificateUploadRequest:
+      type: object
+      required:
+        - file
+        - type
+        - certificateNumber
+        - fullName
+      properties:
+        file:
+          type: string
+          format: binary
+          description: PDF certificate file.
+        type:
+          $ref: '#/components/schemas/CertificateType'
+        certificateNumber:
+          type: string
+          minLength: 1
+        fullName:
+          type: string
+          minLength: 1
+          description: Name of the person named on the certificate.
+        issueDate:
+          type: string
+          format: date
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    Certificate:
+      type: object
+      required:
+        - id
+        - userId
+        - uploadedByUserId
+        - type
+        - certificateNumber
+        - fullName
+        - fileName
+        - mimeType
+        - fileSize
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Unique certificate identifier.
+        userId:
+          type: string
+          description: User who owns this certificate.
+        uploadedByUserId:
+          type: string
+          description: User ID of the person who uploaded the certificate.
+        type:
+          $ref: '#/components/schemas/CertificateType'
+        certificateNumber:
+          type: string
+        fullName:
+          type: string
+        issueDate:
+          type: string
+          format: date
+          nullable: true
+        fileName:
+          type: string
+        mimeType:
+          type: string
+          example: application/pdf
+        fileSize:
+          type: integer
+          format: int64
+          minimum: 0
+          description: File size in bytes.
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    Pagination:
+      type: object
+      required: [page, limit, total, totalPages]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

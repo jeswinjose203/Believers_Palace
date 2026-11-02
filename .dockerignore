@@ -1,0 +1,22 @@
+# Git
+.git
+.gitignore
+
+# Env / secrets
+.env
+
+# Build artifacts
+bin/
+*.exe
+*.out
+
+# Docs / IDE
+README.md
+.idea/
+.vscode/
+*.swp
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml

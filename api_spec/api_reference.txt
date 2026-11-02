@@ -1,0 +1,1197 @@
+================================================================================
+BELIEVERS PALACE - API REFERENCE
+Church / Community Management REST API
+================================================================================
+
+Generated from source (handlers, models, server routing). This document lists
+every endpoint with its URL, required headers, request body, query parameters,
+and a description of behavior and responses.
+
+--------------------------------------------------------------------------------
+GENERAL INFORMATION
+--------------------------------------------------------------------------------
+
+Base URL (local / Docker):   http://localhost:8080
+API base path:               /api
+Health check (no /api):      GET http://localhost:8080/health
+
+Content type:
+  - All JSON endpoints accept and return  application/json
+  - Certificate upload uses               multipart/form-data
+  - Certificate download returns          application/pdf (binary stream)
+
+Authentication:
+  - All endpoints EXCEPT /api/auth/* require a JWT.
+  - Pass it in the header:   Authorization: Bearer <JWT>
+  - Obtain tokens from /auth/register, /auth/login, or /auth/refresh.
+    These return "accessToken" (short-lived JWT), "refreshToken" (opaque,
+    revocable), and "expiresIn" (seconds). "token" is still returned as a
+    deprecated alias of accessToken.
+  - Default access-token lifetime (ACCESS_TOKEN_TTL): 15m. Use /auth/refresh to
+    obtain a new pair; the old refresh token is rotated (revoked).
+  - New accounts receive an email verification token on registration
+    (soft verification: the account is usable immediately; "emailVerified"
+    becomes true after POST /auth/verify-email).
+
+Email delivery:
+  - MAIL_PROVIDER=log (default) writes reset/verification tokens to the server
+    log: "[mailer] email verification for <email>: token=<tok>".
+  - MAIL_PROVIDER=smtp sends real email (SMTP_HOST/PORT/USERNAME/PASSWORD,
+    MAIL_FROM). Gmail: smtp.gmail.com:587 with a 16-char App Password.
+
+Local testing bypass:
+  - Set SKIP_JWT_VALIDATION=true (development only; refused in production) to
+    bypass JWT auth. Requests then run as a synthetic super_admin.
+  - Override the injected identity per request with headers:
+      X-Debug-User-Id, X-Debug-Role, X-Debug-Church-Id
+  - Seed the fixed debug user first (make seed / make docker-seed) so that
+    foreign-key-bound operations succeed.
+
+Roles (lowest to highest privilege):
+  user, priest, associate_priest, church_admin, super_admin
+  - super_admin   : may perform any action.
+  - church_admin  : scoped to their own church (enforced in routing + service);
+                    full administrative control of that church's resources.
+  - priest /      : church staff scoped to their own church. May manage
+    associate_      pastoral content (announcements, events) for that church.
+    priest          No administrative powers (halls, booking status, cemetery
+                    plots/requests, user roles stay church_admin/super_admin).
+  - user          : manages only their own bookings, service requests,
+                    event registrations, profile, and certificates.
+
+--------------------------------------------------------------------------------
+STANDARD RESPONSE SHAPES
+--------------------------------------------------------------------------------
+
+Error envelope (any 4xx / 5xx):
+  {
+    "message": "human readable message",
+    "code": "machine_readable_code",        // e.g. bad_request, unauthorized,
+    "details": { ... }                       // forbidden, not_found, conflict,
+  }                                           // internal (details is optional)
+
+Common error codes & HTTP status:
+  400 bad_request              - invalid JSON / validation failure
+  401 unauthorized             - missing/invalid token or bad credentials
+  403 forbidden                - insufficient permissions
+  404 not_found                - resource does not exist
+  409 conflict                 - duplicate / state conflict
+  413 payload_too_large        - uploaded file exceeds limit
+  415 unsupported_media_type   - non-PDF certificate upload
+  500 internal                 - unexpected server error
+
+Paginated list envelope (all list endpoints):
+  {
+    "data": [ ... ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 134,
+      "totalPages": 7
+    }
+  }
+
+Common pagination query parameters (all list endpoints):
+  page   integer  default 1    (minimum 1)
+  limit  integer  default 20   (range 1..100; values above 100 are clamped)
+  search string   optional     case-insensitive text filter over the most
+                               relevant text fields of the listed resource
+                               (see each list endpoint for the fields matched)
+
+Date/time formats:
+  - Timestamps in JSON bodies are RFC3339 (e.g. "2025-06-01T14:00:00Z").
+  - Certificate "issueDate" form field is YYYY-MM-DD.
+
+================================================================================
+1. AUTHENTICATION
+================================================================================
+
+--------------------------------------------------------------------------------
+1.1  Register a new user
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/auth/register
+Auth   : None (public)
+Headers:
+  Content-Type: application/json
+
+Request body:
+  {
+    "name":     "Jane Doe",         // required, non-empty
+    "email":    "jane@example.com", // required, valid email, unique
+    "password": "supersecret",      // required, minimum 8 characters
+    "phone":    "+1-555-0100",      // optional, nullable
+    "unit":     "Youth Ministry",   // optional, nullable
+    "churchId": "uuid-or-null"      // optional, nullable
+  }
+
+Description:
+  Creates a user with the default role "user" and returns a token pair plus the
+  created user object. Password is bcrypt-hashed and never returned.
+
+Success: 201 Created
+  {
+    "accessToken": "<jwt>",
+    "refreshToken": "<opaque-token>",
+    "expiresIn": 900,
+    "token": "<jwt>",               // deprecated alias of accessToken
+    "user": {
+      "id": "uuid",
+      "name": "Jane Doe",
+      "email": "jane@example.com",
+      "phone": "+1-555-0100",
+      "unit": "Youth Ministry",
+      "profilePic": null,
+      "role": "user",
+      "churchId": null,
+      "emailVerified": false,
+      "createdAt": "2025-01-01T00:00:00Z"
+    }
+  }
+
+Errors:
+  400 bad_request  - missing name, invalid email, or password < 8 chars
+  409 conflict     - email already registered
+
+--------------------------------------------------------------------------------
+1.2  Log in
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/auth/login
+Auth   : None (public)
+Headers:
+  Content-Type: application/json
+
+Request body:
+  {
+    "email":    "jane@example.com",  // required
+    "password": "supersecret"        // required
+  }
+
+Description:
+  Verifies credentials and returns a token pair plus the user object (same
+  shape as register).
+
+Success: 200 OK
+  { "accessToken": "<jwt>", "refreshToken": "<opaque>", "expiresIn": 900,
+    "token": "<jwt>", "user": { ... } }
+
+Errors:
+  400 bad_request   - email or password missing/invalid format
+  401 unauthorized  - invalid email or password
+
+--------------------------------------------------------------------------------
+1.3  Refresh tokens
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/auth/refresh
+Auth   : None (public)
+Headers:
+  Content-Type: application/json
+
+Request body:
+  { "refreshToken": "<opaque-token>" }    // required
+
+Description:
+  Rotates the refresh token: the presented token is revoked and a new
+  access + refresh pair is issued. Reuse of a revoked/expired token fails.
+
+Success: 200 OK  -> same shape as login (accessToken, refreshToken, expiresIn,
+                    token, user)
+
+Errors:
+  400 bad_request   - refreshToken missing
+  401 unauthorized  - invalid or expired refresh token
+
+--------------------------------------------------------------------------------
+1.4  Logout (single session)
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/auth/logout
+Auth   : None (public)
+Headers:
+  Content-Type: application/json
+
+Request body:
+  { "refreshToken": "<opaque-token>" }    // required
+
+Description:
+  Revokes the presented refresh token. Idempotent.
+
+Success: 204 No Content
+
+Errors:
+  400 bad_request   - refreshToken missing
+
+--------------------------------------------------------------------------------
+1.5  Forgot password
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/auth/forgot-password
+Auth   : None (public)
+Headers:
+  Content-Type: application/json
+
+Request body:
+  { "email": "jane@example.com" }    // required
+
+Description:
+  Always returns 200 (no account enumeration). If the email is registered a
+  single-use reset token is delivered via the Mailer. In development the token
+  is written to the API log: "[mailer] password reset for <email>: token=<tok>".
+
+Success: 200 OK  -> { "message": "if the email is registered, a reset link has been sent" }
+
+--------------------------------------------------------------------------------
+1.6  Reset password
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/auth/reset-password
+Auth   : None (public)
+Headers:
+  Content-Type: application/json
+
+Request body:
+  { "token": "<reset-token>", "newPassword": "newsupersecret" }  // min 8 chars
+
+Description:
+  Validates the single-use reset token, sets the new password, and revokes all
+  of the user's refresh tokens (forces re-login everywhere).
+
+Success: 200 OK  -> { "message": "password updated" }
+
+Errors:
+  400 bad_request   - token missing/invalid/expired, or password < 8 chars
+
+--------------------------------------------------------------------------------
+1.7  Verify email
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/auth/verify-email
+Auth   : None (public)
+Headers:
+  Content-Type: application/json
+
+Request body:
+  { "token": "<verification-token>" }    // required
+
+Description:
+  Consumes the single-use verification token and sets the user's emailVerified
+  flag to true.
+
+Success: 200 OK  -> { "message": "email verified" }
+
+Errors:
+  400 bad_request   - token missing/invalid/expired
+
+--------------------------------------------------------------------------------
+1.8  Resend email verification
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/auth/resend-verification
+Auth   : None (public)
+Headers:
+  Content-Type: application/json
+
+Request body:
+  { "email": "jane@example.com" }    // required
+
+Description:
+  Always returns 200 (no account enumeration). If the email is registered and
+  not yet verified, a new verification token is issued and sent. In development
+  the token is written to the API log.
+
+Success: 200 OK  -> { "message": "if the email is registered and unverified, a verification link has been sent" }
+
+================================================================================
+2. USERS
+================================================================================
+All routes below require:  Authorization: Bearer <JWT>
+
+--------------------------------------------------------------------------------
+2.0  Log out everywhere
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/users/logout-all
+Auth   : Authenticated (any role)
+
+Description:
+  Revokes every active refresh token for the current user (logs them out of all
+  devices/sessions).
+
+Success: 204 No Content
+
+Errors:
+  401 unauthorized  - missing/invalid token
+
+--------------------------------------------------------------------------------
+2.1  List users
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/users
+Access : church_admin, super_admin
+Query parameters:
+  churchId  string  filter by church (church_admin is always forced to own church)
+  role      string  filter by role (must be a valid role)
+  page      integer (pagination)
+  limit     integer (pagination)
+
+Description:
+  Returns a paginated list of users. A church_admin only sees users within
+  their own church, regardless of the churchId query value.
+
+Success: 200 OK -> paginated envelope of user objects
+Errors : 400 (invalid role filter), 403 (insufficient permissions)
+
+--------------------------------------------------------------------------------
+2.2  Get current user
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/users/me
+Access : current authenticated user
+
+Description: Returns the profile of the authenticated user.
+Success: 200 OK -> user object
+Errors : 404 not_found
+
+--------------------------------------------------------------------------------
+2.3  Update current user profile
+--------------------------------------------------------------------------------
+Method : PUT
+URL    : /api/users/me
+Access : current authenticated user
+Headers:
+  Content-Type: application/json
+
+Request body (all fields optional; omit a field to leave it unchanged):
+  {
+    "name":       "New Name",
+    "phone":      "+1-555-0101",
+    "unit":       "Choir",
+    "profilePic": "https://cdn.example.com/pic.jpg"
+  }
+
+Description:
+  Partial update of the current user's own profile. "name" may not be set to
+  an empty string.
+
+Success: 200 OK -> updated user object
+Errors : 400 bad_request (empty name), 404 not_found
+
+--------------------------------------------------------------------------------
+2.4  Update a user's role
+--------------------------------------------------------------------------------
+Method : PATCH
+URL    : /api/users/{userId}/role
+Access : super_admin only
+Headers:
+  Content-Type: application/json
+Path params:
+  userId  string  target user id
+
+Request body:
+  { "role": "church_admin" }   // one of: user, priest, associate_priest,
+                                //         church_admin, super_admin
+
+Description: Changes the target user's role.
+Success: 200 OK -> updated user object
+Errors : 400 (invalid role), 403 (not super_admin), 404 not_found
+
+================================================================================
+3. CHURCHES
+================================================================================
+All routes require:  Authorization: Bearer <JWT>
+
+--------------------------------------------------------------------------------
+3.1  List churches
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/churches
+Access : any authenticated user
+Query  : page, limit (pagination); search (matches name, address)
+
+Description: Returns a paginated list of condensed church records.
+Success: 200 OK -> paginated envelope of:
+  { "id":"uuid", "name":"...", "address":"...", "logo":"..." }
+
+--------------------------------------------------------------------------------
+3.2  Create a church
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/churches
+Access : super_admin only
+Headers:
+  Content-Type: application/json
+
+Request body:
+  {
+    "name":    "Grace Cathedral",   // required
+    "address": "123 Main St",
+    "phone":   "+1-555-0000",
+    "email":   "info@grace.org",
+    "logo":    "https://.../logo.png",
+    "priest": {
+      "name":       "Fr. John",
+      "phone":      "+1-555-0001",
+      "email":      "john@grace.org",
+      "profilePic": "https://.../john.jpg"
+    },
+    "associatePriest": {
+      "name":       "Fr. Paul",
+      "phone":      "+1-555-0002",
+      "email":      "paul@grace.org",
+      "profilePic": null
+    }
+  }
+
+Description:
+  Creates a church. Priest / associatePriest are optional nested objects stored
+  as JSONB.
+
+Success: 201 Created -> full church object (includes createdAt, updatedAt)
+Errors : 400 bad_request, 403 forbidden
+
+--------------------------------------------------------------------------------
+3.3  Get a church
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/churches/{churchId}
+Access : any authenticated user
+Path params: churchId string
+
+Success: 200 OK -> full church object
+Errors : 404 not_found
+
+--------------------------------------------------------------------------------
+3.4  Update a church
+--------------------------------------------------------------------------------
+Method : PUT
+URL    : /api/churches/{churchId}
+Access : owning church_admin or super_admin
+Headers:
+  Content-Type: application/json
+Path params: churchId string
+
+Request body: same shape as Create (3.2).
+
+Success: 200 OK -> updated church object
+Errors : 400 bad_request, 403 forbidden, 404 not_found
+
+--------------------------------------------------------------------------------
+3.5  Delete a church
+--------------------------------------------------------------------------------
+Method : DELETE
+URL    : /api/churches/{churchId}
+Access : super_admin only
+Path params: churchId string
+
+Success: 204 No Content (empty body)
+Errors : 403 forbidden, 404 not_found
+
+================================================================================
+4. ANNOUNCEMENTS
+================================================================================
+All routes require:  Authorization: Bearer <JWT>
+
+--------------------------------------------------------------------------------
+4.1  List announcements for a church
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/churches/{churchId}/announcements
+Access : any authenticated user
+Path params: churchId string
+Query  : page, limit (pagination); search (matches title, content)
+
+Success: 200 OK -> paginated envelope of announcement objects:
+  {
+    "id":"uuid", "churchId":"uuid", "title":"...", "content":"...",
+    "image": null, "publishedAt": "2025-01-01T00:00:00Z" | null,
+    "createdAt":"...", "updatedAt":"..."
+  }
+
+--------------------------------------------------------------------------------
+4.2  Create an announcement
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/churches/{churchId}/announcements
+Access : owning church_admin or super_admin
+Headers:
+  Content-Type: application/json
+Path params: churchId string
+
+Request body:
+  {
+    "title":       "Sunday Service",     // required
+    "content":     "Join us at 9am",     // required
+    "image":       "https://.../img.jpg",// optional, nullable
+    "publishedAt": "2025-01-01T00:00:00Z"// optional, nullable (RFC3339)
+  }
+
+Success: 201 Created -> announcement object
+Errors : 400 bad_request, 403 forbidden
+
+--------------------------------------------------------------------------------
+4.3  Update an announcement
+--------------------------------------------------------------------------------
+Method : PUT
+URL    : /api/announcements/{announcementId}
+Access : owning church_admin or super_admin
+Headers:
+  Content-Type: application/json
+Path params: announcementId string
+
+Request body (all fields optional; omit to leave unchanged):
+  {
+    "title":       "Updated title",
+    "content":     "Updated content",
+    "image":       "https://.../img.jpg",
+    "publishedAt": "2025-01-01T00:00:00Z"
+  }
+
+Success: 200 OK -> updated announcement object
+Errors : 400 bad_request, 403 forbidden, 404 not_found
+
+--------------------------------------------------------------------------------
+4.4  Delete an announcement
+--------------------------------------------------------------------------------
+Method : DELETE
+URL    : /api/announcements/{announcementId}
+Access : owning church_admin or super_admin
+Path params: announcementId string
+
+Success: 204 No Content
+Errors : 403 forbidden, 404 not_found
+
+================================================================================
+5. HALLS
+================================================================================
+All routes require:  Authorization: Bearer <JWT>
+
+--------------------------------------------------------------------------------
+5.1  List halls for a church
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/churches/{churchId}/halls
+Access : any authenticated user
+Path params: churchId string
+Query  : page, limit (pagination); search (matches name, description, location)
+
+Success: 200 OK -> paginated envelope of hall objects:
+  {
+    "id":"uuid", "churchId":"uuid", "name":"...", "description":"...",
+    "capacity": 200, "location":"...", "images":["..."],
+    "amenities":["..."], "price": 500.0, "createdAt":"..."
+  }
+
+--------------------------------------------------------------------------------
+5.2  Create a hall
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/churches/{churchId}/halls
+Access : owning church_admin or super_admin
+Headers:
+  Content-Type: application/json
+Path params: churchId string
+
+Request body:
+  {
+    "name":        "Fellowship Hall",   // required
+    "description": "Large event space",
+    "capacity":    200,                  // optional, nullable integer
+    "location":    "Ground floor",
+    "images":      ["https://.../1.jpg"],// array of strings
+    "amenities":   ["projector","wifi"], // array of strings
+    "price":       500.0                 // optional, nullable number
+  }
+
+Success: 201 Created -> hall object
+Errors : 400 bad_request, 403 forbidden
+
+--------------------------------------------------------------------------------
+5.3  Get a hall
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/halls/{hallId}
+Access : any authenticated user
+Path params: hallId string
+
+Success: 200 OK -> hall object
+Errors : 404 not_found
+
+--------------------------------------------------------------------------------
+5.4  Update a hall
+--------------------------------------------------------------------------------
+Method : PUT
+URL    : /api/halls/{hallId}
+Access : owning church_admin or super_admin
+Headers:
+  Content-Type: application/json
+Path params: hallId string
+
+Request body (all fields optional; omit to leave unchanged):
+  {
+    "name":"...", "description":"...", "capacity":150,
+    "location":"...", "images":["..."], "amenities":["..."], "price":600.0
+  }
+
+Success: 200 OK -> updated hall object
+Errors : 400 bad_request, 403 forbidden, 404 not_found
+
+--------------------------------------------------------------------------------
+5.5  Delete a hall
+--------------------------------------------------------------------------------
+Method : DELETE
+URL    : /api/halls/{hallId}
+Access : owning church_admin or super_admin
+Path params: hallId string
+
+Success: 204 No Content
+Errors : 403 forbidden, 404 not_found
+
+================================================================================
+6. BOOKINGS
+================================================================================
+All routes require:  Authorization: Bearer <JWT>
+
+Booking status lifecycle (enum):
+  pending, approved, rejected, cancelled, completed
+
+--------------------------------------------------------------------------------
+6.1  List bookings for a church
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/churches/{churchId}/bookings
+Access : admins see all bookings; regular users see only their own
+Path params: churchId string
+Query parameters:
+  status  string  filter by booking status
+  search  string  matches purpose, notes
+  page, limit     (pagination)
+
+Success: 200 OK -> paginated envelope of booking objects:
+  {
+    "id":"uuid", "churchId":"uuid", "hallId":"uuid", "userId":"uuid",
+    "startDate":"...", "endDate":"...", "purpose":"...", "notes":"...",
+    "status":"pending", "adminNotes":"...", "cancellationReason":"...",
+    "createdAt":"..."
+  }
+
+--------------------------------------------------------------------------------
+6.1a  List my bookings
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/bookings
+Access : any authenticated user (returns only the caller's own bookings,
+         across all churches)
+Query parameters:
+  status  string  filter by booking status
+  search  string  matches purpose, notes
+  page, limit     (pagination)
+
+Success: 200 OK -> paginated envelope of booking objects (same shape as 6.1)
+Errors : 401 unauthorized
+
+--------------------------------------------------------------------------------
+6.2  Create a booking
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/churches/{churchId}/bookings
+Access : any authenticated user
+Headers:
+  Content-Type: application/json
+Path params: churchId string
+
+Request body:
+  {
+    "hallId":    "uuid",                  // required
+    "startDate": "2025-06-01T09:00:00Z",  // required (RFC3339)
+    "endDate":   "2025-06-01T17:00:00Z",  // required (RFC3339)
+    "purpose":   "Wedding reception",
+    "notes":     "Need extra chairs"
+  }
+
+Description:
+  Creates a booking (initial status "pending"). The hall must exist and must
+  belong to {churchId}. The requested time range must not overlap an existing
+  active (pending or approved) booking for the same hall; overlaps are rejected
+  (enforced in the service layer and by a database exclusion constraint).
+
+Success: 201 Created -> booking object
+Errors : 400 bad_request, 403 forbidden, 404 not_found (hall),
+         409 conflict (hall already booked for an overlapping time range)
+
+--------------------------------------------------------------------------------
+6.3  Get a booking
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/bookings/{bookingId}
+Access : the booking owner or a church admin
+Path params: bookingId string
+
+Success: 200 OK -> booking object
+Errors : 403 forbidden, 404 not_found
+
+--------------------------------------------------------------------------------
+6.4  Update booking status
+--------------------------------------------------------------------------------
+Method : PATCH
+URL    : /api/bookings/{bookingId}/status
+Access : church_admin or super_admin
+Headers:
+  Content-Type: application/json
+Path params: bookingId string
+
+Request body:
+  {
+    "status":     "approved",        // one of the status enum values
+    "adminNotes": "Approved by office"
+  }
+
+Success: 200 OK -> updated booking object
+Errors : 400 bad_request, 403 forbidden, 404 not_found
+
+--------------------------------------------------------------------------------
+6.5  Cancel a booking
+--------------------------------------------------------------------------------
+Method : PATCH
+URL    : /api/bookings/{bookingId}/cancel
+Access : the booking owner or a church admin
+Headers:
+  Content-Type: application/json   (body is OPTIONAL; empty body allowed)
+Path params: bookingId string
+
+Request body (optional):
+  { "reason": "Change of plans" }
+
+Success: 200 OK -> updated booking object (status "cancelled")
+Errors : 400 bad_request, 403 forbidden, 404 not_found
+
+================================================================================
+7. EVENTS
+================================================================================
+All routes require:  Authorization: Bearer <JWT>
+
+--------------------------------------------------------------------------------
+7.1  List events for a church
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/churches/{churchId}/events
+Access : any authenticated user
+Path params: churchId string
+Query  : page, limit (pagination); search (matches title, description, location)
+
+Success: 200 OK -> paginated envelope of event objects:
+  {
+    "id":"uuid", "churchId":"uuid", "title":"...", "description":"...",
+    "location":"...", "startDate":"...", "endDate":"..." | null,
+    "image":"...", "capacity": 100, "registrationRequired": true,
+    "createdAt":"..."
+  }
+
+--------------------------------------------------------------------------------
+7.2  Create an event
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/churches/{churchId}/events
+Access : owning church_admin or super_admin
+Headers:
+  Content-Type: application/json
+Path params: churchId string
+
+Request body:
+  {
+    "title":                "Easter Service",   // required
+    "description":          "Celebration",
+    "location":             "Main sanctuary",
+    "startDate":            "2025-04-20T09:00:00Z", // required (RFC3339)
+    "endDate":              "2025-04-20T11:00:00Z", // optional, nullable
+    "image":                "https://.../img.jpg",
+    "capacity":             100,                 // optional, nullable integer
+    "registrationRequired": true                 // optional, nullable boolean
+  }
+
+Success: 201 Created -> event object
+Errors : 400 bad_request, 403 forbidden
+
+--------------------------------------------------------------------------------
+7.3  Get an event
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/events/{eventId}
+Access : any authenticated user
+Path params: eventId string
+
+Success: 200 OK -> event object
+Errors : 404 not_found
+
+--------------------------------------------------------------------------------
+7.4  Update an event
+--------------------------------------------------------------------------------
+Method : PUT
+URL    : /api/events/{eventId}
+Access : owning church_admin or super_admin
+Headers:
+  Content-Type: application/json
+Path params: eventId string
+
+Request body: same shape as Create (7.2).
+
+Success: 200 OK -> updated event object
+Errors : 400 bad_request, 403 forbidden, 404 not_found
+
+--------------------------------------------------------------------------------
+7.5  Delete an event
+--------------------------------------------------------------------------------
+Method : DELETE
+URL    : /api/events/{eventId}
+Access : owning church_admin or super_admin
+Path params: eventId string
+
+Success: 204 No Content
+Errors : 403 forbidden, 404 not_found
+
+--------------------------------------------------------------------------------
+7.6  Register for an event
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/events/{eventId}/register
+Access : any authenticated user
+Headers:
+  Content-Type: application/json   (body is OPTIONAL; empty body allowed)
+Path params: eventId string
+
+Request body (optional; defaults derived from the authenticated user):
+  {
+    "attendeeName":  "Jane Doe",
+    "attendeeEmail": "jane@example.com",
+    "attendeePhone": "+1-555-0100",
+    "notes":         "Vegetarian meal"
+  }
+
+Description:
+  Registers the current user to attend. Fails if the user is already
+  registered or if registration is unavailable for the event.
+
+Success: 201 Created -> registration object:
+  {
+    "id":"uuid", "eventId":"uuid", "userId":"uuid" | null,
+    "attendeeName":"...", "attendeeEmail":"...", "attendeePhone":"...",
+    "notes":"...", "createdAt":"..."
+  }
+
+Errors :
+  400 bad_request
+  403 forbidden
+  404 not_found (event)
+  409 conflict  - already registered OR registration unavailable
+
+--------------------------------------------------------------------------------
+7.7  List registrations for an event
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/events/{eventId}/registrations
+Access : owning church_admin or super_admin
+Path params: eventId string
+Query  : page, limit (pagination)
+
+Description:
+  Returns the attendee registrations for the event, most recent first.
+
+Success: 200 OK -> paginated envelope of registration objects:
+  {
+    "id":"uuid", "eventId":"uuid", "userId":"uuid" | null,
+    "attendeeName":"...", "attendeeEmail":"...", "attendeePhone":"...",
+    "notes":"...", "createdAt":"..."
+  }
+Errors : 403 forbidden, 404 not_found (event)
+
+================================================================================
+8. CEMETERY
+================================================================================
+All routes require:  Authorization: Bearer <JWT>
+
+Plot status (enum):     available, reserved, occupied, unavailable
+Service type (enum):    burial, plot_reservation, grave_maintenance,
+                        memorial_service, other
+Request status (enum):  pending, approved, rejected, scheduled, completed,
+                        cancelled
+
+--------------------------------------------------------------------------------
+8.1  List cemetery plots for a church
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/churches/{churchId}/cemetery-plots
+Access : any authenticated user
+Path params: churchId string
+Query parameters:
+  status  string  filter by plot status
+  search  string  matches plot number, section, location description
+  page, limit     (pagination)
+
+Success: 200 OK -> paginated envelope of plot objects:
+  {
+    "id":"uuid", "churchId":"uuid", "plotNumber":"A-12", "section":"A",
+    "locationDescription":"...", "status":"available", "notes":"...",
+    "createdAt":"..."
+  }
+
+--------------------------------------------------------------------------------
+8.2  Create a cemetery plot
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/churches/{churchId}/cemetery-plots
+Access : church_admin or super_admin
+Headers:
+  Content-Type: application/json
+Path params: churchId string
+
+Request body:
+  {
+    "plotNumber":          "A-12",      // required, unique within church
+    "section":             "A",
+    "locationDescription": "North wall",
+    "status":              "available", // plot status enum
+    "notes":               "..."
+  }
+
+Success: 201 Created -> plot object
+Errors : 400 bad_request, 403 forbidden, 409 conflict (plot number exists)
+
+--------------------------------------------------------------------------------
+8.2a  Update a cemetery plot
+--------------------------------------------------------------------------------
+Method : PUT
+URL    : /api/cemetery-plots/{plotId}
+Access : church_admin (of the plot's church) or super_admin
+Headers:
+  Content-Type: application/json
+Path params: plotId string
+
+Request body (all fields optional; only provided fields are changed):
+  {
+    "plotNumber":          "A-12",       // must be non-empty if provided
+    "section":             "A",
+    "locationDescription": "North wall",
+    "status":              "reserved",   // plot status enum
+    "notes":               "..."
+  }
+
+Success: 200 OK -> updated plot object
+Errors : 400 bad_request, 403 forbidden, 404 not_found,
+         409 conflict (plot number exists)
+
+--------------------------------------------------------------------------------
+8.2b  Delete a cemetery plot
+--------------------------------------------------------------------------------
+Method : DELETE
+URL    : /api/cemetery-plots/{plotId}
+Access : church_admin (of the plot's church) or super_admin
+Path params: plotId string
+
+Success: 204 No Content
+Errors : 403 forbidden, 404 not_found
+
+--------------------------------------------------------------------------------
+8.3  List cemetery service requests for a church
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/churches/{churchId}/cemetery-service-requests
+Access : admins see all; regular users see only their own
+Path params: churchId string
+Query parameters:
+  status  string  filter by request status
+  type    string  filter by service type
+  search  string  matches full name, deceased name, description
+  page, limit     (pagination)
+
+Success: 200 OK -> paginated envelope of service request objects:
+  {
+    "id":"uuid", "churchId":"uuid", "userId":"uuid",
+    "type":"burial", "status":"pending", "fullName":"...",
+    "contactPhone":"...", "contactEmail":"...", "deceasedName":"...",
+    "requestedDate":"..." | null, "plotId":"uuid" | null,
+    "description":"...", "notes":"...", "adminNotes":"...",
+    "scheduledDate":"..." | null, "createdAt":"...", "updatedAt":"..."
+  }
+
+--------------------------------------------------------------------------------
+8.4  Create a cemetery service request
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/churches/{churchId}/cemetery-service-requests
+Access : any authenticated user
+Headers:
+  Content-Type: application/json
+Path params: churchId string
+
+Request body:
+  {
+    "type":          "burial",        // required (service type enum)
+    "fullName":      "Jane Doe",       // required
+    "contactPhone":  "+1-555-0100",
+    "contactEmail":  "jane@example.com",
+    "deceasedName":  "John Doe",
+    "requestedDate": "2025-06-10T00:00:00Z", // optional, nullable
+    "plotId":        "uuid",           // optional, nullable; must be available
+    "description":   "...",
+    "notes":         "..."
+  }
+
+Description:
+  Submits a service request (initial status "pending"). If a plotId is given,
+  the plot must exist and be available.
+
+Success: 201 Created -> service request object
+Errors :
+  400 bad_request
+  403 forbidden
+  404 not_found (plot)
+  409 conflict  - requested plot is not available
+
+--------------------------------------------------------------------------------
+8.5  Get a cemetery service request
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/cemetery-service-requests/{requestId}
+Access : the request owner or a church admin
+Path params: requestId string
+
+Success: 200 OK -> service request object
+Errors : 403 forbidden, 404 not_found
+
+--------------------------------------------------------------------------------
+8.6  Update a cemetery service request status
+--------------------------------------------------------------------------------
+Method : PATCH
+URL    : /api/cemetery-service-requests/{requestId}/status
+Access : church_admin or super_admin
+Headers:
+  Content-Type: application/json
+Path params: requestId string
+
+Request body:
+  {
+    "status":        "scheduled",            // request status enum
+    "adminNotes":    "Scheduled with staff",
+    "scheduledDate": "2025-06-15T10:00:00Z"  // optional, nullable
+  }
+
+Success: 200 OK -> updated service request object
+Errors : 400 bad_request, 403 forbidden, 404 not_found
+
+================================================================================
+9. CERTIFICATES
+================================================================================
+All routes require:  Authorization: Bearer <JWT>
+
+Certificate type (enum):
+  baptism, confirmation, marriage, first_communion, death, other
+
+Access rule for all certificate routes:
+  The certificate must belong to a user who is the requester themselves, OR
+  a user the requester administers (managing admin).
+
+--------------------------------------------------------------------------------
+9.1  List a user's certificates
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/users/{userId}/certificates
+Access : the user themselves or a managing admin
+Path params: userId string
+Query parameters:
+  type   string  filter by certificate type
+  page, limit    (pagination)
+
+Success: 200 OK -> paginated envelope of certificate metadata objects:
+  {
+    "id":"uuid", "userId":"uuid", "uploadedByUserId":"uuid",
+    "type":"baptism", "certificateNumber":"BAP-001", "fullName":"...",
+    "issueDate":"..." | null, "fileName":"baptism.pdf",
+    "mimeType":"application/pdf", "fileSize": 12345, "notes": null,
+    "createdAt":"..."
+  }
+  (The on-disk file path is internal and never returned.)
+
+--------------------------------------------------------------------------------
+9.2  Upload a certificate
+--------------------------------------------------------------------------------
+Method : POST
+URL    : /api/users/{userId}/certificates
+Access : the user themselves or a managing admin
+Headers:
+  Content-Type: multipart/form-data
+Path params: userId string
+
+Form fields (multipart/form-data):
+  file               (required) the PDF file part; must be application/pdf
+  type               (required) certificate type enum
+  certificateNumber  (required) unique certificate number
+  fullName           (required) name on the certificate
+  issueDate          (optional) YYYY-MM-DD
+  notes              (optional) free text
+
+Limits:
+  - Only PDF files are accepted.
+  - Max file size is governed by MAX_UPLOAD_BYTES (default 10 MiB / 10485760).
+
+Description:
+  Validates file type and size, stores the PDF on disk under STORAGE_DIR, and
+  records metadata in the database.
+
+Success: 201 Created -> certificate metadata object (see 9.1)
+
+Errors :
+  400 bad_request             - missing file / invalid form / bad issueDate
+  403 forbidden
+  404 not_found (user)
+  409 conflict                - certificate number already exists
+  413 payload_too_large       - file exceeds the configured limit
+  415 unsupported_media_type  - file is not a PDF
+
+Example (curl):
+  curl -X POST "http://localhost:8080/api/users/$USER_ID/certificates" \
+    -H "Authorization: Bearer $TOKEN" \
+    -F 'file=@baptism.pdf;type=application/pdf' \
+    -F 'type=baptism' \
+    -F 'certificateNumber=BAP-001' \
+    -F 'fullName=Jane Doe' \
+    -F 'issueDate=2000-05-01'
+
+--------------------------------------------------------------------------------
+9.3  Download a certificate
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /api/certificates/{certificateId}/download
+Access : the owning user or a managing admin
+Path params: certificateId string
+
+Description:
+  Streams the stored PDF back to the client.
+
+Success: 200 OK
+  Response headers:
+    Content-Type: application/pdf
+    Content-Length: <file size>
+    Content-Disposition: attachment; filename="<original file name>"
+  Body: binary PDF content.
+
+Errors : 403 forbidden, 404 not_found
+
+================================================================================
+10. HEALTH CHECK
+================================================================================
+
+--------------------------------------------------------------------------------
+10.1  Health
+--------------------------------------------------------------------------------
+Method : GET
+URL    : /health            (NOTE: not under /api)
+Auth   : None (public)
+
+Description: Pings the database and reports service health.
+Success: 200 OK -> { "status": "ok" }
+Errors : 503 Service Unavailable -> { "message": "database unavailable" }
+
+================================================================================
+END OF API REFERENCE
+================================================================================
