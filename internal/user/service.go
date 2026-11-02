@@ -33,10 +33,10 @@ type Service struct {
 	refreshTTL time.Duration
 	resetTTL   time.Duration
 	verifyTTL  time.Duration
-	logTokens bool
+	logTokens  bool
 }
 
-func(s *Service) SetLogTokens(v bool) {
+func (s *Service) SetLogTokens(v bool) {
 	s.logTokens = v
 }
 
@@ -96,7 +96,7 @@ func (s *Service) issueEmailVerification(ctx context.Context, u *User) error {
 	if err := s.repo.StoreEmailVerificationToken(ctx, u.ID, hash, time.Now().Add(s.verifyTTL)); err != nil {
 		return err
 	}
-	if s.logTokens{
+	if s.logTokens {
 		slog.Info("email verification token issued",
 			slog.String("email", u.Email),
 			slog.String("token", raw),
@@ -172,6 +172,12 @@ func (s *Service) List(ctx context.Context, f ListFilter) ([]User, int, error) {
 	return s.repo.List(ctx, f)
 }
 
+// Stats returns aggregate user counts. When churchID is non-empty the counts
+// are scoped to that church.
+func (s *Service) Stats(ctx context.Context, churchID string) (*Stats, error) {
+	return s.repo.Stats(ctx, churchID)
+}
+
 // UpdateProfile updates the current user's profile.
 func (s *Service) UpdateProfile(ctx context.Context, id string, in ProfileUpdateInput) (*User, error) {
 	if in.Name != nil && strings.TrimSpace(*in.Name) == "" {
@@ -244,7 +250,7 @@ func (s *Service) ForgotPassword(ctx context.Context, in ForgotPasswordInput) er
 	if err := s.repo.StorePasswordResetToken(ctx, u.ID, hash, time.Now().Add(s.resetTTL)); err != nil {
 		return err
 	}
-	if s.logTokens{
+	if s.logTokens {
 		slog.Info("password reset token issued",
 			slog.String("email", u.Email),
 			slog.String("token", raw),

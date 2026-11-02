@@ -96,6 +96,12 @@ class ApiService {
   Future<User> updateRole(String userId, String role) =>
       _client.patch('/users/$userId/role', User.fromJson, body: {'role': role});
 
+  Future<UserStats> getUserStats({String? churchId}) => _client.get(
+        '/users/stats',
+        UserStats.fromJson,
+        query: {if (churchId != null) 'churchId': churchId},
+      );
+
   // Churches
   Future<PaginatedResponse<Church>> listChurches({
     String? search,

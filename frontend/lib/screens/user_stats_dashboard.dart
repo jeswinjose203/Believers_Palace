@@ -44,20 +44,11 @@ class _UserStatsDashboardState extends ConsumerState<UserStatsDashboard> {
   }
 
   Future<_Stats> _load() async {
-    final api = ref.read(apiServiceProvider);
-    // Total (limit 1 — we only need the pagination total).
-    final totalRes = await api.listUsers(limit: 1);
-    final total = totalRes.pagination.total;
-
-    // Per-role counts in parallel.
-    final results = await Future.wait(
-      _roles.map((r) => api.listUsers(role: r, limit: 1)),
+    final stats = await ref.read(apiServiceProvider).getUserStats();
+    return _Stats(
+      total: stats.total,
+      byRole: {for (final r in _roles) r: stats.countFor(r)},
     );
-    final byRole = <String, int>{
-      for (var i = 0; i < _roles.length; i++)
-        _roles[i]: results[i].pagination.total,
-    };
-    return _Stats(total: total, byRole: byRole);
   }
 
   @override

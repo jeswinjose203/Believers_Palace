@@ -185,6 +185,7 @@ re-issues one).
 | Method | Path                   | Access                         |
 |--------|------------------------|--------------------------------|
 | GET    | `/users`               | church_admin / super_admin     |
+| GET    | `/users/stats`         | church_admin / super_admin     |
 | GET    | `/users/me`            | current user                   |
 | PUT    | `/users/me`            | current user                   |
 | PATCH  | `/users/{userId}/role` | super_admin                    |

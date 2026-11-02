@@ -27,6 +27,12 @@ type ListFilter struct {
 	Offset   int
 }
 
+// Stats summarizes user counts, optionally scoped to a single church.
+type Stats struct {
+	Total  int               `json:"total"`
+	ByRole map[auth.Role]int `json:"byRole"`
+}
+
 // Repository provides access to the user store.
 type Repository struct {
 	pool *pgxpool.Pool
@@ -165,6 +171,39 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]User, int, error
 		return nil, 0, fmt.Errorf("iterate users: %w", err)
 	}
 	return users, total, nil
+}
+
+// Stats returns the total user count and a per-role breakdown in a single
+// query. When churchID is non-empty the counts are scoped to that church.
+func (r *Repository) Stats(ctx context.Context, churchID string) (*Stats, error) {
+	q := "SELECT role, count(*) FROM users"
+	args := []any{}
+	if churchID != "" {
+		q += " WHERE church_id = $1"
+		args = append(args, churchID)
+	}
+	q += " GROUP BY role"
+
+	rows, err := r.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("user stats: %w", err)
+	}
+	defer rows.Close()
+
+	stats := &Stats{ByRole: map[auth.Role]int{}}
+	for rows.Next() {
+		var role auth.Role
+		var count int
+		if err := rows.Scan(&role, &count); err != nil {
+			return nil, fmt.Errorf("scan user stats: %w", err)
+		}
+		stats.ByRole[role] = count
+		stats.Total += count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate user stats: %w", err)
+	}
+	return stats, nil
 }
 
 // UpdateProfile applies the non-nil profile fields and returns the updated user.

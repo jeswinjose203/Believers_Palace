@@ -41,6 +41,8 @@ func (h *Handler) UserRoutes() chi.Router {
 	r := chi.NewRouter()
 	// List users: church_admin or super_admin only.
 	r.With(auth.RequireRole(auth.RoleChurchAdmin, auth.RoleSuperAdmin)).Get("/", h.list)
+	// User statistics (counts by role): church_admin or super_admin only.
+	r.With(auth.RequireRole(auth.RoleChurchAdmin, auth.RoleSuperAdmin)).Get("/stats", h.stats)
 	r.Get("/me", h.getMe)
 	r.Put("/me", h.updateMe)
 	r.Post("/logout-all", h.logoutAll)
@@ -242,6 +244,24 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.Paged(w, users, pp.Page, pp.Limit, total)
+}
+
+// stats returns aggregate user counts by role. A church_admin is scoped to
+// their own church; a super_admin may optionally scope via ?churchId=.
+func (h *Handler) stats(w http.ResponseWriter, r *http.Request) {
+	id := auth.MustFromContext(r.Context())
+
+	churchID := r.URL.Query().Get("churchId")
+	if id.Role == auth.RoleChurchAdmin {
+		churchID = id.ChurchID
+	}
+
+	s, err := h.svc.Stats(r.Context(), churchID)
+	if err != nil {
+		h.writeServiceError(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, s)
 }
 
 func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {

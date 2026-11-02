@@ -650,6 +650,25 @@ class ChatMessage {
       );
 }
 
+class UserStats {
+  final int total;
+  final Map<String, int> byRole;
+
+  UserStats({required this.total, required this.byRole});
+
+  /// Returns the count for [role], defaulting to 0 when the backend omitted a
+  /// role with no users.
+  int countFor(String role) => byRole[role] ?? 0;
+
+  factory UserStats.fromJson(Map<String, dynamic> json) {
+    final raw = (json['byRole'] as Map<String, dynamic>?) ?? const {};
+    return UserStats(
+      total: (json['total'] as int?) ?? 0,
+      byRole: raw.map((k, v) => MapEntry(k, (v as num).toInt())),
+    );
+  }
+}
+
 class ErrorResponse {
   final String message;
   final String? code;
