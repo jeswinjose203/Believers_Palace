@@ -1,17 +1,13 @@
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/api_service.dart';
 
-/// A reusable form field that lets the user pick an image from their device,
-/// uploads it to the backend, and reports the resulting public URL.
-///
-/// It also accepts/falls back to a manually entered URL so existing data and
-/// external links keep working. The current value (an image URL or null) is
-/// surfaced via [onChanged].
+/// A reusable form field that lets the user pick an image from their device and
+/// uploads it to the backend. The resulting public URL (or null) is surfaced
+/// via [onChanged]. Upload uses the file bytes so it works on every platform,
+/// including web where a filesystem path is not available.
 class ImagePickerField extends ConsumerStatefulWidget {
   final String label;
   final String? initialUrl;
@@ -29,7 +25,6 @@ class ImagePickerField extends ConsumerStatefulWidget {
 }
 
 class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
-  late final TextEditingController _urlController;
   String? _url;
   bool _uploading = false;
   String? _error;
@@ -38,36 +33,43 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
   void initState() {
     super.initState();
     _url = widget.initialUrl;
-    _urlController = TextEditingController(text: widget.initialUrl ?? '');
-  }
-
-  @override
-  void dispose() {
-    _urlController.dispose();
-    super.dispose();
   }
 
   Future<void> _pickAndUpload() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      withData: false,
-    );
-    final path = result?.files.single.path;
-    if (path == null) return;
+    setState(() => _error = null);
 
-    setState(() {
-      _uploading = true;
-      _error = null;
-    });
+    final FilePickerResult? result;
     try {
-      final url = await ref.read(apiServiceProvider).uploadImage(File(path));
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true, // load bytes so upload works on all platforms
+      );
+    } catch (e) {
+      setState(() => _error = 'Could not open picker: $e');
+      return;
+    }
+    if (result == null || result.files.isEmpty) return; // cancelled
+
+    final picked = result.files.single;
+    final bytes = picked.bytes;
+    if (bytes == null) {
+      setState(() => _error = 'Could not read the selected image.');
+      return;
+    }
+
+    setState(() => _uploading = true);
+    try {
+      final url = await ref
+          .read(apiServiceProvider)
+          .uploadImageBytes(bytes, picked.name);
+      if (!mounted) return;
       setState(() {
         _url = url;
-        _urlController.text = url;
         _uploading = false;
       });
       widget.onChanged(url);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _uploading = false;
         _error = e.toString();
@@ -76,10 +78,7 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
   }
 
   void _clear() {
-    setState(() {
-      _url = null;
-      _urlController.clear();
-    });
+    setState(() => _url = null);
     widget.onChanged(null);
   }
 
@@ -100,51 +99,40 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
             _Preview(url: _url),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Wrap(
+                spacing: 8,
                 children: [
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: _uploading ? null : _pickAndUpload,
-                        icon: _uploading
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.photo_library, size: 18),
-                        label: Text(_uploading ? 'Uploading...' : 'Choose image'),
-                      ),
-                      if (_url != null && _url!.isNotEmpty)
-                        TextButton.icon(
-                          onPressed: _uploading ? null : _clear,
-                          icon: const Icon(Icons.clear, size: 18),
-                          label: const Text('Remove'),
-                        ),
-                    ],
+                  OutlinedButton.icon(
+                    onPressed: _uploading ? null : _pickAndUpload,
+                    icon: _uploading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.photo_library, size: 18),
+                    label: Text(_uploading
+                        ? 'Uploading...'
+                        : (_url == null ? 'Choose image' : 'Change image')),
                   ),
+                  if (_url != null && _url!.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: _uploading ? null : _clear,
+                      icon: const Icon(Icons.clear, size: 18),
+                      label: const Text('Remove'),
+                    ),
                 ],
               ),
             ),
           ],
         ),
-        TextField(
-          controller: _urlController,
-          decoration: const InputDecoration(
-            labelText: 'Or paste an image URL',
-            isDense: true,
-          ),
-          onChanged: (v) {
-            setState(() => _url = v.isEmpty ? null : v);
-            widget.onChanged(v.isEmpty ? null : v);
-          },
-        ),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+            child: Text(
+              _error!,
+              style: const TextStyle(color: Colors.red, fontSize: 12),
+            ),
           ),
       ],
     );

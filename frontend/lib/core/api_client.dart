@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../config.dart';
 import '../models/models.dart';
@@ -201,5 +202,44 @@ class ApiClient {
     final decoded = _decode(response);
     if (decoded == null) throw ApiException(0, 'Empty response');
     return decoded;
+  }
+
+  /// Uploads raw bytes as a multipart file part and returns the decoded JSON
+  /// response. Works on every platform (including web) since it does not rely
+  /// on a filesystem path.
+  Future<Map<String, dynamic>> uploadBytesJson(
+    String path, {
+    required List<int> bytes,
+    required String field,
+    required String fileName,
+  }) async {
+    final request = http.MultipartRequest('POST', _uri(path, null))
+      ..headers.addAll(_headers(multipart: true))
+      ..files.add(http.MultipartFile.fromBytes(
+        field,
+        bytes,
+        filename: fileName.isEmpty ? 'upload' : fileName,
+        contentType: _imageMediaType(fileName),
+      ));
+
+    final streamed = await _client.send(request);
+    final response = await http.Response.fromStream(streamed);
+    _check(response);
+    final decoded = _decode(response);
+    if (decoded == null) throw ApiException(0, 'Empty response');
+    return decoded;
+  }
+
+  /// Infers an image MediaType from a filename extension. Falls back to a
+  /// generic binary type; the server also accepts the filename extension.
+  MediaType? _imageMediaType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.png')) return MediaType('image', 'png');
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+      return MediaType('image', 'jpeg');
+    }
+    if (lower.endsWith('.webp')) return MediaType('image', 'webp');
+    if (lower.endsWith('.gif')) return MediaType('image', 'gif');
+    return null;
   }
 }

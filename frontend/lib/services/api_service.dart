@@ -420,4 +420,16 @@ class ApiService {
     );
     return res['url'] as String;
   }
+
+  /// Uploads image bytes (works on all platforms, including web where a file
+  /// path is unavailable). [fileName] is used to infer the content type.
+  Future<String> uploadImageBytes(List<int> bytes, String fileName) async {
+    final res = await _client.uploadBytesJson(
+      '/media/upload',
+      bytes: bytes,
+      field: 'file',
+      fileName: fileName,
+    );
+    return res['url'] as String;
+  }
 }
