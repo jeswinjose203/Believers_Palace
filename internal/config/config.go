@@ -86,6 +86,10 @@ type StorageConfig struct {
 	Dir string
 	// MaxUploadBytes is the maximum allowed size for an uploaded file.
 	MaxUploadBytes int64
+	// MediaDir is the base directory where uploaded images are stored.
+	MediaDir string
+	// MaxImageBytes is the maximum allowed size for an uploaded image.
+	MaxImageBytes int64
 }
 
 // DSN returns a PostgreSQL connection string.
@@ -124,6 +128,8 @@ func Load() (*Config, error) {
 		Storage: StorageConfig{
 			Dir:            getEnv("STORAGE_DIR", "./storage/certificates"),
 			MaxUploadBytes: getEnvInt64("MAX_UPLOAD_BYTES", 10*1024*1024), // 10 MiB
+			MediaDir:       getEnv("MEDIA_DIR", "./storage/media"),
+			MaxImageBytes:  getEnvInt64("MAX_IMAGE_BYTES", 5*1024*1024), // 5 MiB
 		},
 		Mail: MailConfig{
 			Provider: getEnv("MAIL_PROVIDER", "log"),

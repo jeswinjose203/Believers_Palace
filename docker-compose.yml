@@ -54,6 +54,9 @@ services:
       DB_SSLMODE: disable
       STORAGE_DIR: /app/storage
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}
+      MEDIA_DIR: /app/storage/media
+      MAX_IMAGE_BYTES: ${MAX_IMAGE_BYTES:-5242880}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
     ports:
       - "${HTTP_PORT:-8080}:8080"
     networks:

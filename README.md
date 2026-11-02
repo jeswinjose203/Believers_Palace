@@ -117,6 +117,8 @@ Key environment variables (see `.env.example` for the full list):
 | `PUBLIC_BASE_URL`  | `http://localhost:8080`    | External base URL for links in emails  |
 | `STORAGE_DIR`      | `./storage/certificates`   | Where uploaded PDFs are stored         |
 | `MAX_UPLOAD_BYTES` | `10485760` (10 MiB)        | Max certificate file size              |
+| `MEDIA_DIR`        | `./storage/media`          | Where uploaded images are stored       |
+| `MAX_IMAGE_BYTES`  | `5242880` (5 MiB)          | Max image upload size                  |
 | `MAIL_PROVIDER`    | `log`                      | `log` (console) or `smtp` (real email) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `MAIL_FROM` | — | Required when `MAIL_PROVIDER=smtp` (e.g. Gmail: host `smtp.gmail.com`, port `587`, a 16-char App Password) |
 
@@ -244,6 +246,28 @@ Uploads are `multipart/form-data` with a `file` part (PDF) plus `type`,
 `certificateNumber`, `fullName`, and optional `issueDate` (YYYY-MM-DD) and
 `notes` fields. Files are validated for type and size, stored on disk under
 `STORAGE_DIR`, and streamed back on download.
+
+### Media (image uploads)
+| Method | Path                | Access               |
+|--------|---------------------|----------------------|
+| POST   | `/media/upload`     | any authenticated    |
+| GET    | `/media/{key}`      | public (no auth)     |
+
+Image uploads back the photo fields on other resources (church `logo`, user
+`profilePic`, event/announcement `image`, hall `images[]`). `POST /media/upload`
+is `multipart/form-data` with a single `file` part; it accepts JPEG, PNG, WebP,
+and GIF up to `MAX_IMAGE_BYTES` (default 5 MiB), stores the file under
+`MEDIA_DIR` with path-traversal protection, and returns:
+
+```json
+{ "url": "http://localhost:8080/api/media/<key>", "fileName": "<key>", "mimeType": "image/png", "fileSize": 12345 }
+```
+
+Save the returned `url` into the relevant field via the normal create/update
+endpoint. Images are served publicly at `GET /media/{key}` (no `Authorization`
+header) so they load directly in `<img>`/`NetworkImage`. The returned URL is
+built from `PUBLIC_BASE_URL`, so set that to your externally reachable base URL
+in production.
 
 ### Example
 

@@ -386,4 +386,16 @@ class ApiService {
 
   Future<int> downloadCertificate(String certificateId, String savePath) =>
       _client.download('/certificates/$certificateId/download', savePath);
+
+  // Media (image upload). Returns the public URL of the stored image, which can
+  // be saved into fields like church logo, profile picture, or event image.
+  Future<String> uploadImage(File file) async {
+    final res = await _client.uploadMultipartJson(
+      '/media/upload',
+      file: file,
+      field: 'file',
+      fields: const {},
+    );
+    return res['url'] as String;
+  }
 }

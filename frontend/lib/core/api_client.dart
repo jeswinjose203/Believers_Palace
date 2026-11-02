@@ -180,4 +180,26 @@ class ApiClient {
     if (decoded == null) throw ApiException(0, 'Empty response');
     return fromJson(decoded);
   }
+
+  /// Uploads a multipart file and returns the decoded JSON response map. Use
+  /// for endpoints whose response is not wrapped in a typed model (e.g. media
+  /// uploads returning {url, fileName, mimeType, fileSize}).
+  Future<Map<String, dynamic>> uploadMultipartJson(
+    String path, {
+    required File file,
+    required String field,
+    required Map<String, String> fields,
+  }) async {
+    final request = http.MultipartRequest('POST', _uri(path, null))
+      ..headers.addAll(_headers(multipart: true))
+      ..files.add(await http.MultipartFile.fromPath(field, file.path))
+      ..fields.addAll(fields);
+
+    final streamed = await _client.send(request);
+    final response = await http.Response.fromStream(streamed);
+    _check(response);
+    final decoded = _decode(response);
+    if (decoded == null) throw ApiException(0, 'Empty response');
+    return decoded;
+  }
 }

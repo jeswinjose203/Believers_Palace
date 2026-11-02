@@ -22,6 +22,7 @@ import (
 	"believers_palace/internal/hall"
 	"believers_palace/internal/httpx"
 	"believers_palace/internal/mailer"
+	"believers_palace/internal/media"
 	"believers_palace/internal/user"
 )
 
@@ -109,6 +110,13 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	certificateSvc := certificate.NewService(certificateRepo, certStorage, userRepo, cfg.Storage.MaxUploadBytes)
 	certificateHandler := certificate.NewHandler(certificateSvc)
 
+	mediaStorage, err := media.NewStorage(cfg.Storage.MediaDir)
+	if err != nil {
+		return nil, err
+	}
+	mediaSvc := media.NewService(mediaStorage, cfg.PublicBaseURL, cfg.Storage.MaxImageBytes)
+	mediaHandler := media.NewHandler(mediaSvc)
+
 	// Health check.
 	r.Get("/health", func(w http.ResponseWriter, req *http.Request) {
 		if err := pool.Ping(req.Context()); err != nil {
@@ -130,12 +138,21 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 			authGroup.Mount("/auth", userHandler.AuthRoutes())
 		})
 
+		// Public image serving. Uploaded images are referenced by URL in
+		// resource fields (logos, profile pictures, event/hall images) and must
+		// be loadable without an Authorization header.
+		api.Mount("/media", mediaHandler.PublicRoutes())
+
 		// Authenticated routes.
 		api.Group(func(protected chi.Router) {
 			protected.Use(authMiddleware)
 			protected.Mount("/users", userHandler.UserRoutes())
 			protected.Mount("/users/{userId}/certificates", certificateHandler.UserRoutes())
 			protected.Mount("/churches", churchHandler.Routes())
+
+			// Image upload (authenticated). Served at /api/media/upload; the
+			// public GET /api/media/{key} route handles downloads.
+			protected.Mount("/media/upload", mediaHandler.UploadRoutes())
 
 			// Church-nested sub-resources.
 			protected.Mount("/churches/{churchId}/announcements", announcementHandler.ChurchRoutes())
