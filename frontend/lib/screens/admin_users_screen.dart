@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
 import '../services/api_service.dart';
+import 'user_stats_dashboard.dart';
 
 const _roles = [
   'user',
@@ -38,6 +39,8 @@ class AdminUsersScreen extends ConsumerStatefulWidget {
 class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
   Future<PaginatedResponse<User>>? _future;
   String? _roleFilter;
+  // Bumped to force the stats dashboard to reload after a mutation.
+  int _statsToken = 0;
 
   Future<PaginatedResponse<User>> _load() =>
       ref.read(apiServiceProvider).listUsers(role: _roleFilter, limit: 100);
@@ -49,7 +52,10 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+      _statsToken++;
+    });
     await _future;
   }
 
@@ -128,44 +134,80 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
           ),
         ),
       ),
-      body: FutureBuilder<PaginatedResponse<User>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          final users = snapshot.data?.data ?? [];
-          if (users.isEmpty) {
-            return const Center(child: Text('No users found.'));
-          }
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView.builder(
-              itemCount: users.length,
-              itemBuilder: (context, i) {
-                final u = users[i];
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundImage:
-                        (u.profilePic != null && u.profilePic!.isNotEmpty)
-                            ? NetworkImage(u.profilePic!)
-                            : null,
-                    child: (u.profilePic == null || u.profilePic!.isEmpty)
-                        ? Text(u.name.isNotEmpty ? u.name[0].toUpperCase() : '?')
-                        : null,
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: FutureBuilder<PaginatedResponse<User>>(
+          future: _future,
+          builder: (context, snapshot) {
+            final loading =
+                snapshot.connectionState == ConnectionState.waiting;
+            final users = snapshot.data?.data ?? [];
+
+            return CustomScrollView(
+              // Always scrollable so pull-to-refresh works even when short.
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: UserStatsDashboard(refreshToken: _statsToken),
+                ),
+                const SliverToBoxAdapter(child: Divider(height: 1)),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: Text('All users',
+                        style: Theme.of(context).textTheme.titleSmall),
                   ),
-                  title: Text(u.name),
-                  subtitle: Text(u.email),
-                  trailing: Chip(label: Text(roleLabel(u.role))),
-                  onTap: () => _changeRole(u),
-                );
-              },
-            ),
-          );
-        },
+                ),
+                if (loading)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  )
+                else if (snapshot.hasError)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Center(child: Text('Error: ${snapshot.error}')),
+                    ),
+                  )
+                else if (users.isEmpty)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: Text('No users found.')),
+                    ),
+                  )
+                else
+                  SliverList.builder(
+                    itemCount: users.length,
+                    itemBuilder: (context, i) {
+                      final u = users[i];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage:
+                              (u.profilePic != null && u.profilePic!.isNotEmpty)
+                                  ? NetworkImage(u.profilePic!)
+                                  : null,
+                          child: (u.profilePic == null ||
+                                  u.profilePic!.isEmpty)
+                              ? Text(u.name.isNotEmpty
+                                  ? u.name[0].toUpperCase()
+                                  : '?')
+                              : null,
+                        ),
+                        title: Text(u.name),
+                        subtitle: Text(u.email),
+                        trailing: Chip(label: Text(roleLabel(u.role))),
+                        onTap: () => _changeRole(u),
+                      );
+                    },
+                  ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
