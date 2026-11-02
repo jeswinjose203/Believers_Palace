@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"believers_palace/internal/booking"
 	"believers_palace/internal/cemetery"
 	"believers_palace/internal/certificate"
+	"believers_palace/internal/chat"
 	"believers_palace/internal/church"
 	"believers_palace/internal/config"
 	"believers_palace/internal/event"
@@ -98,6 +101,14 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	eventSvc := event.NewService(eventRepo, churchRepo)
 	eventHandler := event.NewHandler(eventSvc)
 
+	chatRepo := chat.NewRepository(pool)
+	chatSvc := chat.NewService(
+		chatRepo,
+		eventChurchResolver{eventRepo},
+		userDisplayResolver{userRepo},
+	)
+	chatHandler := chat.NewHandler(chatSvc)
+
 	cemeteryRepo := cemetery.NewRepository(pool)
 	cemeterySvc := cemetery.NewService(cemeteryRepo, churchRepo)
 	cemeteryHandler := cemetery.NewHandler(cemeterySvc)
@@ -138,10 +149,12 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 			authGroup.Mount("/auth", userHandler.AuthRoutes())
 		})
 
-		// Public image serving. Uploaded images are referenced by URL in
+		// Media: public image download (GET /media/{key}) plus authenticated
+		// image upload (POST /media/upload). Mounted once; the router applies
+		// auth only to the upload route. Images are referenced by URL in
 		// resource fields (logos, profile pictures, event/hall images) and must
 		// be loadable without an Authorization header.
-		api.Mount("/media", mediaHandler.PublicRoutes())
+		api.Mount("/media", mediaHandler.Routes(authMiddleware))
 
 		// Authenticated routes.
 		api.Group(func(protected chi.Router) {
@@ -149,10 +162,6 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 			protected.Mount("/users", userHandler.UserRoutes())
 			protected.Mount("/users/{userId}/certificates", certificateHandler.UserRoutes())
 			protected.Mount("/churches", churchHandler.Routes())
-
-			// Image upload (authenticated). Served at /api/media/upload; the
-			// public GET /api/media/{key} route handles downloads.
-			protected.Mount("/media/upload", mediaHandler.UploadRoutes())
 
 			// Church-nested sub-resources.
 			protected.Mount("/churches/{churchId}/announcements", announcementHandler.ChurchRoutes())
@@ -166,7 +175,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 			protected.Mount("/announcements", announcementHandler.Routes())
 			protected.Mount("/halls", hallHandler.Routes())
 			protected.Mount("/bookings", bookingHandler.Routes())
-			protected.Mount("/events", eventHandler.Routes())
+			protected.Mount("/events", eventHandler.RoutesWith(chatHandler.EventRoutes()))
 			protected.Mount("/cemetery-service-requests", cemeteryHandler.RequestRoutes())
 			protected.Mount("/cemetery-plots", cemeteryHandler.PlotRoutes())
 			protected.Mount("/certificates", certificateHandler.Routes())
@@ -174,4 +183,38 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	})
 
 	return r, nil
+}
+
+// eventChurchResolver adapts the event repository to the chat package's
+// eventResolver interface.
+type eventChurchResolver struct {
+	repo *event.Repository
+}
+
+func (a eventChurchResolver) ChurchIDOfEvent(ctx context.Context, eventID string) (string, bool, error) {
+	ev, err := a.repo.GetByID(ctx, eventID)
+	if errors.Is(err, event.ErrNotFound) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return ev.ChurchID, true, nil
+}
+
+// userDisplayResolver adapts the user repository to the chat package's
+// userResolver interface.
+type userDisplayResolver struct {
+	repo *user.Repository
+}
+
+func (a userDisplayResolver) DisplayOf(ctx context.Context, userID string) (string, *string, bool, error) {
+	u, err := a.repo.GetByID(ctx, userID)
+	if errors.Is(err, user.ErrNotFound) {
+		return "", nil, false, nil
+	}
+	if err != nil {
+		return "", nil, false, err
+	}
+	return u.Name, u.ProfilePic, true, nil
 }

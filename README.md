@@ -209,9 +209,19 @@ re-issues one).
 | GET/PUT/DELETE | `/events/{eventId}`               |
 | POST   | `/events/{eventId}/register`              |
 | GET    | `/events/{eventId}/registrations`         |
+| GET/POST | `/events/{eventId}/messages`            |
+| DELETE | `/events/{eventId}/messages/{messageId}`  |
 
 Create/update/delete of these resources require the owning church_admin or
 super_admin.
+
+**Event chat:** every event has a chat. Any authenticated user may read
+(`GET /events/{eventId}/messages`, paginated, oldest-first) and post
+(`POST /events/{eventId}/messages` with `{content}`). A message may be deleted
+by its author, or by the owning church_admin / super_admin
+(`DELETE /events/{eventId}/messages/{messageId}`). The author's name and photo
+are snapshotted when the message is posted. The Flutter client refreshes the
+chat by polling.
 
 ### Bookings
 | Method | Path                               | Access                         |

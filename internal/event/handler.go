@@ -39,6 +39,17 @@ func (h *Handler) Routes() chi.Router {
 	return r
 }
 
+// RoutesWith returns the event routes with an additional sub-router mounted at
+// /{eventId}/messages (used to attach the per-event chat without coupling the
+// event package to the chat package).
+func (h *Handler) RoutesWith(messages chi.Router) chi.Router {
+	r := h.Routes().(*chi.Mux)
+	if messages != nil {
+		r.Mount("/{eventId}/messages", messages)
+	}
+	return r
+}
+
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	churchID := chi.URLParam(r, "churchId")
 	pp := httpx.ParsePageParams(r)

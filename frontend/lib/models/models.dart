@@ -620,6 +620,36 @@ class Certificate {
       );
 }
 
+class ChatMessage {
+  final String id;
+  final String eventId;
+  final String? userId;
+  final String authorName;
+  final String? authorPic;
+  final String content;
+  final DateTime createdAt;
+
+  ChatMessage({
+    required this.id,
+    required this.eventId,
+    this.userId,
+    required this.authorName,
+    this.authorPic,
+    required this.content,
+    required this.createdAt,
+  });
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+        id: json['id'] as String,
+        eventId: json['eventId'] as String,
+        userId: json['userId'] as String?,
+        authorName: json['authorName'] as String? ?? 'User',
+        authorPic: json['authorPic'] as String?,
+        content: json['content'] as String,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+      );
+}
+
 class ErrorResponse {
   final String message;
   final String? code;

@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/image_picker_field.dart';
 import 'church_bookings_screen.dart';
+import 'event_chat_screen.dart';
 
 /// Church detail with role-aware management.
 ///
@@ -30,7 +31,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -92,6 +93,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
           tabs: const [
             Tab(text: 'Announcements'),
             Tab(text: 'Halls'),
+            Tab(text: 'Bookings'),
             Tab(text: 'Events'),
             Tab(text: 'Cemetery Plots'),
             Tab(text: 'Cemetery Requests'),
@@ -110,7 +112,11 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
           _HallsTab(
             churchId: widget.church.id,
             canManage: canManage,
-            onBook: _showBookingDialog,
+            onError: _showError,
+            onSuccess: _showSuccess,
+          ),
+          _BookingsTab(
+            churchId: widget.church.id,
             onError: _showError,
             onSuccess: _showSuccess,
           ),
@@ -133,74 +139,6 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
             onNew: _showCemeteryRequestDialog,
             onError: _showError,
             onSuccess: _showSuccess,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showBookingDialog(Hall hall) async {
-    final purpose = TextEditingController();
-    final notes = TextEditingController();
-    DateTime chosenStart = DateTime.now();
-    DateTime chosenEnd = chosenStart.add(const Duration(hours: 2));
-
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Book ${hall.name}'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _DateTimeField(
-                label: 'Start',
-                initial: chosenStart,
-                onPicked: (d) => chosenStart = d ?? chosenStart,
-              ),
-              _DateTimeField(
-                label: 'End',
-                initial: chosenEnd,
-                onPicked: (d) => chosenEnd = d ?? chosenEnd,
-              ),
-              TextField(
-                controller: purpose,
-                decoration: const InputDecoration(labelText: 'Purpose'),
-              ),
-              TextField(
-                controller: notes,
-                decoration: const InputDecoration(labelText: 'Notes'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              try {
-                await ref.read(apiServiceProvider).createBooking(
-                  widget.church.id,
-                  {
-                    'hallId': hall.id,
-                    'startDate': chosenStart.toIso8601String(),
-                    'endDate': chosenEnd.toIso8601String(),
-                    'purpose': purpose.text.isEmpty ? null : purpose.text,
-                    'notes': notes.text.isEmpty ? null : notes.text,
-                  },
-                );
-                if (context.mounted) {
-                  Navigator.of(context).pop();
-                  _showSuccess('Booking requested');
-                }
-              } catch (e) {
-                _showError(e.toString());
-              }
-            },
-            child: const Text('Book'),
           ),
         ],
       ),
@@ -584,14 +522,12 @@ class _AnnouncementsTabState extends ConsumerState<_AnnouncementsTab> {
 class _HallsTab extends ConsumerStatefulWidget {
   final String churchId;
   final bool canManage;
-  final ValueChanged<Hall> onBook;
   final void Function(String) onError;
   final void Function(String) onSuccess;
 
   const _HallsTab({
     required this.churchId,
     required this.canManage,
-    required this.onBook,
     required this.onError,
     required this.onSuccess,
   });
@@ -745,22 +681,180 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
           [
             if (h.location != null) h.location,
             if (h.capacity != null) 'Capacity: ${h.capacity}',
+            if (h.price != null) 'Price: ${h.price}',
           ].where((s) => s != null).join(' · '),
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.calendar_today),
-              tooltip: 'Book',
-              onPressed: () => widget.onBook(h),
-            ),
-            if (widget.canManage)
-              _EditDeleteMenu(
+        trailing: widget.canManage
+            ? _EditDeleteMenu(
                 onEdit: () => _form(existing: h),
                 onDelete: () => _delete(h),
-              ),
+              )
+            : null,
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bookings (dedicated section: pick a hall, choose a time range).
+// ---------------------------------------------------------------------------
+
+class _BookingsTab extends ConsumerStatefulWidget {
+  final String churchId;
+  final void Function(String) onError;
+  final void Function(String) onSuccess;
+
+  const _BookingsTab({
+    required this.churchId,
+    required this.onError,
+    required this.onSuccess,
+  });
+
+  @override
+  ConsumerState<_BookingsTab> createState() => _BookingsTabState();
+}
+
+class _BookingsTabState extends ConsumerState<_BookingsTab> {
+  Future<PaginatedResponse<Booking>>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  void _reload() {
+    // Church bookings endpoint returns the caller's own bookings for regular
+    // users and all bookings for admins; either way it scopes to this church.
+    _future = ref
+        .read(apiServiceProvider)
+        .listChurchBookings(widget.churchId, limit: 50);
+  }
+
+  void _refresh() => setState(_reload);
+
+  Future<void> _newBooking() async {
+    // Load halls for the picker first.
+    List<Hall> halls;
+    try {
+      final res =
+          await ref.read(apiServiceProvider).listHalls(widget.churchId, limit: 100);
+      halls = res.data;
+    } catch (e) {
+      widget.onError(e.toString());
+      return;
+    }
+    if (!mounted) return;
+    if (halls.isEmpty) {
+      widget.onError('This church has no halls to book yet.');
+      return;
+    }
+
+    String? hallId = halls.first.id;
+    final purpose = TextEditingController();
+    final notes = TextEditingController();
+    DateTime start = DateTime.now();
+    DateTime end = start.add(const Duration(hours: 2));
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('New Booking'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: hallId,
+                  decoration: const InputDecoration(labelText: 'Hall *'),
+                  items: halls
+                      .map((h) =>
+                          DropdownMenuItem(value: h.id, child: Text(h.name)))
+                      .toList(),
+                  onChanged: (v) => setState(() => hallId = v),
+                ),
+                _DateTimeField(
+                  label: 'Start',
+                  initial: start,
+                  onPicked: (d) => start = d ?? start,
+                ),
+                _DateTimeField(
+                  label: 'End',
+                  initial: end,
+                  onPicked: (d) => end = d ?? end,
+                ),
+                TextField(
+                  controller: purpose,
+                  decoration: const InputDecoration(labelText: 'Purpose'),
+                ),
+                TextField(
+                  controller: notes,
+                  decoration: const InputDecoration(labelText: 'Notes'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Request booking'),
+            ),
           ],
+        ),
+      ),
+    );
+    if (confirmed != true || hallId == null) return;
+
+    try {
+      await ref.read(apiServiceProvider).createBooking(widget.churchId, {
+        'hallId': hallId,
+        'startDate': start.toIso8601String(),
+        'endDate': end.toIso8601String(),
+        'purpose': purpose.text.isEmpty ? null : purpose.text,
+        'notes': notes.text.isEmpty ? null : notes.text,
+      });
+      widget.onSuccess('Booking requested');
+      _refresh();
+    } catch (e) {
+      widget.onError(e.toString());
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'approved':
+        return Colors.green.shade100;
+      case 'rejected':
+      case 'cancelled':
+        return Colors.red.shade100;
+      default:
+        return Colors.grey.shade200;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _ManagedList<Booking>(
+      future: _future!,
+      canManage: false,
+      onAdd: null,
+      floatingAction: FloatingActionButton.extended(
+        onPressed: _newBooking,
+        icon: const Icon(Icons.add),
+        label: const Text('Book a hall'),
+      ),
+      itemBuilder: (b) => ListTile(
+        leading: const CircleAvatar(child: Icon(Icons.event_seat)),
+        title: Text('${_shortDate(b.startDate)} → ${_shortDate(b.endDate)}'),
+        subtitle: Text('Purpose: ${b.purpose ?? "-"}'),
+        trailing: Chip(
+          label: Text(b.status),
+          backgroundColor: _statusColor(b.status),
         ),
       ),
     );
@@ -931,9 +1025,19 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
         subtitle: Text(
           '${_shortDate(e.startDate)}${e.location != null ? ' · ${e.location}' : ''}',
         ),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => EventChatScreen(event: e)),
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline),
+              tooltip: 'Chat',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => EventChatScreen(event: e)),
+              ),
+            ),
             IconButton(
               icon: const Icon(Icons.how_to_reg),
               tooltip: 'Register',

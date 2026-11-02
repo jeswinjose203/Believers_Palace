@@ -1,6 +1,10 @@
 package media
 
 import (
+	"bytes"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -110,5 +114,51 @@ func TestStorageRejectsPathTraversal(t *testing.T) {
 		if _, err := st.Open(key); err == nil {
 			t.Errorf("Open(%q) succeeded, want error", key)
 		}
+	}
+}
+
+// passthroughAuth is a no-op middleware standing in for real authentication in
+// routing tests.
+func passthroughAuth(next http.Handler) http.Handler { return next }
+
+// TestRoutesUploadAndDownload verifies the router resolves both the public
+// download route and the authenticated upload route (regression test for the
+// /media/upload 404 caused by conflicting mounts).
+func TestRoutesUploadAndDownload(t *testing.T) {
+	st, _ := NewStorage(t.TempDir())
+	svc := NewService(st, "http://localhost:8080", 1<<20)
+	h := NewHandler(svc)
+	router := h.Routes(passthroughAuth)
+
+	// Build a small multipart image upload.
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile("file", "logo.png")
+	if err != nil {
+		t.Fatalf("CreateFormFile: %v", err)
+	}
+	// A minimal PNG signature is enough; type is resolved by extension/mime.
+	_, _ = part.Write([]byte("\x89PNG\r\n\x1a\n-fake"))
+	_ = mw.Close()
+
+	uploadReq := httptest.NewRequest(http.MethodPost, "/upload", &buf)
+	uploadReq.Header.Set("Content-Type", mw.FormDataContentType())
+	uploadRec := httptest.NewRecorder()
+	router.ServeHTTP(uploadRec, uploadReq)
+
+	if uploadRec.Code != http.StatusCreated {
+		t.Fatalf("POST /upload status = %d, want 201; body: %s", uploadRec.Code, uploadRec.Body.String())
+	}
+	body := uploadRec.Body.String()
+	if !strings.Contains(body, "/api/media/") {
+		t.Fatalf("upload response missing media URL: %s", body)
+	}
+
+	// Download a non-existent key should 404 (route resolves, file missing).
+	dlReq := httptest.NewRequest(http.MethodGet, "/deadbeef.png", nil)
+	dlRec := httptest.NewRecorder()
+	router.ServeHTTP(dlRec, dlReq)
+	if dlRec.Code != http.StatusNotFound {
+		t.Fatalf("GET /{key} for missing file status = %d, want 404", dlRec.Code)
 	}
 }

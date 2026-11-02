@@ -277,6 +277,28 @@ class ApiService {
         query: {'page': page, 'limit': limit},
       );
 
+  // Event chat messages
+  Future<PaginatedResponse<ChatMessage>> listEventMessages(
+    String eventId, {
+    int page = 1,
+    int limit = 100,
+  }) =>
+      _client.get(
+        '/events/$eventId/messages',
+        (json) => PaginatedResponse.fromJson(json, ChatMessage.fromJson),
+        query: {'page': page, 'limit': limit},
+      );
+
+  Future<ChatMessage> postEventMessage(String eventId, String content) =>
+      _client.post(
+        '/events/$eventId/messages',
+        ChatMessage.fromJson,
+        body: {'content': content},
+      );
+
+  Future<void> deleteEventMessage(String eventId, String messageId) =>
+      _client.delete('/events/$eventId/messages/$messageId');
+
   // Cemetery plots
   Future<PaginatedResponse<CemeteryPlot>> listCemeteryPlots(
     String churchId, {

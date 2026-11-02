@@ -24,20 +24,22 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// UploadRoutes returns the authenticated upload route, mounted under
-// /media/upload.
-func (h *Handler) UploadRoutes() chi.Router {
+// Routes returns the media router mounted at /media. The download route
+// (GET /{key}) is public so images load directly via a URL (e.g. an <img> src
+// or Flutter NetworkImage); the upload route (POST /upload) is protected by the
+// supplied authentication middleware.
+func (h *Handler) Routes(authMiddleware func(http.Handler) http.Handler) chi.Router {
 	r := chi.NewRouter()
-	r.Post("/", h.upload)
-	return r
-}
 
-// PublicRoutes returns the unauthenticated download route, mounted under
-// /media. Images are served publicly so clients can load them directly via a
-// URL (e.g. an <img> src or Flutter NetworkImage).
-func (h *Handler) PublicRoutes() chi.Router {
-	r := chi.NewRouter()
+	// Public download.
 	r.Get("/{key}", h.download)
+
+	// Authenticated upload.
+	r.Group(func(protected chi.Router) {
+		protected.Use(authMiddleware)
+		protected.Post("/upload", h.upload)
+	})
+
 	return r
 }
 
