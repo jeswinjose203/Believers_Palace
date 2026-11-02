@@ -98,10 +98,10 @@ func TestValidateSMTPRequiresSettings(t *testing.T) {
 		AppEnv: "development",
 		Mail: MailConfig{
 			Provider: "smtp",
-			SMTPHost: "smtp.gmail.com",
-			SMTPUser: "[email protected]",
-			SMTPPass: "app-password",
-			From:     "[email protected]",
+			SMTPHost: "believerspalace400gmail.com",
+			SMTPUser: "believers_palace",
+			SMTPPass: "qrqh rfcn sjyl tway",
+			From:     "believerspalace400gmail.com",
 		},
 	}
 	if err := c.validate(); err != nil {

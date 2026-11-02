@@ -35,8 +35,9 @@ class ApiClient {
   }
 
   Uri _uri(String path, Map<String, dynamic>? query) {
-    final base = Uri.parse(apiBaseUrl);
-    final resolved = base.resolve(path.startsWith('/') ? path.substring(1) : path);
+    final trimmedBase = apiBaseUrl.endsWith('/') ? apiBaseUrl.substring(0,apiBaseUrl.length - 1) : apiBaseUrl;
+    final normalizedPath = path.startsWith('/') ? path : '/$path';
+    final resolved = Uri.parse('$trimmedBase$normalizedPath');
     if (query == null || query.isEmpty) return resolved;
     return resolved.replace(
       queryParameters: {

@@ -74,6 +74,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	}
 	userRepo := user.NewRepository(pool)
 	userSvc := user.NewService(userRepo, tm, mail, cfg.JWT.RefreshTTL, cfg.JWT.ResetTTL)
+	userSvc.SetLogTokens(cfg.AppEnv != "production") // log tokens in dev/test, not in prod
 	userHandler := user.NewHandler(userSvc, tm)
 
 	churchRepo := church.NewRepository(pool)

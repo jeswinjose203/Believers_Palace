@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"net/mail"
 	"strings"
 	"time"
@@ -32,6 +33,11 @@ type Service struct {
 	refreshTTL time.Duration
 	resetTTL   time.Duration
 	verifyTTL  time.Duration
+	logTokens bool
+}
+
+func(s *Service) SetLogTokens(v bool) {
+	s.logTokens = v
 }
 
 // NewService creates a user service.
@@ -89,6 +95,12 @@ func (s *Service) issueEmailVerification(ctx context.Context, u *User) error {
 	}
 	if err := s.repo.StoreEmailVerificationToken(ctx, u.ID, hash, time.Now().Add(s.verifyTTL)); err != nil {
 		return err
+	}
+	if s.logTokens{
+		slog.Info("email verification token issued",
+			slog.String("email", u.Email),
+			slog.String("token", raw),
+		)
 	}
 	return s.mailer.SendEmailVerification(ctx, u.Email, raw)
 }
@@ -231,6 +243,12 @@ func (s *Service) ForgotPassword(ctx context.Context, in ForgotPasswordInput) er
 	}
 	if err := s.repo.StorePasswordResetToken(ctx, u.ID, hash, time.Now().Add(s.resetTTL)); err != nil {
 		return err
+	}
+	if s.logTokens{
+		slog.Info("password reset token issued",
+			slog.String("email", u.Email),
+			slog.String("token", raw),
+		)
 	}
 	return s.mailer.SendPasswordReset(ctx, u.Email, raw)
 }
