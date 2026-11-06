@@ -9,9 +9,9 @@ import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 
-/// Per-event chat. Only users registered for the event (and church staff) can
-/// read and post; a message can be deleted by its author or by a church admin /
-/// super admin.
+/// Per-event chat. If the event requires registration, only registered users
+/// (and church staff) can read and post; otherwise any signed-in user can.
+/// A message can be deleted by its author or by a church admin / super admin.
 ///
 /// Delivery uses lightweight polling (every few seconds) plus pull-to-refresh,
 /// fitting the REST backend without a persistent socket connection.

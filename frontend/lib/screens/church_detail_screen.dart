@@ -1230,18 +1230,23 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        TextButton.icon(
-                          onPressed: () => widget.onRegister(e),
-                          icon: const Icon(Icons.how_to_reg, size: 16),
-                          label: const Text('Register'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: _kPurple,
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(0, 28),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        // Admins/staff post the events, so they don't register.
+                        // Registration is only offered when the event requires it.
+                        if (!widget.canManage &&
+                            e.registrationRequired == true) ...[
+                          TextButton.icon(
+                            onPressed: () => widget.onRegister(e),
+                            icon: const Icon(Icons.how_to_reg, size: 16),
+                            label: const Text('Register'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: _kPurple,
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 28),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
+                          const SizedBox(width: 12),
+                        ],
                         TextButton.icon(
                           onPressed: openChat,
                           icon: const Icon(Icons.chat_bubble_outline, size: 16),

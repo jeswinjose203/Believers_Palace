@@ -50,12 +50,16 @@ func (f *fakeStore) Delete(_ context.Context, id string) error {
 	return nil
 }
 
-// fakeEvents maps event IDs to church IDs.
+// fakeEvents maps event IDs to church IDs. Events are treated as requiring
+// registration unless listed in openEvents.
 type fakeEvents map[string]string
 
-func (f fakeEvents) ChurchIDOfEvent(_ context.Context, eventID string) (string, bool, error) {
+// openEvents lists event IDs that do NOT require registration.
+var openEvents = map[string]bool{}
+
+func (f fakeEvents) LookupEvent(_ context.Context, eventID string) (EventInfo, bool, error) {
 	c, ok := f[eventID]
-	return c, ok, nil
+	return EventInfo{ChurchID: c, RegistrationRequired: !openEvents[eventID]}, ok, nil
 }
 
 type fakeUsers struct{}
@@ -184,5 +188,25 @@ func TestChatRequiresRegistration(t *testing.T) {
 				t.Errorf("Post err = %v, want %v", err, c.wantErr)
 			}
 		})
+	}
+}
+
+// TestChatOpenWhenRegistrationNotRequired verifies that events without the
+// registrationRequired flag allow any authenticated user to chat.
+func TestChatOpenWhenRegistrationNotRequired(t *testing.T) {
+	openEvents["open"] = true
+	defer delete(openEvents, "open")
+
+	svc := NewService(newFakeStore(), fakeEvents{"open": "c1", "closed": "c1"}, fakeUsers{}, fakeRegs{})
+	stranger := auth.Identity{UserID: "stranger", Role: auth.RoleUser}
+
+	if _, err := svc.Post(context.Background(), stranger, "open", CreateRequest{Content: "hi"}); err != nil {
+		t.Errorf("open event: Post err = %v, want nil", err)
+	}
+	if _, _, err := svc.List(context.Background(), stranger, "open", 10, 0); err != nil {
+		t.Errorf("open event: List err = %v, want nil", err)
+	}
+	if _, err := svc.Post(context.Background(), stranger, "closed", CreateRequest{Content: "hi"}); err != ErrNotRegistered {
+		t.Errorf("registration-required event: Post err = %v, want ErrNotRegistered", err)
 	}
 }

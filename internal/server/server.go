@@ -192,15 +192,15 @@ type eventChurchResolver struct {
 	repo *event.Repository
 }
 
-func (a eventChurchResolver) ChurchIDOfEvent(ctx context.Context, eventID string) (string, bool, error) {
+func (a eventChurchResolver) LookupEvent(ctx context.Context, eventID string) (chat.EventInfo, bool, error) {
 	ev, err := a.repo.GetByID(ctx, eventID)
 	if errors.Is(err, event.ErrNotFound) {
-		return "", false, nil
+		return chat.EventInfo{}, false, nil
 	}
 	if err != nil {
-		return "", false, err
+		return chat.EventInfo{}, false, err
 	}
-	return ev.ChurchID, true, nil
+	return chat.EventInfo{ChurchID: ev.ChurchID, RegistrationRequired: ev.RegistrationRequired}, true, nil
 }
 
 // userDisplayResolver adapts the user repository to the chat package's

@@ -28,11 +28,19 @@ func (e *ValidationError) Error() string { return e.Message }
 
 func invalid(msg string) error { return &ValidationError{Message: msg} }
 
-// eventResolver resolves an event's existence and owning church.
+// EventInfo is the subset of an event the chat service needs.
+type EventInfo struct {
+	ChurchID string
+	// RegistrationRequired gates the chat: when true only registered attendees
+	// (and church staff) may chat; when false any authenticated user may.
+	RegistrationRequired bool
+}
+
+// eventResolver resolves an event's existence, owning church and whether it
+// requires registration.
 type eventResolver interface {
-	// ChurchIDOfEvent returns the church that owns the event and whether it
-	// exists.
-	ChurchIDOfEvent(ctx context.Context, eventID string) (churchID string, ok bool, err error)
+	// LookupEvent returns the event info and whether the event exists.
+	LookupEvent(ctx context.Context, eventID string) (info EventInfo, ok bool, err error)
 }
 
 // userResolver resolves a user's display name and profile picture for author
@@ -70,17 +78,21 @@ func NewService(repo messageStore, events eventResolver, users userResolver, reg
 }
 
 // authorizeAccess verifies the event exists and that the caller may take part
-// in its chat: church staff of the event's church (and super_admin) always may;
-// everyone else must be registered for the event.
+// in its chat. Church staff of the event's church (and super_admin) always may.
+// If the event does not require registration, any authenticated user may.
+// Otherwise the caller must be registered for the event.
 func (s *Service) authorizeAccess(ctx context.Context, id auth.Identity, eventID string) error {
-	churchID, ok, err := s.events.ChurchIDOfEvent(ctx, eventID)
+	ev, ok, err := s.events.LookupEvent(ctx, eventID)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return ErrEventNotFound
 	}
-	if auth.CanManageChurchContent(id, churchID) {
+	if auth.CanManageChurchContent(id, ev.ChurchID) {
+		return nil
+	}
+	if !ev.RegistrationRequired {
 		return nil
 	}
 	if id.UserID == "" {
@@ -97,7 +109,7 @@ func (s *Service) authorizeAccess(ctx context.Context, id auth.Identity, eventID
 }
 
 // List returns a page of messages for an event. Only registered attendees and
-// church staff may read the chat.
+// church staff may read the chat when the event requires registration.
 func (s *Service) List(ctx context.Context, id auth.Identity, eventID string, limit, offset int) ([]Message, int, error) {
 	if err := s.authorizeAccess(ctx, id, eventID); err != nil {
 		return nil, 0, err
@@ -105,8 +117,8 @@ func (s *Service) List(ctx context.Context, id auth.Identity, eventID string, li
 	return s.repo.ListByEvent(ctx, eventID, limit, offset)
 }
 
-// Post creates a message authored by the calling user. Only registered
-// attendees and church staff may post. The author's name and profile picture
+// Post creates a message authored by the calling user. When the event requires
+// registration, only registered attendees and church staff may post. The author's name and profile picture
 // are snapshotted at insert time.
 func (s *Service) Post(ctx context.Context, id auth.Identity, eventID string, in CreateRequest) (*Message, error) {
 	if err := s.authorizeAccess(ctx, id, eventID); err != nil {
@@ -156,14 +168,14 @@ func (s *Service) Delete(ctx context.Context, id auth.Identity, eventID, message
 	}
 
 	// Otherwise require administrative control of the event's church.
-	churchID, ok, err := s.events.ChurchIDOfEvent(ctx, eventID)
+	ev, ok, err := s.events.LookupEvent(ctx, eventID)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return ErrEventNotFound
 	}
-	if auth.CanManageChurch(id, churchID) {
+	if auth.CanManageChurch(id, ev.ChurchID) {
 		return s.repo.Delete(ctx, messageID)
 	}
 	return ErrForbidden
