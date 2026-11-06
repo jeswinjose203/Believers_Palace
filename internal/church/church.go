@@ -14,10 +14,12 @@ type PriestDetails struct {
 type Church struct {
 	ID              string         `json:"id"`
 	Name            string         `json:"name"`
+	Description     string         `json:"description,omitempty"`
 	Address         string         `json:"address,omitempty"`
 	Phone           string         `json:"phone,omitempty"`
 	Email           string         `json:"email,omitempty"`
 	Logo            string         `json:"logo,omitempty"`
+	Images          []string       `json:"images"`
 	Priest          *PriestDetails `json:"priest,omitempty"`
 	AssociatePriest *PriestDetails `json:"associatePriest,omitempty"`
 	CreatedAt       time.Time      `json:"createdAt"`
@@ -26,19 +28,23 @@ type Church struct {
 
 // ListItem is the condensed church representation returned by list endpoints.
 type ListItem struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Address string `json:"address,omitempty"`
-	Logo    string `json:"logo,omitempty"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Address     string   `json:"address,omitempty"`
+	Logo        string   `json:"logo,omitempty"`
+	Images      []string `json:"images"`
 }
 
 // Request is the payload for creating or updating a church.
 type Request struct {
 	Name            string         `json:"name"`
+	Description     string         `json:"description"`
 	Address         string         `json:"address"`
 	Phone           string         `json:"phone"`
 	Email           string         `json:"email"`
 	Logo            string         `json:"logo"`
+	Images          []string       `json:"images"`
 	Priest          *PriestDetails `json:"priest"`
 	AssociatePriest *PriestDetails `json:"associatePriest"`
 }

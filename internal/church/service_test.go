@@ -70,3 +70,20 @@ func TestValidate(t *testing.T) {
 		t.Error("validate(blank name) should fail")
 	}
 }
+
+func TestImagesRoundTrip(t *testing.T) {
+	enc, err := encodeStrings([]string{"a.png", "b.png"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := decodeStrings([]byte(enc))
+	if err != nil || len(got) != 2 || got[0] != "a.png" || got[1] != "b.png" {
+		t.Errorf("round trip = %v, %v", got, err)
+	}
+	if empty, _ := decodeStrings(nil); empty == nil || len(empty) != 0 {
+		t.Errorf("decodeStrings(nil) = %v, want non-nil empty slice", empty)
+	}
+	if enc, _ := encodeStrings(nil); enc != "[]" {
+		t.Errorf("encodeStrings(nil) = %q, want []", enc)
+	}
+}

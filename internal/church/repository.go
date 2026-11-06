@@ -23,21 +23,27 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-const churchColumns = `id, name, address, phone, email, logo, priest, associate_priest, created_at, updated_at`
+const churchColumns = `id, name, description, address, phone, email, logo, images, priest, associate_priest, created_at, updated_at`
 
 func scanChurch(row pgx.Row) (*Church, error) {
 	var (
-		c                     Church
-		address, phone, email *string
-		logo                  *string
-		priestRaw, assocRaw   []byte
+		c                                  Church
+		description, address, phone, email *string
+		logo                               *string
+		imagesRaw, priestRaw, assocRaw     []byte
 	)
 	err := row.Scan(
-		&c.ID, &c.Name, &address, &phone, &email, &logo,
+		&c.ID, &c.Name, &description, &address, &phone, &email, &logo, &imagesRaw,
 		&priestRaw, &assocRaw, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if description != nil {
+		c.Description = *description
+	}
+	if c.Images, err = decodeStrings(imagesRaw); err != nil {
+		return nil, fmt.Errorf("decode images: %w", err)
 	}
 	if address != nil {
 		c.Address = *address
@@ -58,6 +64,34 @@ func scanChurch(row pgx.Row) (*Church, error) {
 		return nil, fmt.Errorf("decode associate priest: %w", err)
 	}
 	return &c, nil
+}
+
+// decodeStrings decodes a JSONB string array, yielding a non-nil empty slice
+// for NULL/empty so the JSON response always contains an array.
+func decodeStrings(raw []byte) ([]string, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return []string{}, nil
+	}
+	var out []string
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out, nil
+}
+
+// encodeStrings marshals a string slice to a JSONB-storable value.
+func encodeStrings(s []string) (string, error) {
+	if s == nil {
+		s = []string{}
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // decodePriest decodes a JSONB column into PriestDetails. NULL/empty yields nil.
@@ -87,8 +121,8 @@ func encodePriest(p *PriestDetails) (any, error) {
 // Create inserts a new church.
 func (r *Repository) Create(ctx context.Context, in Request) (*Church, error) {
 	const q = `
-		INSERT INTO churches (name, address, phone, email, logo, priest, associate_priest)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO churches (name, description, address, phone, email, logo, images, priest, associate_priest)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING ` + churchColumns
 
 	priest, err := encodePriest(in.Priest)
@@ -100,9 +134,14 @@ func (r *Repository) Create(ctx context.Context, in Request) (*Church, error) {
 		return nil, fmt.Errorf("encode associate priest: %w", err)
 	}
 
+	images, err := encodeStrings(in.Images)
+	if err != nil {
+		return nil, fmt.Errorf("encode images: %w", err)
+	}
+
 	row := r.pool.QueryRow(ctx, q,
-		in.Name, nullify(in.Address), nullify(in.Phone), nullify(in.Email),
-		nullify(in.Logo), priest, assoc,
+		in.Name, nullify(in.Description), nullify(in.Address), nullify(in.Phone), nullify(in.Email),
+		nullify(in.Logo), images, priest, assoc,
 	)
 	c, err := scanChurch(row)
 	if err != nil {
@@ -144,7 +183,7 @@ func (r *Repository) List(ctx context.Context, search string, limit, offset int)
 	)
 	if search != "" {
 		args = append(args, "%"+search+"%")
-		where = fmt.Sprintf("WHERE (name ILIKE $%d OR address ILIKE $%d)", len(args), len(args))
+		where = fmt.Sprintf("WHERE (name ILIKE $%d OR address ILIKE $%d OR description ILIKE $%d)", len(args), len(args), len(args))
 	}
 
 	var total int
@@ -154,7 +193,7 @@ func (r *Repository) List(ctx context.Context, search string, limit, offset int)
 
 	args = append(args, limit, offset)
 	q := fmt.Sprintf(
-		"SELECT id, name, address, logo FROM churches %s ORDER BY name ASC LIMIT $%d OFFSET $%d",
+		"SELECT id, name, description, address, logo, images FROM churches %s ORDER BY name ASC LIMIT $%d OFFSET $%d",
 		where, len(args)-1, len(args),
 	)
 
@@ -167,11 +206,18 @@ func (r *Repository) List(ctx context.Context, search string, limit, offset int)
 	items := make([]ListItem, 0)
 	for rows.Next() {
 		var (
-			it            ListItem
-			address, logo *string
+			it                         ListItem
+			description, address, logo *string
+			imagesRaw                  []byte
 		)
-		if err := rows.Scan(&it.ID, &it.Name, &address, &logo); err != nil {
+		if err := rows.Scan(&it.ID, &it.Name, &description, &address, &logo, &imagesRaw); err != nil {
 			return nil, 0, fmt.Errorf("scan church: %w", err)
+		}
+		if description != nil {
+			it.Description = *description
+		}
+		if it.Images, err = decodeStrings(imagesRaw); err != nil {
+			return nil, 0, fmt.Errorf("decode images: %w", err)
 		}
 		if address != nil {
 			it.Address = *address
@@ -191,9 +237,9 @@ func (r *Repository) List(ctx context.Context, search string, limit, offset int)
 func (r *Repository) Update(ctx context.Context, id string, in Request) (*Church, error) {
 	const q = `
 		UPDATE churches
-		SET name = $1, address = $2, phone = $3, email = $4, logo = $5,
-		    priest = $6, associate_priest = $7, updated_at = now()
-		WHERE id = $8
+		SET name = $1, description = $2, address = $3, phone = $4, email = $5,
+		    logo = $6, images = $7, priest = $8, associate_priest = $9, updated_at = now()
+		WHERE id = $10
 		RETURNING ` + churchColumns
 
 	priest, err := encodePriest(in.Priest)
@@ -205,9 +251,14 @@ func (r *Repository) Update(ctx context.Context, id string, in Request) (*Church
 		return nil, fmt.Errorf("encode associate priest: %w", err)
 	}
 
+	images, err := encodeStrings(in.Images)
+	if err != nil {
+		return nil, fmt.Errorf("encode images: %w", err)
+	}
+
 	row := r.pool.QueryRow(ctx, q,
-		in.Name, nullify(in.Address), nullify(in.Phone), nullify(in.Email),
-		nullify(in.Logo), priest, assoc, id,
+		in.Name, nullify(in.Description), nullify(in.Address), nullify(in.Phone), nullify(in.Email),
+		nullify(in.Logo), images, priest, assoc, id,
 	)
 	c, err := scanChurch(row)
 	if errors.Is(err, pgx.ErrNoRows) {

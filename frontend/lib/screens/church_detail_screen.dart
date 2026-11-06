@@ -31,7 +31,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -91,6 +91,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
           controller: _tabController,
           isScrollable: true,
           tabs: const [
+            Tab(text: 'About'),
             Tab(text: 'Announcements'),
             Tab(text: 'Halls'),
             Tab(text: 'Bookings'),
@@ -103,6 +104,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
+          _AboutTab(church: widget.church),
           _AnnouncementsTab(
             churchId: widget.church.id,
             canManage: canManageContent,
@@ -1435,6 +1437,108 @@ class _ManagedList<T> extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+
+/// First tab of the church detail screen: gallery, description, contact info
+/// and the priests associated with the church.
+class _AboutTab extends StatelessWidget {
+  final Church church;
+
+  const _AboutTab({required this.church});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final images = church.images.isNotEmpty
+        ? church.images
+        : [if (church.logo != null && church.logo!.isNotEmpty) church.logo!];
+    final hasDescription = (church.description ?? '').isNotEmpty;
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 24),
+      children: [
+        if (images.isNotEmpty)
+          SizedBox(
+            height: 220,
+            child: PageView.builder(
+              itemCount: images.length,
+              itemBuilder: (_, i) => Image.network(
+                images[i],
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  color: Colors.grey.shade200,
+                  child: const Center(
+                    child: Icon(Icons.broken_image_outlined, color: Colors.grey),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(church.name, style: theme.textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(
+                hasDescription
+                    ? church.description!
+                    : 'No description available.',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              if ((church.address ?? '').isNotEmpty)
+                _infoRow(Icons.location_on_outlined, church.address!),
+              if ((church.phone ?? '').isNotEmpty)
+                _infoRow(Icons.phone_outlined, church.phone!),
+              if ((church.email ?? '').isNotEmpty)
+                _infoRow(Icons.email_outlined, church.email!),
+              if (church.priest != null || church.associatePriest != null) ...[
+                const SizedBox(height: 16),
+                Text('Clergy', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+                if (church.priest != null)
+                  _priestCard('Priest', church.priest!),
+                if (church.associatePriest != null)
+                  _priestCard('Associate Priest', church.associatePriest!),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _infoRow(IconData icon, String text) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text)),
+          ],
+        ),
+      );
+
+  Widget _priestCard(String role, PriestDetails p) {
+    final contact = [
+      if ((p.phone ?? '').isNotEmpty) p.phone!,
+      if ((p.email ?? '').isNotEmpty) p.email!,
+    ].join('  •  ');
+    return Card(
+      child: ListTile(
+        leading: (p.profilePic ?? '').isNotEmpty
+            ? CircleAvatar(backgroundImage: NetworkImage(p.profilePic!))
+            : const CircleAvatar(child: Icon(Icons.person)),
+        title: Text(p.name ?? ''),
+        subtitle: Text(contact.isEmpty ? role : '$role\n$contact'),
+        isThreeLine: contact.isNotEmpty,
+      ),
     );
   }
 }

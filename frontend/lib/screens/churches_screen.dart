@@ -5,6 +5,7 @@ import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/image_picker_field.dart';
+import '../widgets/multi_image_picker_field.dart';
 import 'church_detail_screen.dart';
 
 class ChurchesScreen extends ConsumerStatefulWidget {
@@ -140,7 +141,19 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
                             ? CircleAvatar(backgroundImage: NetworkImage(c.logo!))
                             : const CircleAvatar(child: Icon(Icons.church)),
                         title: Text(c.name),
-                        subtitle: Text(c.address ?? ''),
+                        isThreeLine: (c.description ?? '').isNotEmpty,
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if ((c.address ?? '').isNotEmpty) Text(c.address!),
+                            if ((c.description ?? '').isNotEmpty)
+                              Text(
+                                c.description!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
                         trailing: canEdit(c)
                             ? PopupMenuButton<String>(
                                 onSelected: (v) {
@@ -190,10 +203,20 @@ class ChurchFormDialog extends ConsumerStatefulWidget {
 
 class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
   late final TextEditingController _name;
+  late final TextEditingController _description;
   late final TextEditingController _address;
   late final TextEditingController _phone;
   late final TextEditingController _email;
   String? _logo;
+  List<String> _images = [];
+  late final TextEditingController _priestName;
+  late final TextEditingController _priestPhone;
+  late final TextEditingController _priestEmail;
+  late final TextEditingController _assocName;
+  late final TextEditingController _assocPhone;
+  late final TextEditingController _assocEmail;
+  String? _priestPic;
+  String? _assocPic;
   bool _saving = false;
   String? _error;
 
@@ -202,7 +225,17 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
     super.initState();
     final c = widget.existing;
     _name = TextEditingController(text: c?.name ?? '');
+    _description = TextEditingController(text: c?.description ?? '');
     _address = TextEditingController(text: c?.address ?? '');
+    _images = List<String>.from(c?.images ?? const []);
+    _priestName = TextEditingController(text: c?.priest?.name ?? '');
+    _priestPhone = TextEditingController(text: c?.priest?.phone ?? '');
+    _priestEmail = TextEditingController(text: c?.priest?.email ?? '');
+    _assocName = TextEditingController(text: c?.associatePriest?.name ?? '');
+    _assocPhone = TextEditingController(text: c?.associatePriest?.phone ?? '');
+    _assocEmail = TextEditingController(text: c?.associatePriest?.email ?? '');
+    _priestPic = c?.priest?.profilePic;
+    _assocPic = c?.associatePriest?.profilePic;
     _phone = TextEditingController(text: c?.phone ?? '');
     _email = TextEditingController(text: c?.email ?? '');
     _logo = c?.logo;
@@ -211,6 +244,13 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
   @override
   void dispose() {
     _name.dispose();
+    _description.dispose();
+    _priestName.dispose();
+    _priestPhone.dispose();
+    _priestEmail.dispose();
+    _assocName.dispose();
+    _assocPhone.dispose();
+    _assocEmail.dispose();
     _address.dispose();
     _phone.dispose();
     _email.dispose();
@@ -226,8 +266,26 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
       _saving = true;
       _error = null;
     });
+    Map<String, dynamic>? priest(
+            TextEditingController n,
+            TextEditingController p,
+            TextEditingController e,
+            String? pic) =>
+        n.text.trim().isEmpty
+            ? null
+            : {
+                'name': n.text.trim(),
+                'phone': p.text.trim(),
+                'email': e.text.trim(),
+                'profilePic': pic,
+              };
     final body = {
       'name': _name.text.trim(),
+      'description': _description.text.trim(),
+      'images': _images,
+      'priest': priest(_priestName, _priestPhone, _priestEmail, _priestPic),
+      'associatePriest':
+          priest(_assocName, _assocPhone, _assocEmail, _assocPic),
       'address': _address.text.isEmpty ? null : _address.text,
       'phone': _phone.text.isEmpty ? null : _phone.text,
       'email': _email.text.isEmpty ? null : _email.text,
@@ -262,6 +320,15 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
               decoration: const InputDecoration(labelText: 'Name *'),
             ),
             TextField(
+              controller: _description,
+              minLines: 3,
+              maxLines: 6,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                alignLabelWithHint: true,
+              ),
+            ),
+            TextField(
               controller: _address,
               decoration: const InputDecoration(labelText: 'Address'),
             ),
@@ -277,6 +344,57 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
               label: 'Logo',
               initialUrl: _logo,
               onChanged: (url) => _logo = url,
+            ),
+            MultiImagePickerField(
+              label: 'Gallery images',
+              initialUrls: _images,
+              onChanged: (urls) => _images = List<String>.from(urls),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Priest',
+                  style: Theme.of(context).textTheme.titleSmall),
+            ),
+            TextField(
+              controller: _priestName,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            TextField(
+              controller: _priestPhone,
+              decoration: const InputDecoration(labelText: 'Phone'),
+            ),
+            TextField(
+              controller: _priestEmail,
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+            ImagePickerField(
+              label: 'Priest photo',
+              initialUrl: _priestPic,
+              onChanged: (url) => _priestPic = url,
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Associate priest',
+                  style: Theme.of(context).textTheme.titleSmall),
+            ),
+            TextField(
+              controller: _assocName,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            TextField(
+              controller: _assocPhone,
+              decoration: const InputDecoration(labelText: 'Phone'),
+            ),
+            TextField(
+              controller: _assocEmail,
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+            ImagePickerField(
+              label: 'Associate priest photo',
+              initialUrl: _assocPic,
+              onChanged: (url) => _assocPic = url,
             ),
             if (_error != null)
               Padding(

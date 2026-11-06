@@ -199,6 +199,12 @@ re-issues one).
 | PUT    | `/churches/{id}`      | owning church_admin / super_admin       |
 | DELETE | `/churches/{id}`      | super_admin                             |
 
+Church records include a `description`, a `logo`, a multi-image gallery
+`images[]` (URLs from `POST /media/upload`), and `priest` / `associatePriest`
+details (name, phone, email, profilePic). List items return `id`, `name`,
+`description`, `address`, `logo` and `images`; `search` also matches the
+description. Migration `0013` adds the `description` and `images` columns.
+
 ### Announcements, Halls, Events (per church)
 | Method | Path                                      |
 |--------|-------------------------------------------|

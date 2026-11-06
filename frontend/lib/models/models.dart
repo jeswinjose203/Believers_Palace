@@ -140,10 +140,12 @@ class PriestDetails {
 class Church {
   final String id;
   final String name;
+  final String? description;
   final String? address;
   final String? phone;
   final String? email;
   final String? logo;
+  final List<String> images;
   final PriestDetails? priest;
   final PriestDetails? associatePriest;
   final DateTime? createdAt;
@@ -152,10 +154,12 @@ class Church {
   Church({
     required this.id,
     required this.name,
+    this.description,
     this.address,
     this.phone,
     this.email,
     this.logo,
+    this.images = const [],
     this.priest,
     this.associatePriest,
     this.createdAt,
@@ -165,10 +169,13 @@ class Church {
   factory Church.fromJson(Map<String, dynamic> json) => Church(
         id: json['id'] as String,
         name: json['name'] as String,
+        description: json['description'] as String?,
         address: json['address'] as String?,
         phone: json['phone'] as String?,
         email: json['email'] as String?,
         logo: json['logo'] as String?,
+        images: (json['images'] as List?)?.map((e) => e as String).toList() ??
+            const [],
         priest: json['priest'] != null
             ? PriestDetails.fromJson(json['priest'] as Map<String, dynamic>)
             : null,
@@ -186,10 +193,12 @@ class Church {
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
+        'description': description,
         'address': address,
         'phone': phone,
         'email': email,
         'logo': logo,
+        'images': images,
         'priest': priest?.toJson(),
         'associatePriest': associatePriest?.toJson(),
         'createdAt': createdAt?.toIso8601String(),
