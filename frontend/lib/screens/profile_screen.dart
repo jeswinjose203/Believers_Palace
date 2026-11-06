@@ -5,6 +5,7 @@ import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/image_picker_field.dart';
+import 'churches_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -80,7 +81,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             _tile('Phone', user.phone ?? '-'),
             _tile('Unit', user.unit ?? '-'),
             _tile('Role', _roleLabel(user.role)),
-            if (user.churchId != null)
+            if (user.role == 'user')
+              Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  title: const Text('Church'),
+                  subtitle: Text(user.churchId == null
+                      ? 'No church selected'
+                      : (_churchName ?? 'Loading...')),
+                  trailing: TextButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ChurchesScreen(
+                            selectMode: true, popOnSelect: true),
+                      ),
+                    ),
+                    child: Text(
+                        user.churchId == null ? 'Select' : 'Change'),
+                  ),
+                ),
+              )
+            else if (user.churchId != null)
               _tile('Church', _churchName ?? 'Loading...'),
             const SizedBox(height: 24),
             OutlinedButton.icon(
