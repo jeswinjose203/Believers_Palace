@@ -179,9 +179,9 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
         surfaceTintColor: Colors.white,
         automaticallyImplyLeading: !widget.isHome,
         centerTitle: true,
-        title: const Text(
-          'Believers Palace',
-          style: TextStyle(fontWeight: FontWeight.w600),
+        title: Text(
+          _church.name,
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         actions: [
           if (user?.role == 'user')
@@ -245,6 +245,8 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
             _HallsTab(
               churchId: widget.church.id,
               canManage: canManage,
+              canBook: canBook,
+              onBook: _book,
               onError: _showError,
               onSuccess: _showSuccess,
             ),
@@ -579,21 +581,72 @@ class _AnnouncementsTabState extends ConsumerState<_AnnouncementsTab> {
   @override
   Widget build(BuildContext context) {
     return _ManagedList<Announcement>(
+      title: 'Announcements',
       future: _future!,
       canManage: widget.canManage,
       onAdd: () => _form(),
-      itemBuilder: (a) => ListTile(
-        leading: (a.image != null && a.image!.isNotEmpty)
-            ? CircleAvatar(backgroundImage: NetworkImage(a.image!))
-            : const CircleAvatar(child: Icon(Icons.campaign)),
-        title: Text(a.title),
-        subtitle: Text(a.content, maxLines: 2, overflow: TextOverflow.ellipsis),
-        trailing: widget.canManage
-            ? _EditDeleteMenu(
-                onEdit: () => _form(existing: a),
-                onDelete: () => _delete(a),
-              )
-            : null,
+      itemBuilder: (a) => _TintCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEBDDED),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.campaign_outlined, color: _kPurple),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(a.title,
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today_outlined,
+                              size: 14, color: _kPurple),
+                          const SizedBox(width: 6),
+                          Text(_prettyDate(a.publishedAt ?? a.createdAt),
+                              style: const TextStyle(
+                                  fontSize: 13, color: Colors.black54)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (widget.canManage)
+                  _EditDeleteMenu(
+                    onEdit: () => _form(existing: a),
+                    onDelete: () => _delete(a),
+                  ),
+              ],
+            ),
+            if (a.image != null && a.image!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  a.image!,
+                  height: 140,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Text(a.content, style: const TextStyle(fontSize: 14, height: 1.35)),
+          ],
+        ),
       ),
     );
   }
@@ -606,12 +659,16 @@ class _AnnouncementsTabState extends ConsumerState<_AnnouncementsTab> {
 class _HallsTab extends ConsumerStatefulWidget {
   final String churchId;
   final bool canManage;
+  final bool canBook;
+  final ValueChanged<String> onBook;
   final void Function(String) onError;
   final void Function(String) onSuccess;
 
   const _HallsTab({
     required this.churchId,
     required this.canManage,
+    required this.canBook,
+    required this.onBook,
     required this.onError,
     required this.onSuccess,
   });
@@ -753,30 +810,114 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
   @override
   Widget build(BuildContext context) {
     return _ManagedList<Hall>(
+      title: 'Halls',
       future: _future!,
       canManage: widget.canManage,
       onAdd: () => _form(),
-      itemBuilder: (h) => ListTile(
-        leading: (h.images.isNotEmpty)
-            ? CircleAvatar(backgroundImage: NetworkImage(h.images.first))
-            : const CircleAvatar(child: Icon(Icons.meeting_room)),
-        title: Text(h.name),
-        subtitle: Text(
-          [
-            if (h.location != null) h.location,
-            if (h.capacity != null) 'Capacity: ${h.capacity}',
-            if (h.price != null) 'Price: ${h.price}',
-          ].where((s) => s != null).join(' · '),
+      itemBuilder: (h) => Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Material(
+          color: Colors.white,
+          elevation: 1.5,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: _kTintBorder),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 150,
+                width: double.infinity,
+                child: h.images.isNotEmpty
+                    ? Image.network(
+                        h.images.first,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _hallPlaceholder(),
+                      )
+                    : _hallPlaceholder(),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(h.name,
+                                  style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 4),
+                              if (h.capacity != null)
+                                Row(
+                                  children: [
+                                    const Icon(Icons.groups_outlined,
+                                        size: 16, color: _kPurple),
+                                    const SizedBox(width: 6),
+                                    Text('Capacity: ${h.capacity}',
+                                        style: const TextStyle(fontSize: 13)),
+                                  ],
+                                ),
+                              if (h.price != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text('Price: ${h.price}',
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.black54)),
+                                ),
+                            ],
+                          ),
+                        ),
+                        if (widget.canBook)
+                          TextButton(
+                            onPressed: () => widget.onBook(h.id),
+                            style: TextButton.styleFrom(
+                              backgroundColor: _kTint,
+                              foregroundColor: _kPurple,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 22, vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: const Text('Book',
+                                style: TextStyle(fontWeight: FontWeight.w600)),
+                          ),
+                        if (widget.canManage)
+                          _EditDeleteMenu(
+                            onEdit: () => _form(existing: h),
+                            onDelete: () => _delete(h),
+                          ),
+                      ],
+                    ),
+                    if ((h.description ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(h.description!,
+                          style: const TextStyle(
+                              fontSize: 13, color: Colors.black87)),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        trailing: widget.canManage
-            ? _EditDeleteMenu(
-                onEdit: () => _form(existing: h),
-                onDelete: () => _delete(h),
-              )
-            : null,
       ),
     );
   }
+
+  Widget _hallPlaceholder() => Container(
+        color: const Color(0xFFE8DCE9),
+        child: const Center(
+          child: Icon(Icons.meeting_room_outlined, color: _kPurple, size: 48),
+        ),
+      );
 }
 
 // ---------------------------------------------------------------------------
@@ -1017,43 +1158,119 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
   @override
   Widget build(BuildContext context) {
     return _ManagedList<Event>(
+      title: 'Events',
       future: _future!,
       canManage: widget.canManage,
       onAdd: () => _form(),
-      itemBuilder: (e) => ListTile(
-        leading: (e.image != null && e.image!.isNotEmpty)
-            ? CircleAvatar(backgroundImage: NetworkImage(e.image!))
-            : const CircleAvatar(child: Icon(Icons.event)),
-        title: Text(e.title),
-        subtitle: Text(
-          '${_shortDate(e.startDate)}${e.location != null ? ' · ${e.location}' : ''}',
-        ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => EventChatScreen(event: e)),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.chat_bubble_outline),
-              tooltip: 'Chat',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => EventChatScreen(event: e)),
+      itemBuilder: (e) {
+        final start = e.startDate.toLocal();
+        final time = e.endDate != null
+            ? '${DateFormat('h:mm a').format(start)} – ${DateFormat('h:mm a').format(e.endDate!.toLocal())}'
+            : DateFormat('h:mm a').format(start);
+        void openChat() => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => EventChatScreen(event: e)),
+            );
+        return _TintCard(
+          onTap: openChat,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 58,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEBDDED),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Text(DateFormat('MMM').format(start),
+                        style: const TextStyle(
+                            fontSize: 13,
+                            color: _kPurple,
+                            fontWeight: FontWeight.w600)),
+                    Text(DateFormat('dd').format(start),
+                        style: const TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.w700)),
+                  ],
+                ),
               ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.how_to_reg),
-              tooltip: 'Register',
-              onPressed: () => widget.onRegister(e),
-            ),
-            if (widget.canManage)
-              _EditDeleteMenu(
-                onEdit: () => _form(existing: e),
-                onDelete: () => _delete(e),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(e.title,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.access_time,
+                            size: 15, color: _kPurple),
+                        const SizedBox(width: 6),
+                        Text(time, style: const TextStyle(fontSize: 13)),
+                      ],
+                    ),
+                    if ((e.location ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined,
+                              size: 15, color: _kPurple),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(e.location!,
+                                style: const TextStyle(fontSize: 13)),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => widget.onRegister(e),
+                          icon: const Icon(Icons.how_to_reg, size: 16),
+                          label: const Text('Register'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: _kPurple,
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(0, 28),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        TextButton.icon(
+                          onPressed: openChat,
+                          icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                          label: const Text('Chat'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: _kPurple,
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(0, 28),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-          ],
-        ),
-      ),
+              if (widget.canManage)
+                _EditDeleteMenu(
+                  onEdit: () => _form(existing: e),
+                  onDelete: () => _delete(e),
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.only(top: 18),
+                  child: Icon(Icons.chevron_right),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -1117,12 +1334,16 @@ class _ManagedList<T> extends StatelessWidget {
   final VoidCallback? onAdd;
   final Widget? floatingAction;
 
+  /// Optional purple-barred section heading shown above the list.
+  final String? title;
+
   const _ManagedList({
     required this.future,
     required this.itemBuilder,
     required this.canManage,
     this.onAdd,
     this.floatingAction,
+    this.title,
   });
 
   @override
@@ -1131,6 +1352,8 @@ class _ManagedList<T> extends StatelessWidget {
         (canManage && onAdd != null
             ? FloatingActionButton(
                 mini: true,
+                backgroundColor: _kPurple,
+                foregroundColor: Colors.white,
                 onPressed: onAdd,
                 child: const Icon(Icons.add),
               )
@@ -1149,11 +1372,24 @@ class _ManagedList<T> extends StatelessWidget {
         return Stack(
           children: [
             if (items.isEmpty)
-              const Center(child: Text('Nothing here yet.'))
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (title != null) _SectionTitle(title!),
+                  const Expanded(child: Center(child: Text('Nothing here yet.'))),
+                ],
+              )
             else
               ListView.builder(
-                itemCount: items.length,
-                itemBuilder: (context, i) => itemBuilder(items[i]),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+                itemCount: items.length + (title != null ? 1 : 0),
+                itemBuilder: (context, i) {
+                  if (title != null) {
+                    if (i == 0) return _SectionTitle(title!);
+                    return itemBuilder(items[i - 1]);
+                  }
+                  return itemBuilder(items[i]);
+                },
               ),
             if (fab != null)
               Positioned(right: 16, bottom: 16, child: fab),
@@ -1163,6 +1399,62 @@ class _ManagedList<T> extends StatelessWidget {
     );
   }
 }
+
+/// Purple-barred section heading ("| Announcements").
+class _SectionTitle extends StatelessWidget {
+  final String text;
+
+  const _SectionTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 18, bottom: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 4,
+              height: 24,
+              decoration: BoxDecoration(
+                color: _kPurple,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              text,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      );
+}
+
+/// Rounded lavender card used by the Announcements and Events lists.
+class _TintCard extends StatelessWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+
+  const _TintCard({required this.child, this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Material(
+          color: _kTint,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: _kTintBorder),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(padding: const EdgeInsets.all(14), child: child),
+          ),
+        ),
+      );
+}
+
+String _prettyDate(DateTime d) => DateFormat('MMM d, y').format(d.toLocal());
 
 // ---------------------------------------------------------------------------
 // Booking dialog (shared by the header button, hall cards and Bookings tab).
