@@ -1,0 +1,338 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/auth_provider.dart';
+import '../models/models.dart';
+import '../services/api_service.dart';
+import 'church_detail_screen.dart';
+
+const _kPurple = Color(0xFF702078);
+const _kPurpleDark = Color(0xFF3F1F4A);
+const _kTint = Color(0xFFF6EEF7);
+
+/// "Find your church": the landing tab for members after login. Lists
+/// churches (filtered by the search box) as cards; "View church" opens the
+/// full church details page.
+class SearchScreen extends ConsumerStatefulWidget {
+  const SearchScreen({super.key});
+
+  @override
+  ConsumerState<SearchScreen> createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends ConsumerState<SearchScreen> {
+  final _search = TextEditingController();
+  Timer? _debounce;
+  Future<PaginatedResponse<Church>>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<PaginatedResponse<Church>> _load() => ref
+      .read(apiServiceProvider)
+      .listChurches(search: _search.text.trim(), limit: 50);
+
+  Future<void> _refresh() async {
+    setState(() => _future = _load());
+    try {
+      await _future;
+    } catch (_) {}
+  }
+
+  void _onChanged(String _) {
+    setState(() {}); // toggles the clear button
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) setState(() => _future = _load());
+    });
+  }
+
+  void _clear() {
+    _search.clear();
+    _debounce?.cancel();
+    setState(() => _future = _load());
+  }
+
+  void _open(Church c) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ChurchDetailScreen(church: c)),
+    );
+  }
+
+  void _toast(String msg) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+
+  /// Heart: make this the member's church (shown on the Home tab).
+  Future<void> _setMyChurch(Church c) async {
+    final user = ref.read(authProvider).user;
+    if (user?.churchId == c.id) {
+      _toast('${c.name} is already your church');
+      return;
+    }
+    try {
+      await ref.read(authProvider.notifier).updateProfile({'churchId': c.id});
+      _toast('${c.name} set as your church');
+    } catch (e) {
+      _toast(e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final myChurchId = ref.watch(authProvider.select((s) => s.user?.churchId));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Find your church',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'A community to connect, pray and gather.',
+                style: TextStyle(color: Colors.black54, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _search,
+                onChanged: _onChanged,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _refresh(),
+                decoration: InputDecoration(
+                  hintText: 'Search by church name or place',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _search.text.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: _clear,
+                        ),
+                  filled: true,
+                  fillColor: const Color(0xFFF3F1F4),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: FutureBuilder<PaginatedResponse<Church>>(
+            future: _future,
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snap.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Error: ${snap.error}', textAlign: TextAlign.center),
+                        const SizedBox(height: 8),
+                        FilledButton(
+                            onPressed: _refresh, child: const Text('Retry')),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              final churches = snap.data?.data ?? [];
+              final total = snap.data?.pagination.total ?? churches.length;
+              if (churches.isEmpty) {
+                return const Center(child: Text('No churches found.'));
+              }
+              return RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                  itemCount: churches.length + 1,
+                  itemBuilder: (context, i) {
+                    if (i == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Text(
+                          total == 1 ? '1 church' : '$total churches',
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w700),
+                        ),
+                      );
+                    }
+                    final c = churches[i - 1];
+                    return _ChurchCard(
+                      church: c,
+                      isMine: c.id == myChurchId,
+                      onView: () => _open(c),
+                      onHeart: () => _setMyChurch(c),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChurchCard extends StatelessWidget {
+  final Church church;
+  final bool isMine;
+  final VoidCallback onView;
+  final VoidCallback onHeart;
+
+  const _ChurchCard({
+    required this.church,
+    required this.isMine,
+    required this.onView,
+    required this.onHeart,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final image = church.images.isNotEmpty
+        ? church.images.first
+        : ((church.logo ?? '').isNotEmpty ? church.logo : null);
+    final address = church.address ?? '';
+    final description = church.description ?? '';
+
+    final placeholder = Container(
+      color: const Color(0xFFE8DCE9),
+      child: const Center(child: Icon(Icons.church, size: 56, color: _kPurple)),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Material(
+        color: Colors.white,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onView,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 160,
+                width: double.infinity,
+                child: image == null
+                    ? placeholder
+                    : Image.network(
+                        image,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => placeholder,
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 8, 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            church.name,
+                            style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: _kPurple),
+                          ),
+                          if (address.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.location_on_outlined,
+                                      size: 14, color: Colors.black54),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(address,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.black54)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: isMine ? 'Your church' : 'Set as my church',
+                      icon: Icon(
+                          isMine ? Icons.favorite : Icons.favorite_border),
+                      color: _kPurple,
+                      onPressed: onHeart,
+                    ),
+                  ],
+                ),
+              ),
+              if (description.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _kTint,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12)),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: onView,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _kPurpleDark,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text('View church  →'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

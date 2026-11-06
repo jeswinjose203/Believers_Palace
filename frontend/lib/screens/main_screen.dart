@@ -9,6 +9,7 @@ import 'churches_screen.dart';
 import 'home_screen.dart';
 import 'my_bookings_screen.dart';
 import 'profile_screen.dart';
+import 'search_screen.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -29,6 +30,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     final useHome = user?.role == 'user';
 
     final pages = <Widget>[
+      // Members land on Search (index 0) right after login.
+      if (useHome) const SearchScreen(),
       if (useHome) const HomeScreen() else const ChurchesScreen(),
       // Super admins manage bookings per church; they don't make their own.
       if (!isSuperAdmin) const MyBookingsScreen(),
@@ -38,6 +41,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     ];
 
     final items = <BottomNavigationBarItem>[
+      if (useHome)
+        const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
       if (useHome)
         const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home')
       else

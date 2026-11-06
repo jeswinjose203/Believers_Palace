@@ -1776,6 +1776,9 @@ class _PillTabsDelegate extends SliverPersistentHeaderDelegate {
 // previews of announcements, halls and upcoming events).
 // ---------------------------------------------------------------------------
 
+/// How many of the latest announcements the About tab previews.
+const int _previewAnnouncements = 4;
+
 class _AboutTab extends ConsumerStatefulWidget {
   final Church church;
   final String? loadError;
@@ -1815,7 +1818,7 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
   void _reloadLists() {
     final api = ref.read(apiServiceProvider);
     final id = widget.church.id;
-    _announcements = api.listAnnouncements(id, limit: 3);
+    _announcements = api.listAnnouncements(id, limit: 50);
     _halls = api.listHalls(id, limit: 10);
     _events = api.listEvents(id, limit: 50);
   }
@@ -2044,7 +2047,11 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
             _announcements,
             'No announcements yet.',
             (items) => Column(
-              children: items.take(2).map((a) {
+              children: (List<Announcement>.of(items)
+                    ..sort((a, b) => (b.publishedAt ?? b.createdAt)
+                        .compareTo(a.publishedAt ?? a.createdAt)))
+                  .take(_previewAnnouncements)
+                  .map((a) {
                 final date = a.publishedAt ?? a.createdAt;
                 return _tintedCard(
                   onTap: () => widget.onViewAll(1),
