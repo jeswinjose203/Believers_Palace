@@ -35,6 +35,7 @@ func (h *Handler) Routes() chi.Router {
 	r.Put("/{eventId}", h.update)
 	r.Delete("/{eventId}", h.delete)
 	r.Post("/{eventId}/register", h.register)
+	r.Delete("/{eventId}/register", h.unregister)
 	r.Get("/{eventId}/registrations", h.listRegistrations)
 	return r
 }
@@ -51,10 +52,11 @@ func (h *Handler) RoutesWith(messages chi.Router) chi.Router {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
+	id := auth.MustFromContext(r.Context())
 	churchID := chi.URLParam(r, "churchId")
 	pp := httpx.ParsePageParams(r)
 	search := r.URL.Query().Get("search")
-	items, total, err := h.svc.List(r.Context(), churchID, search, pp.Limit, pp.Offset)
+	items, total, err := h.svc.List(r.Context(), id, churchID, search, pp.Limit, pp.Offset)
 	if err != nil {
 		h.writeError(w, err)
 		return
@@ -136,6 +138,15 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusCreated, reg)
 }
 
+func (h *Handler) unregister(w http.ResponseWriter, r *http.Request) {
+	id := auth.MustFromContext(r.Context())
+	if err := h.svc.Unregister(r.Context(), id, chi.URLParam(r, "eventId")); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) listRegistrations(w http.ResponseWriter, r *http.Request) {
 	id := auth.MustFromContext(r.Context())
 	eventID := chi.URLParam(r, "eventId")
@@ -156,6 +167,8 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 		httpx.ErrorCode(w, http.StatusBadRequest, ve.Message, "bad_request")
 	case errors.Is(err, ErrForbidden):
 		httpx.ErrorCode(w, http.StatusForbidden, "insufficient permissions", "forbidden")
+	case errors.Is(err, ErrNotRegistered):
+		httpx.ErrorCode(w, http.StatusNotFound, "not registered for this event", "not_found")
 	case errors.Is(err, ErrAlreadyRegistered):
 		httpx.ErrorCode(w, http.StatusConflict, "already registered for this event", "conflict")
 	case errors.Is(err, ErrRegistrationUnavailable):

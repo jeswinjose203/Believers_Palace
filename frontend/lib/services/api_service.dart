@@ -272,6 +272,9 @@ class ApiService {
       _client.post('/events/$eventId/register', EventRegistration.fromJson,
           body: body);
 
+  Future<void> unregisterFromEvent(String eventId) =>
+      _client.delete('/events/$eventId/register');
+
   Future<PaginatedResponse<EventRegistration>> listEventRegistrations(
     String eventId, {
     int page = 1,

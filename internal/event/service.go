@@ -38,12 +38,40 @@ func NewService(repo *Repository, churches churchGetter) *Service {
 	return &Service{repo: repo, churches: churches}
 }
 
-// List returns a page of events for a church.
-func (s *Service) List(ctx context.Context, churchID, search string, limit, offset int) ([]Event, int, error) {
+// List returns a page of events for a church, each flagged with whether the
+// calling user is registered.
+func (s *Service) List(ctx context.Context, id auth.Identity, churchID, search string, limit, offset int) ([]Event, int, error) {
 	if err := s.ensureChurch(ctx, churchID); err != nil {
 		return nil, 0, err
 	}
-	return s.repo.ListByChurch(ctx, churchID, strings.TrimSpace(search), limit, offset)
+	items, total, err := s.repo.ListByChurch(ctx, churchID, strings.TrimSpace(search), limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	ids := make([]string, len(items))
+	for i := range items {
+		ids[i] = items[i].ID
+	}
+	registered, err := s.repo.RegisteredEventIDs(ctx, id.UserID, ids)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range items {
+		v := registered[items[i].ID]
+		items[i].Registered = &v
+	}
+	return items, total, nil
+}
+
+// Unregister cancels the calling user's registration for an event.
+func (s *Service) Unregister(ctx context.Context, id auth.Identity, eventID string) error {
+	if _, err := s.repo.GetByID(ctx, eventID); err != nil {
+		return err
+	}
+	if id.UserID == "" {
+		return ErrNotRegistered
+	}
+	return s.repo.DeleteRegistration(ctx, eventID, id.UserID)
 }
 
 // Get returns an event by ID.

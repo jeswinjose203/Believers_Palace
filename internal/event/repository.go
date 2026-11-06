@@ -13,6 +13,9 @@ import (
 // ErrNotFound is returned when an event does not exist.
 var ErrNotFound = errors.New("event not found")
 
+// ErrNotRegistered is returned when cancelling a registration that doesn't exist.
+var ErrNotRegistered = errors.New("not registered for this event")
+
 // ErrAlreadyRegistered is returned when a user registers twice for an event.
 var ErrAlreadyRegistered = errors.New("already registered for this event")
 
@@ -175,6 +178,43 @@ func (r *Repository) CountRegistrations(ctx context.Context, eventID string) (in
 		return 0, fmt.Errorf("count registrations: %w", err)
 	}
 	return n, nil
+}
+
+// RegisteredEventIDs returns the subset of eventIDs the user is registered for.
+func (r *Repository) RegisteredEventIDs(ctx context.Context, userID string, eventIDs []string) (map[string]bool, error) {
+	out := make(map[string]bool)
+	if userID == "" || len(eventIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.pool.Query(ctx,
+		`SELECT event_id FROM event_registrations WHERE user_id = $1 AND event_id = ANY($2::uuid[])`,
+		userID, eventIDs)
+	if err != nil {
+		return nil, fmt.Errorf("registered events: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan registered event: %w", err)
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
+// DeleteRegistration removes the user's registration for an event. It returns
+// ErrNotRegistered if there was none.
+func (r *Repository) DeleteRegistration(ctx context.Context, eventID, userID string) error {
+	tag, err := r.pool.Exec(ctx,
+		`DELETE FROM event_registrations WHERE event_id = $1 AND user_id = $2`, eventID, userID)
+	if err != nil {
+		return fmt.Errorf("delete registration: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotRegistered
+	}
+	return nil
 }
 
 // IsRegistered reports whether the user has registered for the event.

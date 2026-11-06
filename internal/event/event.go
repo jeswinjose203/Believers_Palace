@@ -18,6 +18,9 @@ type Event struct {
 	Capacity             *int       `json:"capacity,omitempty"`
 	RegistrationRequired bool       `json:"registrationRequired"`
 	CreatedAt            time.Time  `json:"createdAt"`
+	// Registered reports whether the calling user is registered for the event.
+	// It is only populated on list responses.
+	Registered *bool `json:"registered,omitempty"`
 }
 
 // Registration is an attendee registration for an event.

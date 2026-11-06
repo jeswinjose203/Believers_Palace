@@ -369,6 +369,9 @@ class Event {
   final bool? registrationRequired;
   final DateTime? createdAt;
 
+  /// Whether the signed-in user is registered (only set on list responses).
+  final bool registered;
+
   Event({
     required this.id,
     required this.churchId,
@@ -381,6 +384,7 @@ class Event {
     this.capacity,
     this.registrationRequired,
     this.createdAt,
+    this.registered = false,
   });
 
   factory Event.fromJson(Map<String, dynamic> json) => Event(
@@ -399,6 +403,7 @@ class Event {
         createdAt: json['createdAt'] != null
             ? DateTime.tryParse(json['createdAt'] as String)
             : null,
+        registered: json['registered'] as bool? ?? false,
       );
 
   Map<String, dynamic> toJson() => {

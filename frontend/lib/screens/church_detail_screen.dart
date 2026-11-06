@@ -1018,7 +1018,7 @@ class _BookingsTabState extends ConsumerState<_BookingsTab> {
 class _EventsTab extends ConsumerStatefulWidget {
   final String churchId;
   final bool canManage;
-  final ValueChanged<Event> onRegister;
+  final Future<void> Function(Event) onRegister;
   final void Function(String) onError;
   final void Function(String) onSuccess;
 
@@ -1145,6 +1145,35 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
     }
   }
 
+  Future<void> _unregister(Event e) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel registration?'),
+        content: Text('You will no longer be registered for "${e.title}".'
+            '${e.registrationRequired == true ? ' You will also lose access to its chat.' : ''}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Cancel registration'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(apiServiceProvider).unregisterFromEvent(e.id);
+      widget.onSuccess('Registration cancelled');
+      _refresh();
+    } catch (err) {
+      widget.onError(err.toString());
+    }
+  }
+
   Future<void> _delete(Event e) async {
     if (!await _confirmDelete(context, e.title)) return;
     try {
@@ -1235,9 +1264,18 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
                         if (!widget.canManage &&
                             e.registrationRequired == true) ...[
                           TextButton.icon(
-                            onPressed: () => widget.onRegister(e),
-                            icon: const Icon(Icons.how_to_reg, size: 16),
-                            label: const Text('Register'),
+                            onPressed: e.registered
+                                ? () => _unregister(e)
+                                : () async {
+                                    await widget.onRegister(e);
+                                    if (mounted) _refresh();
+                                  },
+                            icon: Icon(
+                                e.registered
+                                    ? Icons.check_circle
+                                    : Icons.how_to_reg,
+                                size: 16),
+                            label: Text(e.registered ? 'Registered' : 'Register'),
                             style: TextButton.styleFrom(
                               foregroundColor: _kPurple,
                               padding: EdgeInsets.zero,
@@ -1268,7 +1306,7 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
                               ),
                             ),
                             icon: const Icon(Icons.groups, size: 16),
-                            label: const Text('Registered'),
+                            label: const Text('Attendees'),
                             style: TextButton.styleFrom(
                               foregroundColor: _kPurple,
                               padding: EdgeInsets.zero,

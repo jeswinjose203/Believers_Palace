@@ -214,7 +214,7 @@ description. Migration `0013` adds the `description` and `images` columns.
 | GET/PUT/DELETE | `/halls/{hallId}`                 |
 | GET/POST | `/churches/{churchId}/events`           |
 | GET/PUT/DELETE | `/events/{eventId}`               |
-| POST   | `/events/{eventId}/register`              |
+| POST/DELETE | `/events/{eventId}/register`         |
 | GET    | `/events/{eventId}/registrations`         |
 | GET/POST | `/events/{eventId}/messages`            |
 | DELETE | `/events/{eventId}/messages/{messageId}`  |
@@ -230,6 +230,9 @@ super_admin) may read and post; anyone else gets `403` with code
 `not_registered`. If `registrationRequired` is false, any authenticated user may
 chat and registration is not offered in the app. Admins can see the attendee
 list and count via `GET /events/{eventId}/registrations` (`pagination.total`).
+Users can cancel their own registration with `DELETE /events/{eventId}/register`
+(204, or 404 if not registered); event list items include `registered` for the
+caller.
 A message may be deleted by its author, or by the owning church_admin /
 super_admin (`DELETE /events/{eventId}/messages/{messageId}`). The author's name and photo
 are snapshotted when the message is posted. The Flutter client refreshes the
