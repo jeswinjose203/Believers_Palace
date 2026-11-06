@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/auth_provider.dart';
 import '../models/models.dart';
@@ -9,7 +12,15 @@ import 'church_bookings_screen.dart';
 import 'churches_screen.dart';
 import 'event_chat_screen.dart';
 
+const _kPurple = Color(0xFF702078);
+const _kPurpleDark = Color(0xFF55204F);
+const _kTint = Color(0xFFF6EEF7);
+const _kTintBorder = Color(0xFFE4D3E6);
+
 /// Church detail with role-aware management.
+///
+/// Layout: image gallery, name + "Book a Hall", pill tabs (About,
+/// Announcements, Halls, Events, Bookings) and the tab content.
 ///
 /// - super_admin / church_admin (own church): full control of halls, bookings,
 ///   and booking status.
@@ -35,18 +46,44 @@ class ChurchDetailScreen extends ConsumerStatefulWidget {
 
 class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
     with SingleTickerProviderStateMixin {
+  static const int _announcementsTab = 1;
+  static const int _bookingsTab = 4;
+
   late final TabController _tabController;
+
+  /// The list endpoint returns a condensed church; the full record (gallery,
+  /// description, clergy, contact) is fetched on open.
+  late Church _church = widget.church;
+  String? _loadError;
+
+  /// Bumped after a booking is created so the Bookings tab reloads.
+  int _bookingsVersion = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
+    _loadChurch();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadChurch() async {
+    try {
+      final full = await ref.read(apiServiceProvider).getChurch(widget.church.id);
+      if (!mounted) return;
+      setState(() {
+        _church = full;
+        _loadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadError = e.toString());
+    }
   }
 
   void _showError(String message) {
@@ -72,85 +109,233 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
     return staff.contains(user.role) && user.churchId == widget.church.id;
   }
 
+  /// Opens the booking dialog (optionally for a specific hall) and, on
+  /// success, jumps to the Bookings tab.
+  Future<void> _book([String? hallId]) async {
+    final created = await _showNewBookingDialog(
+      context,
+      ref,
+      churchId: widget.church.id,
+      preselectHallId: hallId,
+      onError: _showError,
+      onSuccess: _showSuccess,
+    );
+    if (created && mounted) {
+      setState(() => _bookingsVersion++);
+      _tabController.animateTo(_bookingsTab);
+    }
+  }
+
+  /// Heart action: make this the signed-in member's church.
+  Future<void> _setAsMyChurch() async {
+    final user = ref.read(authProvider).user;
+    if (user == null) return;
+    if (user.churchId == widget.church.id) {
+      _showSuccess('This is already your church');
+      return;
+    }
+    try {
+      await ref
+          .read(authProvider.notifier)
+          .updateProfile({'churchId': widget.church.id});
+      _showSuccess('Set as your church');
+    } catch (e) {
+      _showError(e.toString());
+    }
+  }
+
+  void _openChangeChurch() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            const ChurchesScreen(selectMode: true, popOnSelect: true),
+      ),
+    );
+  }
+
+  void _openManageBookings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChurchBookingsScreen(
+          churchId: widget.church.id,
+          churchName: widget.church.name,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
     final canManage = _canManage(user);
     final canManageContent = _canManageContent(user);
+    final canBook = user?.role != 'super_admin';
+    final isMyChurch = user?.churchId == widget.church.id;
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(widget.church.name),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
         automaticallyImplyLeading: !widget.isHome,
+        centerTitle: true,
+        title: const Text(
+          'Believers Palace',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
         actions: [
-          if (widget.isHome)
+          if (user?.role == 'user')
             IconButton(
-              icon: const Icon(Icons.swap_horiz),
-              tooltip: 'Change church',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const ChurchesScreen(
-                      selectMode: true, popOnSelect: true),
-                ),
-              ),
+              icon: Icon(isMyChurch ? Icons.favorite : Icons.favorite_border),
+              color: _kPurple,
+              tooltip: isMyChurch ? 'Your church' : 'Set as my church',
+              onPressed: _setAsMyChurch,
             ),
-          if (canManage)
-            IconButton(
-              icon: const Icon(Icons.event_available),
-              tooltip: 'Manage bookings',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ChurchBookingsScreen(
-                    churchId: widget.church.id,
-                    churchName: widget.church.name,
-                  ),
-                ),
-              ),
-            ),
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            onSelected: (v) {
+              switch (v) {
+                case 'change':
+                  _openChangeChurch();
+                case 'bookings':
+                  _openManageBookings();
+                case 'refresh':
+                  _loadChurch();
+              }
+            },
+            itemBuilder: (_) => [
+              if (widget.isHome)
+                const PopupMenuItem(
+                    value: 'change', child: Text('Change church')),
+              if (canManage)
+                const PopupMenuItem(
+                    value: 'bookings', child: Text('Manage bookings')),
+              const PopupMenuItem(value: 'refresh', child: Text('Refresh')),
+            ],
+          ),
         ],
-        bottom: TabBar(
+      ),
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerScrolled) => [
+          SliverToBoxAdapter(child: _buildHeader(canBook)),
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _PillTabsDelegate(_tabController),
+          ),
+        ],
+        body: TabBarView(
           controller: _tabController,
-          isScrollable: true,
-          tabs: const [
-            Tab(text: 'About'),
-            Tab(text: 'Announcements'),
-            Tab(text: 'Halls'),
-            Tab(text: 'Bookings'),
-            Tab(text: 'Events'),
+          children: [
+            _AboutTab(
+              church: _church,
+              loadError: _loadError,
+              canBook: canBook,
+              onRefresh: _loadChurch,
+              onViewAll: (i) => _tabController.animateTo(i),
+              onBook: _book,
+              onError: _showError,
+              onSuccess: _showSuccess,
+            ),
+            _AnnouncementsTab(
+              churchId: widget.church.id,
+              canManage: canManageContent,
+              onError: _showError,
+              onSuccess: _showSuccess,
+            ),
+            _HallsTab(
+              churchId: widget.church.id,
+              canManage: canManage,
+              onError: _showError,
+              onSuccess: _showSuccess,
+            ),
+            _EventsTab(
+              churchId: widget.church.id,
+              canManage: canManageContent,
+              onRegister: _showRegisterDialog,
+              onError: _showError,
+              onSuccess: _showSuccess,
+            ),
+            _BookingsTab(
+              key: ValueKey(_bookingsVersion),
+              churchId: widget.church.id,
+              canBook: canBook,
+              onError: _showError,
+              onSuccess: _showSuccess,
+            ),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _AboutTab(churchId: widget.church.id, initial: widget.church),
-          _AnnouncementsTab(
-            churchId: widget.church.id,
-            canManage: canManageContent,
-            onError: _showError,
-            onSuccess: _showSuccess,
+    );
+  }
+
+  Widget _buildHeader(bool canBook) {
+    final images = _church.images.isNotEmpty
+        ? _church.images
+        : [
+            if (_church.logo != null && _church.logo!.isNotEmpty) _church.logo!,
+          ];
+    final address = _church.address ?? '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Gallery(images: images),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _church.name,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (address.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined,
+                              size: 16, color: _kPurple),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              address,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.black54),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (canBook) ...[
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: () => _book(),
+                  icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                  label: const Text('Book a Hall'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _kPurple,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
-          _HallsTab(
-            churchId: widget.church.id,
-            canManage: canManage,
-            onError: _showError,
-            onSuccess: _showSuccess,
-          ),
-          _BookingsTab(
-            churchId: widget.church.id,
-            canBook: user?.role != 'super_admin',
-            onError: _showError,
-            onSuccess: _showSuccess,
-          ),
-          _EventsTab(
-            churchId: widget.church.id,
-            canManage: canManageContent,
-            onRegister: _showRegisterDialog,
-            onError: _showError,
-            onSuccess: _showSuccess,
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -605,6 +790,7 @@ class _BookingsTab extends ConsumerStatefulWidget {
   final void Function(String) onSuccess;
 
   const _BookingsTab({
+    super.key,
     required this.churchId,
     required this.canBook,
     required this.onError,
@@ -635,96 +821,14 @@ class _BookingsTabState extends ConsumerState<_BookingsTab> {
   void _refresh() => setState(_reload);
 
   Future<void> _newBooking() async {
-    // Load halls for the picker first.
-    List<Hall> halls;
-    try {
-      final res =
-          await ref.read(apiServiceProvider).listHalls(widget.churchId, limit: 100);
-      halls = res.data;
-    } catch (e) {
-      widget.onError(e.toString());
-      return;
-    }
-    if (!mounted) return;
-    if (halls.isEmpty) {
-      widget.onError('This church has no halls to book yet.');
-      return;
-    }
-
-    String? hallId = halls.first.id;
-    final purpose = TextEditingController();
-    final notes = TextEditingController();
-    DateTime start = DateTime.now();
-    DateTime end = start.add(const Duration(hours: 2));
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('New Booking'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  value: hallId,
-                  decoration: const InputDecoration(labelText: 'Hall *'),
-                  items: halls
-                      .map((h) =>
-                          DropdownMenuItem(value: h.id, child: Text(h.name)))
-                      .toList(),
-                  onChanged: (v) => setState(() => hallId = v),
-                ),
-                _DateTimeField(
-                  label: 'Start',
-                  initial: start,
-                  onPicked: (d) => start = d ?? start,
-                ),
-                _DateTimeField(
-                  label: 'End',
-                  initial: end,
-                  onPicked: (d) => end = d ?? end,
-                ),
-                TextField(
-                  controller: purpose,
-                  decoration: const InputDecoration(labelText: 'Purpose'),
-                ),
-                TextField(
-                  controller: notes,
-                  decoration: const InputDecoration(labelText: 'Notes'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Request booking'),
-            ),
-          ],
-        ),
-      ),
+    final created = await _showNewBookingDialog(
+      context,
+      ref,
+      churchId: widget.churchId,
+      onError: widget.onError,
+      onSuccess: widget.onSuccess,
     );
-    if (confirmed != true || hallId == null) return;
-
-    try {
-      await ref.read(apiServiceProvider).createBooking(widget.churchId, {
-        'hallId': hallId,
-        // Backend requires RFC3339 (with timezone); toUtc() appends 'Z'.
-        'startDate': start.toUtc().toIso8601String(),
-        'endDate': end.toUtc().toIso8601String(),
-        'purpose': purpose.text.isEmpty ? null : purpose.text,
-        'notes': notes.text.isEmpty ? null : notes.text,
-      });
-      widget.onSuccess('Booking requested');
-      _refresh();
-    } catch (e) {
-      widget.onError(e.toString());
-    }
+    if (created && mounted) _refresh();
   }
 
   Color _statusColor(String status) {
@@ -1060,134 +1164,742 @@ class _ManagedList<T> extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Booking dialog (shared by the header button, hall cards and Bookings tab).
+// Returns true when a booking request was created.
+// ---------------------------------------------------------------------------
 
-/// First tab of the church detail screen: gallery, description, contact info
-/// and the priests associated with the church. The list endpoint only returns
-/// a condensed church, so the full record is fetched here.
+Future<bool> _showNewBookingDialog(
+  BuildContext context,
+  WidgetRef ref, {
+  required String churchId,
+  String? preselectHallId,
+  required void Function(String) onError,
+  required void Function(String) onSuccess,
+}) async {
+  // Load halls for the picker first.
+  List<Hall> halls;
+  try {
+    final res = await ref.read(apiServiceProvider).listHalls(churchId, limit: 100);
+    halls = res.data;
+  } catch (e) {
+    onError(e.toString());
+    return false;
+  }
+  if (!context.mounted) return false;
+  if (halls.isEmpty) {
+    onError('This church has no halls to book yet.');
+    return false;
+  }
+
+  String? hallId = halls.any((h) => h.id == preselectHallId)
+      ? preselectHallId
+      : halls.first.id;
+  final purpose = TextEditingController();
+  final notes = TextEditingController();
+  DateTime start = DateTime.now();
+  DateTime end = start.add(const Duration(hours: 2));
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('New Booking'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: hallId,
+                decoration: const InputDecoration(labelText: 'Hall *'),
+                items: halls
+                    .map((h) =>
+                        DropdownMenuItem(value: h.id, child: Text(h.name)))
+                    .toList(),
+                onChanged: (v) => setState(() => hallId = v),
+              ),
+              _DateTimeField(
+                label: 'Start',
+                initial: start,
+                onPicked: (d) => start = d ?? start,
+              ),
+              _DateTimeField(
+                label: 'End',
+                initial: end,
+                onPicked: (d) => end = d ?? end,
+              ),
+              TextField(
+                controller: purpose,
+                decoration: const InputDecoration(labelText: 'Purpose'),
+              ),
+              TextField(
+                controller: notes,
+                decoration: const InputDecoration(labelText: 'Notes'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Request booking'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (confirmed != true || hallId == null) return false;
+
+  try {
+    await ref.read(apiServiceProvider).createBooking(churchId, {
+      'hallId': hallId,
+      // Backend requires RFC3339 (with timezone); toUtc() appends 'Z'.
+      'startDate': start.toUtc().toIso8601String(),
+      'endDate': end.toUtc().toIso8601String(),
+      'purpose': purpose.text.isEmpty ? null : purpose.text,
+      'notes': notes.text.isEmpty ? null : notes.text,
+    });
+    onSuccess('Booking requested');
+    return true;
+  } catch (e) {
+    onError(e.toString());
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Header widgets: image gallery and pinned pill tab bar.
+// ---------------------------------------------------------------------------
+
+class _Gallery extends StatefulWidget {
+  final List<String> images;
+
+  const _Gallery({required this.images});
+
+  @override
+  State<_Gallery> createState() => _GalleryState();
+}
+
+class _GalleryState extends State<_Gallery> {
+  int _page = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final images = widget.images;
+    final placeholder = Container(
+      color: const Color(0xFFE8DCE9),
+      child: const Center(
+        child: Icon(Icons.church, size: 56, color: _kPurple),
+      ),
+    );
+
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+      child: SizedBox(
+        height: 210,
+        width: double.infinity,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (images.isEmpty)
+              placeholder
+            else
+              PageView.builder(
+                itemCount: images.length,
+                onPageChanged: (i) => setState(() => _page = i),
+                itemBuilder: (_, i) => Image.network(
+                  images[i],
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => placeholder,
+                ),
+              ),
+            if (images.isNotEmpty)
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.photo_outlined,
+                          size: 14, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${_page + 1} / ${images.length}',
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PillTabsDelegate extends SliverPersistentHeaderDelegate {
+  final TabController controller;
+
+  _PillTabsDelegate(this.controller);
+
+  static const _tabs = <(IconData, String)>[
+    (Icons.info_outline, 'About'),
+    (Icons.campaign_outlined, 'Announcements'),
+    (Icons.meeting_room_outlined, 'Halls'),
+    (Icons.event_outlined, 'Events'),
+    (Icons.event_seat_outlined, 'Bookings'),
+  ];
+
+  @override
+  double get minExtent => 56;
+
+  @override
+  double get maxExtent => 56;
+
+  @override
+  bool shouldRebuild(covariant _PillTabsDelegate oldDelegate) =>
+      oldDelegate.controller != controller;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Colors.white,
+      alignment: Alignment.center,
+      child: TabBar(
+        controller: controller,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        dividerColor: _kTintBorder,
+        indicatorSize: TabBarIndicatorSize.tab,
+        indicatorPadding: const EdgeInsets.symmetric(vertical: 6),
+        indicator: BoxDecoration(
+          color: _kPurpleDark,
+          borderRadius: BorderRadius.circular(22),
+        ),
+        labelColor: Colors.white,
+        unselectedLabelColor: _kPurpleDark,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        tabs: [
+          for (final t in _tabs)
+            Tab(
+              height: 44,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(t.$1, size: 18),
+                    const SizedBox(width: 6),
+                    Text(t.$2),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// About tab: overview of the church (description, quick actions, clergy and
+// previews of announcements, halls and upcoming events).
+// ---------------------------------------------------------------------------
+
 class _AboutTab extends ConsumerStatefulWidget {
-  final String churchId;
-  final Church initial;
+  final Church church;
+  final String? loadError;
+  final bool canBook;
+  final Future<void> Function() onRefresh;
+  final ValueChanged<int> onViewAll;
+  final ValueChanged<String?> onBook;
+  final void Function(String) onError;
+  final void Function(String) onSuccess;
 
-  const _AboutTab({required this.churchId, required this.initial});
+  const _AboutTab({
+    required this.church,
+    required this.loadError,
+    required this.canBook,
+    required this.onRefresh,
+    required this.onViewAll,
+    required this.onBook,
+    required this.onError,
+    required this.onSuccess,
+  });
 
   @override
   ConsumerState<_AboutTab> createState() => _AboutTabState();
 }
 
 class _AboutTabState extends ConsumerState<_AboutTab> {
-  late Church church = widget.initial;
-  bool _loading = true;
-  String? _error;
+  Future<PaginatedResponse<Announcement>>? _announcements;
+  Future<PaginatedResponse<Hall>>? _halls;
+  Future<PaginatedResponse<Event>>? _events;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _reloadLists();
   }
 
-  Future<void> _load() async {
+  void _reloadLists() {
+    final api = ref.read(apiServiceProvider);
+    final id = widget.church.id;
+    _announcements = api.listAnnouncements(id, limit: 3);
+    _halls = api.listHalls(id, limit: 10);
+    _events = api.listEvents(id, limit: 50);
+  }
+
+  Future<void> _refresh() async {
+    setState(_reloadLists);
+    await widget.onRefresh();
+  }
+
+  // ---- quick actions ------------------------------------------------------
+
+  Future<void> _launch(Uri uri, String failMessage) async {
     try {
-      final full = await ref.read(apiServiceProvider).getChurch(widget.churchId);
-      if (!mounted) return;
-      setState(() {
-        church = full;
-        _loading = false;
-        _error = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.toString();
-      });
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) widget.onError(failMessage);
+    } catch (_) {
+      widget.onError(failMessage);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final images = church.images.isNotEmpty
-        ? church.images
-        : [if (church.logo != null && church.logo!.isNotEmpty) church.logo!];
-    final hasDescription = (church.description ?? '').isNotEmpty;
+  void _call() {
+    final phone = widget.church.phone ?? '';
+    if (phone.isEmpty) {
+      widget.onError('No phone number available');
+      return;
+    }
+    _launch(Uri(scheme: 'tel', path: phone), 'Could not start a call');
+  }
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-      padding: const EdgeInsets.only(bottom: 24),
-      children: [
-        if (_loading) const LinearProgressIndicator(),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text('Could not load full details: $_error',
-                style: const TextStyle(color: Colors.red)),
+  void _email() {
+    final email = widget.church.email ?? '';
+    if (email.isEmpty) {
+      widget.onError('No email address available');
+      return;
+    }
+    _launch(Uri(scheme: 'mailto', path: email), 'Could not open email app');
+  }
+
+  void _directions() {
+    final address = widget.church.address ?? '';
+    if (address.isEmpty) {
+      widget.onError('No address available');
+      return;
+    }
+    _launch(
+      Uri.https('www.google.com', '/maps/search/', {
+        'api': '1',
+        'query': '${widget.church.name}, $address',
+      }),
+      'Could not open maps',
+    );
+  }
+
+  Future<void> _share() async {
+    final c = widget.church;
+    final text = [
+      c.name,
+      if ((c.address ?? '').isNotEmpty) c.address!,
+      if ((c.phone ?? '').isNotEmpty) c.phone!,
+      if ((c.email ?? '').isNotEmpty) c.email!,
+    ].join('\n');
+    await Clipboard.setData(ClipboardData(text: text));
+    widget.onSuccess('Church details copied to clipboard');
+  }
+
+  // ---- building blocks ----------------------------------------------------
+
+  Widget _sectionHeader(String title, {VoidCallback? onViewAll}) => Padding(
+        padding: const EdgeInsets.only(top: 20, bottom: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 4,
+              height: 20,
+              decoration: BoxDecoration(
+                color: _kPurple,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ),
+            if (onViewAll != null)
+              TextButton(
+                onPressed: onViewAll,
+                child: const Text('View All'),
+              ),
+          ],
+        ),
+      );
+
+  Widget _tintedCard({required Widget child, VoidCallback? onTap}) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Material(
+          color: _kTint,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: _kTintBorder),
           ),
-        if (images.isNotEmpty)
-          SizedBox(
-            height: 220,
-            child: PageView.builder(
-              itemCount: images.length,
-              itemBuilder: (_, i) => Image.network(
-                images[i],
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  color: Colors.grey.shade200,
-                  child: const Center(
-                    child: Icon(Icons.broken_image_outlined, color: Colors.grey),
-                  ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(padding: const EdgeInsets.all(12), child: child),
+          ),
+        ),
+      );
+
+  Widget _actionButton(IconData icon, String label, VoidCallback onTap) =>
+      Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Material(
+            color: _kTint,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: _kTintBorder),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  children: [
+                    Icon(icon, color: _kPurple),
+                    const SizedBox(height: 4),
+                    Text(label, style: const TextStyle(fontSize: 12)),
+                  ],
                 ),
               ),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(church.name, style: theme.textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              Text(
-                hasDescription
-                    ? church.description!
-                    : 'No description available.',
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              if ((church.address ?? '').isNotEmpty)
-                _infoRow(Icons.location_on_outlined, church.address!),
-              if ((church.phone ?? '').isNotEmpty)
-                _infoRow(Icons.phone_outlined, church.phone!),
-              if ((church.email ?? '').isNotEmpty)
-                _infoRow(Icons.email_outlined, church.email!),
-              if (church.priest != null || church.associatePriest != null) ...[
-                const SizedBox(height: 16),
-                Text('Clergy', style: theme.textTheme.titleMedium),
-                const SizedBox(height: 8),
-                if (church.priest != null)
-                  _priestCard('Priest', church.priest!),
-                if (church.associatePriest != null)
-                  _priestCard('Associate Priest', church.associatePriest!),
-              ],
-            ],
-          ),
         ),
-      ],
-    ),
+      );
+
+  /// Renders a future list as a section body with loading/error/empty states.
+  Widget _futureBody<T>(
+    Future<PaginatedResponse<T>>? future,
+    String emptyText,
+    Widget Function(List<T>) builder,
+  ) {
+    return FutureBuilder<PaginatedResponse<T>>(
+      future: future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.all(12),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        }
+        if (snap.hasError) {
+          return Text('Error: ${snap.error}',
+              style: const TextStyle(color: Colors.red));
+        }
+        final items = snap.data?.data ?? <T>[];
+        if (items.isEmpty) {
+          return Text(emptyText, style: const TextStyle(color: Colors.black54));
+        }
+        return builder(items);
+      },
     );
   }
 
-  Widget _infoRow(IconData icon, String text) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 18),
-            const SizedBox(width: 8),
-            Expanded(child: Text(text)),
+  @override
+  Widget build(BuildContext context) {
+    final church = widget.church;
+    final description = church.description ?? '';
+    final address = church.address ?? '';
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        children: [
+          _sectionHeader('About'),
+          Text(
+            description.isNotEmpty ? description : 'No description available.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          if (widget.loadError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Could not load full details: ${widget.loadError}',
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          if (church.priest != null || church.associatePriest != null) ...[
+            const SizedBox(height: 12),
+            if (church.priest != null) _priestCard('Priest', church.priest!),
+            if (church.associatePriest != null)
+              _priestCard('Associate Priest', church.associatePriest!),
           ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _actionButton(Icons.phone_outlined, 'Call', _call),
+              _actionButton(Icons.email_outlined, 'Email', _email),
+              _actionButton(Icons.location_on_outlined, 'Directions', _directions),
+              _actionButton(Icons.share_outlined, 'Share', _share),
+            ],
+          ),
+          if (address.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _tintedCard(
+              onTap: _directions,
+              child: Row(
+                children: [
+                  const Icon(Icons.location_on_outlined, color: _kPurple),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(address)),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
+            ),
+          ],
+
+          // Latest announcements.
+          _sectionHeader('Latest Announcements', onViewAll: () => widget.onViewAll(1)),
+          _futureBody<Announcement>(
+            _announcements,
+            'No announcements yet.',
+            (items) => Column(
+              children: items.take(2).map((a) {
+                final date = a.publishedAt ?? a.createdAt;
+                return _tintedCard(
+                  onTap: () => widget.onViewAll(1),
+                  child: Row(
+                    children: [
+                      const CircleAvatar(
+                        backgroundColor: Color(0xFFEBDDED),
+                        child: Icon(Icons.campaign_outlined, color: _kPurple),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(a.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            Text(a.content,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.black54)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        DateFormat('MMM d, y').format(date.toLocal()),
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
+          // Halls.
+          _sectionHeader('Halls', onViewAll: () => widget.onViewAll(2)),
+          _futureBody<Hall>(
+            _halls,
+            'No halls yet.',
+            (items) => SizedBox(
+              height: 190,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemBuilder: (_, i) => _hallCard(items[i]),
+              ),
+            ),
+          ),
+
+          // Upcoming events.
+          _sectionHeader('Upcoming Events', onViewAll: () => widget.onViewAll(3)),
+          _futureBody<Event>(
+            _events,
+            'No events yet.',
+            (all) {
+              final now = DateTime.now();
+              final upcoming = all
+                  .where((e) => (e.endDate ?? e.startDate).isAfter(now))
+                  .toList()
+                ..sort((a, b) => a.startDate.compareTo(b.startDate));
+              if (upcoming.isEmpty) {
+                return const Text('No upcoming events.',
+                    style: TextStyle(color: Colors.black54));
+              }
+              return Column(children: upcoming.take(3).map(_eventTile).toList());
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _hallCard(Hall h) {
+    return SizedBox(
+      width: 170,
+      child: Material(
+        color: Colors.white,
+        elevation: 1.5,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: _kTintBorder),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => widget.onViewAll(2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 100,
+                width: double.infinity,
+                child: h.images.isNotEmpty
+                    ? Image.network(
+                        h.images.first,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _hallPlaceholder(),
+                      )
+                    : _hallPlaceholder(),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                child: Text(h.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        h.capacity != null ? 'Capacity: ${h.capacity}' : '',
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.black54),
+                      ),
+                    ),
+                    if (widget.canBook)
+                      TextButton(
+                        onPressed: () => widget.onBook(h.id),
+                        style: TextButton.styleFrom(
+                          backgroundColor: _kTint,
+                          foregroundColor: _kPurple,
+                          minimumSize: const Size(0, 28),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Book'),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _hallPlaceholder() => Container(
+        color: const Color(0xFFE8DCE9),
+        child: const Center(
+          child: Icon(Icons.meeting_room_outlined, color: _kPurple, size: 36),
         ),
       );
+
+  Widget _eventTile(Event e) {
+    final start = e.startDate.toLocal();
+    final time = e.endDate != null
+        ? '${DateFormat('h:mm a').format(start)} – ${DateFormat('h:mm a').format(e.endDate!.toLocal())}'
+        : DateFormat('h:mm a').format(start);
+    return _tintedCard(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => EventChatScreen(event: e)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 54,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _kTintBorder),
+            ),
+            child: Column(
+              children: [
+                Text(DateFormat('MMM').format(start),
+                    style: const TextStyle(
+                        fontSize: 12,
+                        color: _kPurple,
+                        fontWeight: FontWeight.w600)),
+                Text(DateFormat('d').format(start),
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(e.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    const Icon(Icons.access_time, size: 14, color: _kPurple),
+                    const SizedBox(width: 4),
+                    Text(time, style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right),
+        ],
+      ),
+    );
+  }
 
   Widget _priestCard(String role, PriestDetails p) {
     final contact = [
@@ -1195,6 +1907,7 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
       if ((p.email ?? '').isNotEmpty) p.email!,
     ].join('  •  ');
     return Card(
+      margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: (p.profilePic ?? '').isNotEmpty
             ? CircleAvatar(backgroundImage: NetworkImage(p.profilePic!))
