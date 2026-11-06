@@ -30,7 +30,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
     final pages = <Widget>[
       if (useHome) const HomeScreen() else const ChurchesScreen(),
-      const MyBookingsScreen(),
+      // Super admins manage bookings per church; they don't make their own.
+      if (!isSuperAdmin) const MyBookingsScreen(),
       const CertificatesScreen(),
       if (isSuperAdmin) const AdminUsersScreen(),
       const ProfileScreen(),
@@ -42,8 +43,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       else
         const BottomNavigationBarItem(
             icon: Icon(Icons.church), label: 'Churches'),
-      const BottomNavigationBarItem(
-          icon: Icon(Icons.calendar_today), label: 'My Bookings'),
+      if (!isSuperAdmin)
+        const BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today), label: 'My Bookings'),
       const BottomNavigationBarItem(
           icon: Icon(Icons.school), label: 'Certificates'),
       if (isSuperAdmin)

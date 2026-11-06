@@ -138,6 +138,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
           ),
           _BookingsTab(
             churchId: widget.church.id,
+            canBook: user?.role != 'super_admin',
             onError: _showError,
             onSuccess: _showSuccess,
           ),
@@ -599,11 +600,13 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
 
 class _BookingsTab extends ConsumerStatefulWidget {
   final String churchId;
+  final bool canBook;
   final void Function(String) onError;
   final void Function(String) onSuccess;
 
   const _BookingsTab({
     required this.churchId,
+    required this.canBook,
     required this.onError,
     required this.onSuccess,
   });
@@ -742,11 +745,13 @@ class _BookingsTabState extends ConsumerState<_BookingsTab> {
       future: _future!,
       canManage: false,
       onAdd: null,
-      floatingAction: FloatingActionButton.extended(
-        onPressed: _newBooking,
-        icon: const Icon(Icons.add),
-        label: const Text('Book a hall'),
-      ),
+      floatingAction: widget.canBook
+          ? FloatingActionButton.extended(
+              onPressed: _newBooking,
+              icon: const Icon(Icons.add),
+              label: const Text('Book a hall'),
+            )
+          : null,
       itemBuilder: (b) => ListTile(
         leading: const CircleAvatar(child: Icon(Icons.event_seat)),
         title: Text('${_shortDate(b.startDate)} → ${_shortDate(b.endDate)}'),
@@ -802,8 +807,6 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
     final title = TextEditingController(text: existing?.title ?? '');
     final description = TextEditingController(text: existing?.description ?? '');
     final location = TextEditingController(text: existing?.location ?? '');
-    final capacity =
-        TextEditingController(text: existing?.capacity?.toString() ?? '');
     DateTime startDate = existing?.startDate ?? DateTime.now();
     DateTime? endDate = existing?.endDate;
     bool registrationRequired = existing?.registrationRequired ?? false;
@@ -830,11 +833,6 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
                 TextField(
                   controller: location,
                   decoration: const InputDecoration(labelText: 'Location'),
-                ),
-                TextField(
-                  controller: capacity,
-                  decoration: const InputDecoration(labelText: 'Capacity'),
-                  keyboardType: TextInputType.number,
                 ),
                 _DateTimeField(
                   label: 'Start date *',
@@ -879,9 +877,11 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
       'title': title.text,
       'description': description.text.isEmpty ? null : description.text,
       'location': location.text.isEmpty ? null : location.text,
-      'capacity': int.tryParse(capacity.text),
-      'startDate': startDate.toIso8601String(),
-      'endDate': endDate?.toIso8601String(),
+      // Capacity is no longer editable in the UI; keep any existing value.
+      'capacity': existing?.capacity,
+      // RFC3339 with timezone ('Z') is required by the backend.
+      'startDate': startDate.toUtc().toIso8601String(),
+      'endDate': endDate?.toUtc().toIso8601String(),
       'registrationRequired': registrationRequired,
       'image': (image == null || image!.isEmpty) ? null : image,
     };
