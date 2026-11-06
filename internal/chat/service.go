@@ -18,6 +18,12 @@ var ErrNotRegistered = errors.New("register for this event to join the chat")
 // ErrEventNotFound is returned when the target event does not exist.
 var ErrEventNotFound = errors.New("event not found")
 
+// Cursor listing page-size bounds.
+const (
+	DefaultCursorLimit = 50
+	MaxCursorLimit     = 100
+)
+
 // maxContentLen bounds a single chat message.
 const maxContentLen = 4000
 
@@ -61,6 +67,7 @@ type messageStore interface {
 	Create(ctx context.Context, eventID string, userID *string, authorName string, authorPic *string, content string) (*Message, error)
 	GetByID(ctx context.Context, id string) (*Message, error)
 	ListByEvent(ctx context.Context, eventID string, limit, offset int) ([]Message, int, error)
+	ListCursor(ctx context.Context, eventID string, q CursorQuery) ([]Message, bool, error)
 	Delete(ctx context.Context, id string) error
 }
 
@@ -115,6 +122,31 @@ func (s *Service) List(ctx context.Context, id auth.Identity, eventID string, li
 		return nil, 0, err
 	}
 	return s.repo.ListByEvent(ctx, eventID, limit, offset)
+}
+
+// ListCursor returns a cursor-based window of messages (see CursorQuery). The
+// same access rules as List apply.
+func (s *Service) ListCursor(ctx context.Context, id auth.Identity, eventID string, q CursorQuery) (*CursorPage, error) {
+	if q.Before > 0 && q.After > 0 {
+		return nil, invalid("use either before or after, not both")
+	}
+	if q.Limit < 1 {
+		q.Limit = DefaultCursorLimit
+	}
+	if q.Limit > MaxCursorLimit {
+		q.Limit = MaxCursorLimit
+	}
+	if err := s.authorizeAccess(ctx, id, eventID); err != nil {
+		return nil, err
+	}
+	items, hasMore, err := s.repo.ListCursor(ctx, eventID, q)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []Message{}
+	}
+	return &CursorPage{Data: items, HasMore: hasMore}, nil
 }
 
 // Post creates a message authored by the calling user. When the event requires

@@ -637,6 +637,9 @@ class Certificate {
 class ChatMessage {
   final String id;
   final String eventId;
+
+  /// Monotonic cursor used for paging and polling.
+  final int seq;
   final String? userId;
   final String authorName;
   final String? authorPic;
@@ -646,6 +649,7 @@ class ChatMessage {
   ChatMessage({
     required this.id,
     required this.eventId,
+    this.seq = 0,
     this.userId,
     required this.authorName,
     this.authorPic,
@@ -656,6 +660,7 @@ class ChatMessage {
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
         id: json['id'] as String,
         eventId: json['eventId'] as String,
+        seq: (json['seq'] as num?)?.toInt() ?? 0,
         userId: json['userId'] as String?,
         authorName: json['authorName'] as String? ?? 'User',
         authorPic: json['authorPic'] as String?,
@@ -694,5 +699,20 @@ class ErrorResponse {
         message: json['message'] as String,
         code: json['code'] as String?,
         details: json['details'] as Map<String, dynamic>?,
+      );
+}
+
+/// A window of chat messages (oldest first) from the cursor API.
+class ChatCursorPage {
+  final List<ChatMessage> data;
+  final bool hasMore;
+
+  ChatCursorPage({required this.data, required this.hasMore});
+
+  factory ChatCursorPage.fromJson(Map<String, dynamic> json) => ChatCursorPage(
+        data: (json['data'] as List)
+            .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        hasMore: (json['hasMore'] as bool?) ?? false,
       );
 }

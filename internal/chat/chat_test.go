@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"net/http/httptest"
 	"testing"
 
 	"believers_palace/internal/auth"
@@ -9,8 +10,9 @@ import (
 
 // fakeStore is an in-memory messageStore for tests.
 type fakeStore struct {
-	msgs    map[string]*Message
-	deleted []string
+	msgs       map[string]*Message
+	deleted    []string
+	lastCursor CursorQuery
 }
 
 func newFakeStore() *fakeStore {
@@ -39,6 +41,11 @@ func (f *fakeStore) ListByEvent(_ context.Context, eventID string, _, _ int) ([]
 		}
 	}
 	return out, len(out), nil
+}
+
+func (f *fakeStore) ListCursor(_ context.Context, eventID string, q CursorQuery) ([]Message, bool, error) {
+	f.lastCursor = q
+	return []Message{{ID: "c1", EventID: eventID, Seq: 7}}, true, nil
 }
 
 func (f *fakeStore) Delete(_ context.Context, id string) error {
@@ -208,5 +215,79 @@ func TestChatOpenWhenRegistrationNotRequired(t *testing.T) {
 	}
 	if _, err := svc.Post(context.Background(), stranger, "closed", CreateRequest{Content: "hi"}); err != ErrNotRegistered {
 		t.Errorf("registration-required event: Post err = %v, want ErrNotRegistered", err)
+	}
+}
+
+func TestListCursor(t *testing.T) {
+	events := fakeEvents{"e1": "c1"}
+	regs := fakeRegs{"e1/member": true}
+	member := auth.Identity{UserID: "member", Role: auth.RoleUser}
+	stranger := auth.Identity{UserID: "stranger", Role: auth.RoleUser}
+
+	t.Run("both before and after rejected", func(t *testing.T) {
+		svc := NewService(newFakeStore(), events, fakeUsers{}, regs)
+		_, err := svc.ListCursor(context.Background(), member, "e1", CursorQuery{Before: 5, After: 3})
+		if _, ok := err.(*ValidationError); !ok {
+			t.Errorf("err = %v, want ValidationError", err)
+		}
+	})
+	t.Run("access rules apply", func(t *testing.T) {
+		svc := NewService(newFakeStore(), events, fakeUsers{}, regs)
+		if _, err := svc.ListCursor(context.Background(), stranger, "e1", CursorQuery{}); err != ErrNotRegistered {
+			t.Errorf("err = %v, want ErrNotRegistered", err)
+		}
+		if _, err := svc.ListCursor(context.Background(), member, "missing", CursorQuery{}); err != ErrEventNotFound {
+			t.Errorf("err = %v, want ErrEventNotFound", err)
+		}
+	})
+	t.Run("limit defaults and clamps", func(t *testing.T) {
+		store := newFakeStore()
+		svc := NewService(store, events, fakeUsers{}, regs)
+		page, err := svc.ListCursor(context.Background(), member, "e1", CursorQuery{})
+		if err != nil || !page.HasMore || len(page.Data) != 1 {
+			t.Fatalf("page = %+v, err = %v", page, err)
+		}
+		if store.lastCursor.Limit != DefaultCursorLimit {
+			t.Errorf("limit = %d, want %d", store.lastCursor.Limit, DefaultCursorLimit)
+		}
+		if _, err := svc.ListCursor(context.Background(), member, "e1", CursorQuery{Limit: 9999}); err != nil {
+			t.Fatal(err)
+		}
+		if store.lastCursor.Limit != MaxCursorLimit {
+			t.Errorf("limit = %d, want %d", store.lastCursor.Limit, MaxCursorLimit)
+		}
+	})
+}
+
+func TestParseCursorQuery(t *testing.T) {
+	cases := []struct {
+		url        string
+		wantCursor bool
+		wantErr    bool
+		before     int64
+		after      int64
+		limit      int
+	}{
+		{"/?page=1&limit=100", false, false, 0, 0, 0},
+		{"/?latest=1", true, false, 0, 0, DefaultCursorLimit},
+		{"/?after=12&limit=20", true, false, 0, 12, 20},
+		{"/?before=40", true, false, 40, 0, DefaultCursorLimit},
+		{"/?after=abc", true, true, 0, 0, 0},
+		{"/?before=0", true, true, 0, 0, 0},
+		{"/?latest=1&limit=-3", true, true, 0, 0, 0},
+	}
+	for _, c := range cases {
+		q, isCursor, err := parseCursorQuery(httptest.NewRequest("GET", c.url, nil))
+		if isCursor != c.wantCursor {
+			t.Errorf("%s: cursor mode = %v, want %v", c.url, isCursor, c.wantCursor)
+			continue
+		}
+		if (err != nil) != c.wantErr {
+			t.Errorf("%s: err = %v, wantErr %v", c.url, err, c.wantErr)
+			continue
+		}
+		if err == nil && isCursor && (q.Before != c.before || q.After != c.after || q.Limit != c.limit) {
+			t.Errorf("%s: got %+v", c.url, q)
+		}
 	}
 }

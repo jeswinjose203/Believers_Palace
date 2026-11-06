@@ -109,7 +109,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		AppEnv:        getEnv("APP_ENV", "development"),
 		HTTPPort:      getEnv("HTTP_PORT", "8080"),
-		PublicBaseURL: strings.TrimRight(getEnv("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
+		PublicBaseURL: strings.TrimRight(getEnv("PUBLIC_BASE_URL", "http://192.168.1.11:8080"), "/"),
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5432"),

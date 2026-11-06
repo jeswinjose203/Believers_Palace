@@ -298,6 +298,25 @@ class ApiService {
         query: {'page': page, 'limit': limit},
       );
 
+  /// Cursor-based chat listing. With neither [before] nor [after], returns the
+  /// latest [limit] messages. [before]/[after] are message `seq` values.
+  Future<ChatCursorPage> listEventMessagesCursor(
+    String eventId, {
+    int? before,
+    int? after,
+    int limit = 50,
+  }) =>
+      _client.get(
+        '/events/$eventId/messages',
+        ChatCursorPage.fromJson,
+        query: {
+          if (before != null) 'before': before,
+          if (after != null) 'after': after,
+          if (before == null && after == null) 'latest': 1,
+          'limit': limit,
+        },
+      );
+
   Future<ChatMessage> postEventMessage(String eventId, String content) =>
       _client.post(
         '/events/$eventId/messages',
