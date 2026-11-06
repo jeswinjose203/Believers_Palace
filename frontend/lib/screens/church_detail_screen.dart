@@ -11,6 +11,7 @@ import '../widgets/image_picker_field.dart';
 import 'church_bookings_screen.dart';
 import 'churches_screen.dart';
 import 'event_chat_screen.dart';
+import 'event_registrations_screen.dart';
 
 const _kPurple = Color(0xFF702078);
 const _kPurpleDark = Color(0xFF55204F);
@@ -1252,6 +1253,25 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                         ),
+                        if (widget.canManage) ...[
+                          const SizedBox(width: 12),
+                          TextButton.icon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    EventRegistrationsScreen(event: e),
+                              ),
+                            ),
+                            icon: const Icon(Icons.groups, size: 16),
+                            label: const Text('Registered'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: _kPurple,
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 28),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],

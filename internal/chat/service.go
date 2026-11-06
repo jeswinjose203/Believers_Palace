@@ -11,6 +11,10 @@ import (
 // ErrForbidden is returned when the caller lacks permission for the operation.
 var ErrForbidden = errors.New("insufficient permissions")
 
+// ErrNotRegistered is returned when a user who is not registered for the event
+// (and is not church staff) tries to read or post in its chat.
+var ErrNotRegistered = errors.New("register for this event to join the chat")
+
 // ErrEventNotFound is returned when the target event does not exist.
 var ErrEventNotFound = errors.New("event not found")
 
@@ -38,6 +42,11 @@ type userResolver interface {
 	DisplayOf(ctx context.Context, userID string) (name string, profilePic *string, ok bool, err error)
 }
 
+// registrationChecker reports whether a user is registered for an event.
+type registrationChecker interface {
+	IsRegistered(ctx context.Context, eventID, userID string) (bool, error)
+}
+
 // messageStore is the subset of the repository the service relies on. It keeps
 // the authorization logic testable without a live database.
 type messageStore interface {
@@ -52,31 +61,56 @@ type Service struct {
 	repo   messageStore
 	events eventResolver
 	users  userResolver
+	regs   registrationChecker
 }
 
 // NewService creates a chat service.
-func NewService(repo messageStore, events eventResolver, users userResolver) *Service {
-	return &Service{repo: repo, events: events, users: users}
+func NewService(repo messageStore, events eventResolver, users userResolver, regs registrationChecker) *Service {
+	return &Service{repo: repo, events: events, users: users, regs: regs}
 }
 
-// List returns a page of messages for an event. Any authenticated user who can
-// see the event may read its chat; here that means the event must exist.
+// authorizeAccess verifies the event exists and that the caller may take part
+// in its chat: church staff of the event's church (and super_admin) always may;
+// everyone else must be registered for the event.
+func (s *Service) authorizeAccess(ctx context.Context, id auth.Identity, eventID string) error {
+	churchID, ok, err := s.events.ChurchIDOfEvent(ctx, eventID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrEventNotFound
+	}
+	if auth.CanManageChurchContent(id, churchID) {
+		return nil
+	}
+	if id.UserID == "" {
+		return ErrNotRegistered
+	}
+	registered, err := s.regs.IsRegistered(ctx, eventID, id.UserID)
+	if err != nil {
+		return err
+	}
+	if !registered {
+		return ErrNotRegistered
+	}
+	return nil
+}
+
+// List returns a page of messages for an event. Only registered attendees and
+// church staff may read the chat.
 func (s *Service) List(ctx context.Context, id auth.Identity, eventID string, limit, offset int) ([]Message, int, error) {
-	if _, ok, err := s.events.ChurchIDOfEvent(ctx, eventID); err != nil {
+	if err := s.authorizeAccess(ctx, id, eventID); err != nil {
 		return nil, 0, err
-	} else if !ok {
-		return nil, 0, ErrEventNotFound
 	}
 	return s.repo.ListByEvent(ctx, eventID, limit, offset)
 }
 
-// Post creates a message authored by the calling user. The author's name and
-// profile picture are snapshotted at insert time.
+// Post creates a message authored by the calling user. Only registered
+// attendees and church staff may post. The author's name and profile picture
+// are snapshotted at insert time.
 func (s *Service) Post(ctx context.Context, id auth.Identity, eventID string, in CreateRequest) (*Message, error) {
-	if _, ok, err := s.events.ChurchIDOfEvent(ctx, eventID); err != nil {
+	if err := s.authorizeAccess(ctx, id, eventID); err != nil {
 		return nil, err
-	} else if !ok {
-		return nil, ErrEventNotFound
 	}
 
 	content := strings.TrimSpace(in.Content)

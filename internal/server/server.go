@@ -106,6 +106,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 		chatRepo,
 		eventChurchResolver{eventRepo},
 		userDisplayResolver{userRepo},
+		eventRepo, // satisfies chat's registrationChecker (IsRegistered)
 	)
 	chatHandler := chat.NewHandler(chatSvc)
 

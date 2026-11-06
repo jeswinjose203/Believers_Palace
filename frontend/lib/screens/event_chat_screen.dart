@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../core/api_client.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 
-/// Per-event chat. Anyone authenticated can read and post; a message can be
-/// deleted by its author or by a church admin / super admin.
+/// Per-event chat. Only users registered for the event (and church staff) can
+/// read and post; a message can be deleted by its author or by a church admin /
+/// super admin.
 ///
 /// Delivery uses lightweight polling (every few seconds) plus pull-to-refresh,
 /// fitting the REST backend without a persistent socket connection.
@@ -28,6 +30,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen> {
   List<ChatMessage> _messages = const [];
   bool _loading = true;
   bool _sending = false;
+  bool _notRegistered = false;
   String? _error;
   Timer? _poll;
 
@@ -65,6 +68,15 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen> {
       if (initial || atBottom) _jumpToBottom();
     } catch (e) {
       if (!mounted) return;
+      if (e is ApiException && e.code == 'not_registered') {
+        // Not registered for this event: stop polling and show a prompt.
+        _poll?.cancel();
+        setState(() {
+          _loading = false;
+          _notRegistered = true;
+        });
+        return;
+      }
       setState(() {
         _loading = false;
         _error = e.toString();
@@ -150,7 +162,18 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _error != null && _messages.isEmpty
+                : _notRegistered
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text(
+                            'Only registered attendees can use this chat.\n'
+                            'Register for the event to join the conversation.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    : _error != null && _messages.isEmpty
                     ? Center(child: Text('Error: $_error'))
                     : _messages.isEmpty
                         ? const Center(
@@ -177,6 +200,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen> {
                             ),
                           ),
           ),
+          if (!_notRegistered)
           SafeArea(
             top: false,
             child: Padding(

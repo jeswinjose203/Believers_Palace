@@ -64,11 +64,23 @@ func (fakeUsers) DisplayOf(_ context.Context, userID string) (string, *string, b
 	return "Tester", nil, true, nil
 }
 
+// allRegistered treats every user as registered.
+type allRegistered struct{}
+
+func (allRegistered) IsRegistered(context.Context, string, string) (bool, error) { return true, nil }
+
+// fakeRegs is a set of "eventID/userID" keys that are registered.
+type fakeRegs map[string]bool
+
+func (f fakeRegs) IsRegistered(_ context.Context, eventID, userID string) (bool, error) {
+	return f[eventID+"/"+userID], nil
+}
+
 func strptr(s string) *string { return &s }
 
 func TestPostValidation(t *testing.T) {
 	store := newFakeStore()
-	svc := NewService(store, fakeEvents{"e1": "c1"}, fakeUsers{})
+	svc := NewService(store, fakeEvents{"e1": "c1"}, fakeUsers{}, allRegistered{})
 	id := auth.Identity{UserID: "u1", Role: auth.RoleUser}
 
 	if _, err := svc.Post(context.Background(), id, "e1", CreateRequest{Content: "   "}); err == nil {
@@ -96,11 +108,11 @@ func TestDeleteAuthorization(t *testing.T) {
 	}
 
 	cases := []struct {
-		name      string
-		id        auth.Identity
-		msgID     string
-		wantErr   error
-		wantGone  bool
+		name     string
+		id       auth.Identity
+		msgID    string
+		wantErr  error
+		wantGone bool
 	}{
 		{"author deletes own", auth.Identity{UserID: "owner", Role: auth.RoleUser}, "msg-author", nil, true},
 		{"super_admin deletes any", auth.Identity{UserID: "x", Role: auth.RoleSuperAdmin}, "msg-author", nil, true},
@@ -113,7 +125,7 @@ func TestDeleteAuthorization(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			store := seed()
-			svc := NewService(store, events, fakeUsers{})
+			svc := NewService(store, events, fakeUsers{}, allRegistered{})
 			err := svc.Delete(context.Background(), c.id, "e1", c.msgID)
 			if err != c.wantErr {
 				t.Fatalf("err = %v, want %v", err, c.wantErr)
@@ -134,10 +146,43 @@ func TestDeleteAuthorization(t *testing.T) {
 func TestDeleteWrongEvent(t *testing.T) {
 	store := newFakeStore()
 	store.msgs["m1"] = &Message{ID: "m1", EventID: "e1", UserID: strptr("owner"), Content: "x"}
-	svc := NewService(store, fakeEvents{"e1": "c1", "e2": "c1"}, fakeUsers{})
+	svc := NewService(store, fakeEvents{"e1": "c1", "e2": "c1"}, fakeUsers{}, allRegistered{})
 
 	err := svc.Delete(context.Background(), auth.Identity{UserID: "owner", Role: auth.RoleUser}, "e2", "m1")
 	if err != ErrNotFound {
 		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestChatRequiresRegistration verifies only registered attendees and church
+// staff may read or post.
+func TestChatRequiresRegistration(t *testing.T) {
+	events := fakeEvents{"e1": "c1"}
+	regs := fakeRegs{"e1/member": true}
+
+	cases := []struct {
+		name    string
+		id      auth.Identity
+		wantErr error
+	}{
+		{"registered user", auth.Identity{UserID: "member", Role: auth.RoleUser}, nil},
+		{"unregistered user", auth.Identity{UserID: "stranger", Role: auth.RoleUser}, ErrNotRegistered},
+		{"super_admin", auth.Identity{UserID: "sa", Role: auth.RoleSuperAdmin}, nil},
+		{"church_admin same church", auth.Identity{UserID: "a", Role: auth.RoleChurchAdmin, ChurchID: "c1"}, nil},
+		{"priest same church", auth.Identity{UserID: "p", Role: auth.RolePriest, ChurchID: "c1"}, nil},
+		{"church_admin other church", auth.Identity{UserID: "a2", Role: auth.RoleChurchAdmin, ChurchID: "c2"}, ErrNotRegistered},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			svc := NewService(newFakeStore(), events, fakeUsers{}, regs)
+			_, _, err := svc.List(context.Background(), c.id, "e1", 10, 0)
+			if err != c.wantErr {
+				t.Errorf("List err = %v, want %v", err, c.wantErr)
+			}
+			_, err = svc.Post(context.Background(), c.id, "e1", CreateRequest{Content: "hi"})
+			if err != c.wantErr {
+				t.Errorf("Post err = %v, want %v", err, c.wantErr)
+			}
+		})
 	}
 }

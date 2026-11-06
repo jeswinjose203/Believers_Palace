@@ -222,9 +222,12 @@ description. Migration `0013` adds the `description` and `images` columns.
 Create/update/delete of these resources require the owning church_admin or
 super_admin.
 
-**Event chat:** every event has a chat. Any authenticated user may read
-(`GET /events/{eventId}/messages`, paginated, oldest-first) and post
-(`POST /events/{eventId}/messages` with `{content}`). A message may be deleted
+**Event chat:** every event has a chat. Only users who have registered for the
+event (`POST /events/{eventId}/register`) and church staff of the owning church
+(plus super_admin) may read (`GET /events/{eventId}/messages`, paginated,
+oldest-first) and post (`POST /events/{eventId}/messages` with `{content}`);
+anyone else gets `403` with code `not_registered`. Admins can see the attendee
+list and count via `GET /events/{eventId}/registrations` (`pagination.total`). A message may be deleted
 by its author, or by the owning church_admin / super_admin
 (`DELETE /events/{eventId}/messages/{messageId}`). The author's name and photo
 are snapshotted when the message is posted. The Flutter client refreshes the

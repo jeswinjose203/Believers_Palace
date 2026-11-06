@@ -177,6 +177,18 @@ func (r *Repository) CountRegistrations(ctx context.Context, eventID string) (in
 	return n, nil
 }
 
+// IsRegistered reports whether the user has registered for the event.
+func (r *Repository) IsRegistered(ctx context.Context, eventID, userID string) (bool, error) {
+	var exists bool
+	if err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM event_registrations WHERE event_id = $1 AND user_id = $2)`,
+		eventID, userID,
+	).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check registration: %w", err)
+	}
+	return exists, nil
+}
+
 // ListRegistrations returns a page of registrations for an event plus the
 // total count, most recent first.
 func (r *Repository) ListRegistrations(ctx context.Context, eventID string, limit, offset int) ([]Registration, int, error) {

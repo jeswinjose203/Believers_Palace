@@ -79,6 +79,8 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 		httpx.ErrorCode(w, http.StatusBadRequest, ve.Message, "bad_request")
 	case errors.Is(err, ErrForbidden):
 		httpx.ErrorCode(w, http.StatusForbidden, "insufficient permissions", "forbidden")
+	case errors.Is(err, ErrNotRegistered):
+		httpx.ErrorCode(w, http.StatusForbidden, ErrNotRegistered.Error(), "not_registered")
 	case errors.Is(err, ErrEventNotFound):
 		httpx.ErrorCode(w, http.StatusNotFound, "event not found", "not_found")
 	case errors.Is(err, ErrNotFound):
