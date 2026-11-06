@@ -11,10 +11,10 @@ import 'event_chat_screen.dart';
 /// Church detail with role-aware management.
 ///
 /// - super_admin / church_admin (own church): full control of halls, bookings,
-///   cemetery plots, and cemetery request status.
+///   and booking status.
 /// - super_admin / church staff (priest, associate_priest, church_admin, own
 ///   church): manage pastoral content (announcements, events).
-/// - everyone: browse, book halls, register for events, submit cemetery requests.
+/// - everyone: browse, book halls, register for events.
 class ChurchDetailScreen extends ConsumerStatefulWidget {
   final Church church;
 
@@ -31,7 +31,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -48,7 +48,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// Full administrative control (halls, booking status, plots, request status).
+  /// Full administrative control (halls, booking status).
   bool _canManage(User? user) {
     if (user == null) return false;
     if (user.role == 'super_admin') return true;
@@ -96,8 +96,6 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
             Tab(text: 'Halls'),
             Tab(text: 'Bookings'),
             Tab(text: 'Events'),
-            Tab(text: 'Cemetery Plots'),
-            Tab(text: 'Cemetery Requests'),
           ],
         ),
       ),
@@ -126,19 +124,6 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
             churchId: widget.church.id,
             canManage: canManageContent,
             onRegister: _showRegisterDialog,
-            onError: _showError,
-            onSuccess: _showSuccess,
-          ),
-          _CemeteryPlotsTab(
-            churchId: widget.church.id,
-            canManage: canManage,
-            onError: _showError,
-            onSuccess: _showSuccess,
-          ),
-          _CemeteryRequestsTab(
-            churchId: widget.church.id,
-            canManage: canManage,
-            onNew: _showCemeteryRequestDialog,
             onError: _showError,
             onSuccess: _showSuccess,
           ),
@@ -209,116 +194,6 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
             child: const Text('Register'),
           ),
         ],
-      ),
-    );
-  }
-
-  Future<void> _showCemeteryRequestDialog() async {
-    String type = 'burial';
-    final fullName = TextEditingController();
-    final contactPhone = TextEditingController();
-    final contactEmail = TextEditingController();
-    final deceasedName = TextEditingController();
-    final plotId = TextEditingController();
-    final description = TextEditingController();
-    final notes = TextEditingController();
-    DateTime? requestedDate;
-
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('New Cemetery Request'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  value: type,
-                  decoration: const InputDecoration(labelText: 'Type'),
-                  items: const [
-                    'burial',
-                    'plot_reservation',
-                    'grave_maintenance',
-                    'memorial_service',
-                    'other',
-                  ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-                  onChanged: (v) => setState(() => type = v!),
-                ),
-                TextField(
-                  controller: fullName,
-                  decoration: const InputDecoration(labelText: 'Full name *'),
-                ),
-                TextField(
-                  controller: contactPhone,
-                  decoration: const InputDecoration(labelText: 'Contact phone'),
-                ),
-                TextField(
-                  controller: contactEmail,
-                  decoration: const InputDecoration(labelText: 'Contact email'),
-                ),
-                TextField(
-                  controller: deceasedName,
-                  decoration: const InputDecoration(labelText: 'Deceased name'),
-                ),
-                _DateTimeField(
-                  label: 'Requested date',
-                  initial: DateTime.now(),
-                  onPicked: (d) => requestedDate = d,
-                ),
-                TextField(
-                  controller: plotId,
-                  decoration:
-                      const InputDecoration(labelText: 'Plot ID (optional)'),
-                ),
-                TextField(
-                  controller: description,
-                  decoration: const InputDecoration(labelText: 'Description *'),
-                ),
-                TextField(
-                  controller: notes,
-                  decoration: const InputDecoration(labelText: 'Notes'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                try {
-                  await ref.read(apiServiceProvider).createCemeteryRequest(
-                    widget.church.id,
-                    {
-                      'type': type,
-                      'fullName': fullName.text,
-                      'contactPhone':
-                          contactPhone.text.isEmpty ? null : contactPhone.text,
-                      'contactEmail':
-                          contactEmail.text.isEmpty ? null : contactEmail.text,
-                      'deceasedName':
-                          deceasedName.text.isEmpty ? null : deceasedName.text,
-                      'requestedDate': requestedDate?.toIso8601String(),
-                      'plotId': plotId.text.isEmpty ? null : plotId.text,
-                      'description': description.text,
-                      'notes': notes.text.isEmpty ? null : notes.text,
-                    },
-                  );
-                  if (context.mounted) {
-                    Navigator.of(context).pop();
-                    _showSuccess('Request submitted');
-                  }
-                } catch (e) {
-                  _showError(e.toString());
-                }
-              },
-              child: const Text('Submit'),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -815,8 +690,9 @@ class _BookingsTabState extends ConsumerState<_BookingsTab> {
     try {
       await ref.read(apiServiceProvider).createBooking(widget.churchId, {
         'hallId': hallId,
-        'startDate': start.toIso8601String(),
-        'endDate': end.toIso8601String(),
+        // Backend requires RFC3339 (with timezone); toUtc() appends 'Z'.
+        'startDate': start.toUtc().toIso8601String(),
+        'endDate': end.toUtc().toIso8601String(),
         'purpose': purpose.text.isEmpty ? null : purpose.text,
         'notes': notes.text.isEmpty ? null : notes.text,
       });
@@ -1052,284 +928,6 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Cemetery plots.
-// ---------------------------------------------------------------------------
-
-class _CemeteryPlotsTab extends ConsumerStatefulWidget {
-  final String churchId;
-  final bool canManage;
-  final void Function(String) onError;
-  final void Function(String) onSuccess;
-
-  const _CemeteryPlotsTab({
-    required this.churchId,
-    required this.canManage,
-    required this.onError,
-    required this.onSuccess,
-  });
-
-  @override
-  ConsumerState<_CemeteryPlotsTab> createState() => _CemeteryPlotsTabState();
-}
-
-class _CemeteryPlotsTabState extends ConsumerState<_CemeteryPlotsTab> {
-  Future<PaginatedResponse<CemeteryPlot>>? _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _reload();
-  }
-
-  void _reload() {
-    _future = ref
-        .read(apiServiceProvider)
-        .listCemeteryPlots(widget.churchId, limit: 50);
-  }
-
-  void _refresh() => setState(_reload);
-
-  Future<void> _form({CemeteryPlot? existing}) async {
-    final number = TextEditingController(text: existing?.plotNumber ?? '');
-    final section = TextEditingController(text: existing?.section ?? '');
-    final location =
-        TextEditingController(text: existing?.locationDescription ?? '');
-    final notes = TextEditingController(text: existing?.notes ?? '');
-    String status = existing?.status ?? 'available';
-
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(existing == null ? 'New Plot' : 'Edit Plot'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: number,
-                  decoration: const InputDecoration(labelText: 'Plot number *'),
-                ),
-                TextField(
-                  controller: section,
-                  decoration: const InputDecoration(labelText: 'Section'),
-                ),
-                TextField(
-                  controller: location,
-                  decoration:
-                      const InputDecoration(labelText: 'Location description'),
-                ),
-                DropdownButtonFormField<String>(
-                  value: status,
-                  decoration: const InputDecoration(labelText: 'Status'),
-                  items: const ['available', 'reserved', 'occupied', 'unavailable']
-                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
-                      .toList(),
-                  onChanged: (v) => setState(() => status = v!),
-                ),
-                TextField(
-                  controller: notes,
-                  decoration: const InputDecoration(labelText: 'Notes'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (saved != true) return;
-
-    final body = {
-      'plotNumber': number.text,
-      'section': section.text.isEmpty ? null : section.text,
-      'locationDescription': location.text.isEmpty ? null : location.text,
-      'status': status,
-      'notes': notes.text.isEmpty ? null : notes.text,
-    };
-    try {
-      final api = ref.read(apiServiceProvider);
-      if (existing == null) {
-        await api.createCemeteryPlot(widget.churchId, body);
-      } else {
-        await api.updateCemeteryPlot(existing.id, body);
-      }
-      widget.onSuccess('Saved');
-      _refresh();
-    } catch (e) {
-      widget.onError(e.toString());
-    }
-  }
-
-  Future<void> _delete(CemeteryPlot p) async {
-    if (!await _confirmDelete(context, 'Plot ${p.plotNumber}')) return;
-    try {
-      await ref.read(apiServiceProvider).deleteCemeteryPlot(p.id);
-      widget.onSuccess('Deleted');
-      _refresh();
-    } catch (e) {
-      widget.onError(e.toString());
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _ManagedList<CemeteryPlot>(
-      future: _future!,
-      canManage: widget.canManage,
-      onAdd: () => _form(),
-      itemBuilder: (p) => ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.grid_view)),
-        title: Text('Plot ${p.plotNumber}'),
-        subtitle: Text(
-          [p.section, p.locationDescription, p.status]
-              .where((s) => s != null)
-              .join(' · '),
-        ),
-        trailing: widget.canManage
-            ? _EditDeleteMenu(
-                onEdit: () => _form(existing: p),
-                onDelete: () => _delete(p),
-              )
-            : null,
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Cemetery service requests.
-// ---------------------------------------------------------------------------
-
-class _CemeteryRequestsTab extends ConsumerStatefulWidget {
-  final String churchId;
-  final bool canManage;
-  final VoidCallback onNew;
-  final void Function(String) onError;
-  final void Function(String) onSuccess;
-
-  const _CemeteryRequestsTab({
-    required this.churchId,
-    required this.canManage,
-    required this.onNew,
-    required this.onError,
-    required this.onSuccess,
-  });
-
-  @override
-  ConsumerState<_CemeteryRequestsTab> createState() =>
-      _CemeteryRequestsTabState();
-}
-
-class _CemeteryRequestsTabState extends ConsumerState<_CemeteryRequestsTab> {
-  Future<PaginatedResponse<CemeteryServiceRequest>>? _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _reload();
-  }
-
-  void _reload() {
-    _future = ref
-        .read(apiServiceProvider)
-        .listCemeteryRequests(widget.churchId, limit: 50);
-  }
-
-  void _refresh() => setState(_reload);
-
-  Future<void> _updateStatus(CemeteryServiceRequest r) async {
-    String status = r.status;
-    final adminNotes = TextEditingController(text: r.adminNotes ?? '');
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Update request'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                value: status,
-                decoration: const InputDecoration(labelText: 'Status'),
-                items: const [
-                  'pending',
-                  'approved',
-                  'rejected',
-                  'scheduled',
-                  'completed',
-                  'cancelled',
-                ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-                onChanged: (v) => setState(() => status = v!),
-              ),
-              TextField(
-                controller: adminNotes,
-                decoration: const InputDecoration(labelText: 'Admin notes'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (result != true) return;
-    try {
-      await ref.read(apiServiceProvider).updateCemeteryRequestStatus(r.id, {
-        'status': status,
-        'adminNotes': adminNotes.text.isEmpty ? null : adminNotes.text,
-      });
-      widget.onSuccess('Request updated');
-      _refresh();
-    } catch (e) {
-      widget.onError(e.toString());
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _ManagedList<CemeteryServiceRequest>(
-      future: _future!,
-      canManage: false, // requests are created by the dedicated FAB below
-      onAdd: null,
-      floatingAction: FloatingActionButton(
-        mini: true,
-        onPressed: widget.onNew,
-        child: const Icon(Icons.add),
-      ),
-      itemBuilder: (r) => ListTile(
-        title: Text(r.fullName),
-        subtitle: Text('${r.type} · ${r.status}'),
-        trailing: widget.canManage
-            ? IconButton(
-                icon: const Icon(Icons.edit_note),
-                tooltip: 'Update status',
-                onPressed: () => _updateStatus(r),
-              )
-            : (r.requestedDate != null ? Text(_shortDate(r.requestedDate!)) : null),
       ),
     );
   }
