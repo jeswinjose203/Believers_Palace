@@ -306,3 +306,9 @@ make test        # go test ./...
 
 Unit tests cover authorization helpers, validation, enum validity, JSONB array
 encoding, and certificate file storage (including path-traversal protection).
+
+
+
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse tcp:8080 tcp:8080
+
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse --list
