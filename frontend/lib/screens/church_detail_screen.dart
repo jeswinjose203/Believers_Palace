@@ -104,7 +104,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _AboutTab(church: widget.church),
+          _AboutTab(churchId: widget.church.id, initial: widget.church),
           _AnnouncementsTab(
             churchId: widget.church.id,
             canManage: canManageContent,
@@ -1443,11 +1443,46 @@ class _ManagedList<T> extends StatelessWidget {
 
 
 /// First tab of the church detail screen: gallery, description, contact info
-/// and the priests associated with the church.
-class _AboutTab extends StatelessWidget {
-  final Church church;
+/// and the priests associated with the church. The list endpoint only returns
+/// a condensed church, so the full record is fetched here.
+class _AboutTab extends ConsumerStatefulWidget {
+  final String churchId;
+  final Church initial;
 
-  const _AboutTab({required this.church});
+  const _AboutTab({required this.churchId, required this.initial});
+
+  @override
+  ConsumerState<_AboutTab> createState() => _AboutTabState();
+}
+
+class _AboutTabState extends ConsumerState<_AboutTab> {
+  late Church church = widget.initial;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final full = await ref.read(apiServiceProvider).getChurch(widget.churchId);
+      if (!mounted) return;
+      setState(() {
+        church = full;
+        _loading = false;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1457,9 +1492,18 @@ class _AboutTab extends StatelessWidget {
         : [if (church.logo != null && church.logo!.isNotEmpty) church.logo!];
     final hasDescription = (church.description ?? '').isNotEmpty;
 
-    return ListView(
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
+        if (_loading) const LinearProgressIndicator(),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text('Could not load full details: $_error',
+                style: const TextStyle(color: Colors.red)),
+          ),
         if (images.isNotEmpty)
           SizedBox(
             height: 220,
@@ -1510,6 +1554,7 @@ class _AboutTab extends StatelessWidget {
           ),
         ),
       ],
+    ),
     );
   }
 

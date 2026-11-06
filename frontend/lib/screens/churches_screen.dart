@@ -40,9 +40,21 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
   }
 
   Future<void> _createOrEdit({Church? existing}) async {
+    // The list only returns a condensed church; load the full record so the
+    // form is prefilled (and saving does not blank phone/email/priests).
+    Church? full = existing;
+    if (existing != null) {
+      try {
+        full = await ref.read(apiServiceProvider).getChurch(existing.id);
+      } catch (e) {
+        _show('Could not load church details: $e');
+        return;
+      }
+    }
+    if (!mounted) return;
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => ChurchFormDialog(existing: existing),
+      builder: (_) => ChurchFormDialog(existing: full),
     );
     if (result == true) _refresh();
   }
