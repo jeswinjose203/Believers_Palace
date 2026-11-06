@@ -229,6 +229,16 @@ func (r *Repository) UpdateProfile(ctx context.Context, id string, in ProfileUpd
 		sets = append(sets, fmt.Sprintf("profile_pic = $%d", len(args)))
 	}
 
+	if in.ChurchID != nil {
+		// Empty string clears the selection (stored as NULL).
+		var cid any
+		if *in.ChurchID != "" {
+			cid = *in.ChurchID
+		}
+		args = append(args, cid)
+		sets = append(sets, fmt.Sprintf("church_id = $%d", len(args)))
+	}
+
 	if len(sets) == 0 {
 		return r.GetByID(ctx, id)
 	}
@@ -248,6 +258,17 @@ func (r *Repository) UpdateProfile(ctx context.Context, id string, in ProfileUpd
 		return nil, fmt.Errorf("update profile: %w", err)
 	}
 	return u, nil
+}
+
+// ChurchExists reports whether a church with the given ID exists.
+func (r *Repository) ChurchExists(ctx context.Context, id string) (bool, error) {
+	var exists bool
+	if err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM churches WHERE id = $1)`, id,
+	).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check church exists: %w", err)
+	}
+	return exists, nil
 }
 
 // UpdateRole sets a user's role and returns the updated user.

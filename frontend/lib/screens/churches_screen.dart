@@ -9,7 +9,18 @@ import '../widgets/multi_image_picker_field.dart';
 import 'church_detail_screen.dart';
 
 class ChurchesScreen extends ConsumerStatefulWidget {
-  const ChurchesScreen({super.key});
+  /// When true, shows a prompt and a "Select" action so the user can choose
+  /// their church (used as the home page until a church is selected).
+  final bool selectMode;
+
+  /// Pop this route after a church is selected (when pushed on the navigator).
+  final bool popOnSelect;
+
+  const ChurchesScreen({
+    super.key,
+    this.selectMode = false,
+    this.popOnSelect = false,
+  });
 
   @override
   ConsumerState<ChurchesScreen> createState() => _ChurchesScreenState();
@@ -37,6 +48,21 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
   void _show(String msg) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _select(Church church) async {
+    try {
+      await ref
+          .read(authProvider.notifier)
+          .updateProfile({'churchId': church.id});
+      if (!mounted) return;
+      _show('${church.name} selected');
+      if (widget.popOnSelect && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      _show(e.toString());
+    }
   }
 
   Future<void> _createOrEdit({Church? existing}) async {
@@ -98,7 +124,9 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
         (user?.role == 'church_admin' && user?.churchId == c.id);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Churches')),
+      appBar: AppBar(
+        title: Text(widget.selectMode ? 'Select your church' : 'Churches'),
+      ),
       floatingActionButton: isSuperAdmin
           ? FloatingActionButton.extended(
               onPressed: () => _createOrEdit(),
@@ -108,6 +136,16 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
           : null,
       body: Column(
         children: [
+          if (widget.selectMode)
+            Container(
+              width: double.infinity,
+              color: Theme.of(context).colorScheme.primaryContainer,
+              padding: const EdgeInsets.all(12),
+              child: const Text(
+                'Select your church to see its details, announcements and '
+                'events on your home page.',
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: TextField(
@@ -184,7 +222,14 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
                                     ),
                                 ],
                               )
-                            : const Icon(Icons.chevron_right),
+                            : widget.selectMode
+                                ? (c.id == user?.churchId
+                                    ? const Chip(label: Text('Current'))
+                                    : FilledButton.tonal(
+                                        onPressed: () => _select(c),
+                                        child: const Text('Select'),
+                                      ))
+                                : const Icon(Icons.chevron_right),
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => ChurchDetailScreen(church: c),

@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/image_picker_field.dart';
 import 'church_bookings_screen.dart';
+import 'churches_screen.dart';
 import 'event_chat_screen.dart';
 
 /// Church detail with role-aware management.
@@ -18,7 +19,15 @@ import 'event_chat_screen.dart';
 class ChurchDetailScreen extends ConsumerStatefulWidget {
   final Church church;
 
-  const ChurchDetailScreen({super.key, required this.church});
+  /// True when shown as the user's home page: no back button, and a
+  /// "Change church" action.
+  final bool isHome;
+
+  const ChurchDetailScreen({
+    super.key,
+    required this.church,
+    this.isHome = false,
+  });
 
   @override
   ConsumerState<ChurchDetailScreen> createState() => _ChurchDetailScreenState();
@@ -72,7 +81,19 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.church.name),
+        automaticallyImplyLeading: !widget.isHome,
         actions: [
+          if (widget.isHome)
+            IconButton(
+              icon: const Icon(Icons.swap_horiz),
+              tooltip: 'Change church',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ChurchesScreen(
+                      selectMode: true, popOnSelect: true),
+                ),
+              ),
+            ),
           if (canManage)
             IconButton(
               icon: const Icon(Icons.event_available),

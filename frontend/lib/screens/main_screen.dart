@@ -6,6 +6,7 @@ import '../widgets/verify_email_banner.dart';
 import 'admin_users_screen.dart';
 import 'certificates_screen.dart';
 import 'churches_screen.dart';
+import 'home_screen.dart';
 import 'my_bookings_screen.dart';
 import 'profile_screen.dart';
 
@@ -23,9 +24,12 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
     final isSuperAdmin = user?.role == 'super_admin';
+    // Only regular members get the church-aware home page; super admins and
+    // church staff keep the churches list.
+    final useHome = user?.role == 'user';
 
     final pages = <Widget>[
-      const ChurchesScreen(),
+      if (useHome) const HomeScreen() else const ChurchesScreen(),
       const MyBookingsScreen(),
       const CertificatesScreen(),
       if (isSuperAdmin) const AdminUsersScreen(),
@@ -33,7 +37,11 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     ];
 
     final items = <BottomNavigationBarItem>[
-      const BottomNavigationBarItem(icon: Icon(Icons.church), label: 'Churches'),
+      if (useHome)
+        const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home')
+      else
+        const BottomNavigationBarItem(
+            icon: Icon(Icons.church), label: 'Churches'),
       const BottomNavigationBarItem(
           icon: Icon(Icons.calendar_today), label: 'My Bookings'),
       const BottomNavigationBarItem(

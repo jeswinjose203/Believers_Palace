@@ -183,6 +183,26 @@ func (s *Service) UpdateProfile(ctx context.Context, id string, in ProfileUpdate
 	if in.Name != nil && strings.TrimSpace(*in.Name) == "" {
 		return nil, invalid("name cannot be empty")
 	}
+	if in.ChurchID != nil {
+		// Staff roles are bound to their church by an admin; letting them
+		// self-reassign would grant staff rights in another church.
+		current, err := s.repo.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if current.Role != auth.RoleUser {
+			return nil, invalid("only regular users can change their church")
+		}
+		if *in.ChurchID != "" {
+			ok, err := s.repo.ChurchExists(ctx, *in.ChurchID)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, invalid("church not found")
+			}
+		}
+	}
 	return s.repo.UpdateProfile(ctx, id, in)
 }
 

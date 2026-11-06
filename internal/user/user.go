@@ -46,6 +46,9 @@ type ProfileUpdateInput struct {
 	Phone      *string `json:"phone"`
 	Unit       *string `json:"unit"`
 	ProfilePic *string `json:"profilePic"`
+	// ChurchID selects the user's church. Only regular users (role "user") may
+	// change it; an empty string clears the selection.
+	ChurchID *string `json:"churchId"`
 }
 
 // AuthResponse is returned on successful register/login/refresh.
