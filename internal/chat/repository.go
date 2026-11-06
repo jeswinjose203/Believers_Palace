@@ -34,15 +34,43 @@ func scan(row pgx.Row) (*Message, error) {
 	return &m, nil
 }
 
-// Create inserts a new message and returns it.
+// Create inserts a new message with a per-event, commit-ordered `seq`.
+//
+// A per-event transaction-scoped advisory lock serializes the
+// "read max(seq) -> insert seq+1 -> commit" step for a single event. Because
+// the lock is held until commit, each new row becomes visible to other
+// transactions in exactly `seq` order. This guarantees the `after` cursor used
+// by polling can never skip a message, even when many users post at once.
+// Posts to *different* events use different lock keys and do not contend.
 func (r *Repository) Create(ctx context.Context, eventID string, userID *string, authorName string, authorPic *string, content string) (*Message, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after a successful commit
+
+	// Per-event lock: hashtextextended keys the lock by the event UUID so only
+	// concurrent posts to the *same* event serialize. Released on commit/rollback.
+	if _, err := tx.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, eventID,
+	); err != nil {
+		return nil, fmt.Errorf("acquire event lock: %w", err)
+	}
+
 	const q = `
-		INSERT INTO event_messages (event_id, user_id, author_name, author_pic, content)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO event_messages (event_id, seq, user_id, author_name, author_pic, content)
+		VALUES (
+			$1,
+			COALESCE((SELECT max(seq) FROM event_messages WHERE event_id = $1), 0) + 1,
+			$2, $3, $4, $5
+		)
 		RETURNING ` + columns
-	m, err := scan(r.pool.QueryRow(ctx, q, eventID, userID, authorName, authorPic, content))
+	m, err := scan(tx.QueryRow(ctx, q, eventID, userID, authorName, authorPic, content))
 	if err != nil {
 		return nil, fmt.Errorf("create message: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit message: %w", err)
 	}
 	return m, nil
 }
