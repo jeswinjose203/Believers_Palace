@@ -250,6 +250,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       }
                       final c = churches[i - 1];
                       return _ChurchCard(
+                        // Key includes the image reference so the card (and its
+                        // Image.network) rebuilds when the image changes.
+                        key: ValueKey(
+                            '${c.id}|${c.images.isNotEmpty ? c.images.first : c.logo ?? ''}'),
                         church: c,
                         isMine: c.id == myChurchId,
                         canManage: canManage(c),
@@ -282,6 +286,7 @@ class _ChurchCard extends StatelessWidget {
   final VoidCallback onDelete;
 
   const _ChurchCard({
+    super.key,
     required this.church,
     required this.isMine,
     required this.canManage,
@@ -294,9 +299,14 @@ class _ChurchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image = church.images.isNotEmpty
-        ? church.images.first
-        : ((church.logo ?? '').isNotEmpty ? church.logo : null);
+    // Prefer a gallery image, then the logo. If the primary image fails to
+    // load (e.g. the file is missing) fall back to the logo, then a
+    // placeholder, so a broken gallery URL doesn't hide an available logo.
+    final gallery =
+        church.images.isNotEmpty ? church.images.first : null;
+    final logo = (church.logo ?? '').isNotEmpty ? church.logo : null;
+    final primary = gallery ?? logo;
+    final fallbackUrl = (gallery != null) ? logo : null;
     final address = church.address ?? '';
     final description = church.description ?? '';
 
@@ -304,6 +314,12 @@ class _ChurchCard extends StatelessWidget {
       color: const Color(0xFFE8DCE9),
       child: const Center(child: Icon(Icons.church, size: 56, color: _kPurple)),
     );
+
+    Widget buildImage(String url, {required Widget onError}) => Image.network(
+          url,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => onError,
+        );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -320,12 +336,13 @@ class _ChurchCard extends StatelessWidget {
               SizedBox(
                 height: 160,
                 width: double.infinity,
-                child: image == null
+                child: primary == null
                     ? placeholder
-                    : Image.network(
-                        image,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => placeholder,
+                    : buildImage(
+                        primary,
+                        onError: fallbackUrl != null
+                            ? buildImage(fallbackUrl, onError: placeholder)
+                            : placeholder,
                       ),
               ),
               Padding(
@@ -410,13 +427,8 @@ class _ChurchCard extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: double.infinity,
-                      child: OutlinedButton.icon(
+                      child: OutlinedButton(
                         onPressed: isMine ? null : onHeart,
-                        icon: Icon(
-                          isMine ? Icons.check_circle : Icons.add_location_alt_outlined,
-                          size: 18,
-                        ),
-                        label: Text(isMine ? 'Your church' : 'Set my church'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: _kPurple,
                           side: const BorderSide(color: _kPurple),
@@ -424,6 +436,7 @@ class _ChurchCard extends StatelessWidget {
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10)),
                         ),
+                        child: Text(isMine ? 'Your church' : 'Set my church'),
                       ),
                     ),
                     const SizedBox(height: 8),
