@@ -261,10 +261,13 @@ class ChurchFormDialog extends ConsumerStatefulWidget {
 class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
   late final TextEditingController _name;
   late final TextEditingController _description;
+  late final TextEditingController _about;
   late final TextEditingController _address;
   late final TextEditingController _phone;
   late final TextEditingController _email;
   String? _logo;
+  double? _latitude;
+  double? _longitude;
   List<String> _images = [];
   late final TextEditingController _priestName;
   late final TextEditingController _priestPhone;
@@ -283,8 +286,11 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
     final c = widget.existing;
     _name = TextEditingController(text: c?.name ?? '');
     _description = TextEditingController(text: c?.description ?? '');
+    _about = TextEditingController(text: c?.about ?? '');
     _address = TextEditingController(text: c?.address ?? '');
     _images = List<String>.from(c?.images ?? const []);
+    _latitude = c?.latitude;
+    _longitude = c?.longitude;
     _priestName = TextEditingController(text: c?.priest?.name ?? '');
     _priestPhone = TextEditingController(text: c?.priest?.phone ?? '');
     _priestEmail = TextEditingController(text: c?.priest?.email ?? '');
@@ -302,6 +308,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
   void dispose() {
     _name.dispose();
     _description.dispose();
+    _about.dispose();
     _priestName.dispose();
     _priestPhone.dispose();
     _priestEmail.dispose();
@@ -339,7 +346,10 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
     final body = {
       'name': _name.text.trim(),
       'description': _description.text.trim(),
+      'about': _about.text.trim(),
       'images': _images,
+      'latitude': _latitude,
+      'longitude': _longitude,
       'priest': priest(_priestName, _priestPhone, _priestEmail, _priestPic),
       'associatePriest':
           priest(_assocName, _assocPhone, _assocEmail, _assocPic),
@@ -362,6 +372,69 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
         _error = e.toString();
       });
     }
+  }
+
+  /// Opens a lightweight picker to enter/confirm the church's map coordinates.
+  /// This stores real latitude/longitude on the church. (A full interactive map
+  /// can later replace this dialog without changing the stored data shape.)
+  Future<void> _pickLocation() async {
+    final latCtrl =
+        TextEditingController(text: _latitude?.toString() ?? '');
+    final lngCtrl =
+        TextEditingController(text: _longitude?.toString() ?? '');
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Choose location'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Enter the map coordinates for this church.',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: latCtrl,
+              keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true, signed: true),
+              decoration: const InputDecoration(
+                labelText: 'Latitude',
+                hintText: 'e.g. 10.1632',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: lngCtrl,
+              keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true, signed: true),
+              decoration: const InputDecoration(
+                labelText: 'Longitude',
+                hintText: 'e.g. 76.4319',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Set'),
+          ),
+        ],
+      ),
+    );
+    if (result == true) {
+      setState(() {
+        _latitude = double.tryParse(latCtrl.text.trim());
+        _longitude = double.tryParse(lngCtrl.text.trim());
+      });
+    }
+    latCtrl.dispose();
+    lngCtrl.dispose();
   }
 
   @override
@@ -397,7 +470,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                         icon: Icons.church_outlined,
                       ),
                       const SizedBox(height: 14),
-                      _FieldLabel('Description'),
+                      _FieldLabel('Description', required: true),
                       _OutlinedField(
                         controller: _description,
                         hint: 'Brief description about the church',
@@ -406,13 +479,20 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                         maxLength: 250,
                         showCounter: true,
                       ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Logo'),
+                      ImagePickerField(
+                        label: '',
+                        initialUrl: _logo,
+                        onChanged: (url) => _logo = url,
+                      ),
                     ],
                   ),
                   _FormSection(
                     icon: Icons.location_on_outlined,
                     title: 'Contact & Location',
                     children: [
-                      _FieldLabel('Address'),
+                      _FieldLabel('Address', required: true),
                       _OutlinedField(
                         controller: _address,
                         hint: 'Enter full address',
@@ -433,6 +513,13 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                         hint: 'Enter email address',
                         icon: Icons.email_outlined,
                         keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Location (Map)', required: true),
+                      _LocationField(
+                        latitude: _latitude,
+                        longitude: _longitude,
+                        onChoose: _pickLocation,
                       ),
                     ],
                   ),
@@ -511,19 +598,22 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                     icon: Icons.photo_library_outlined,
                     title: 'Gallery & Additional Information',
                     children: [
-                      _FieldLabel('Logo'),
-                      ImagePickerField(
-                        label: '',
-                        initialUrl: _logo,
-                        onChanged: (url) => _logo = url,
-                      ),
-                      const SizedBox(height: 14),
                       _FieldLabel('Gallery Images'),
                       MultiImagePickerField(
                         label: '',
                         initialUrls: _images,
                         onChanged: (urls) =>
                             _images = List<String>.from(urls),
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('About the Church'),
+                      _OutlinedField(
+                        controller: _about,
+                        hint: 'Share more details (history, services, etc.)',
+                        minLines: 3,
+                        maxLines: 6,
+                        maxLength: 500,
+                        showCounter: true,
                       ),
                     ],
                   ),
@@ -553,7 +643,8 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
 
 const Color _kFormPurple = Color(0xFF7B2FBE);
 
-/// Purple gradient header for the church form, matching the app design.
+/// Purple gradient header for the church form, with a curved bottom edge and a
+/// church silhouette, matching the app design.
 class _FormHeader extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -567,50 +658,158 @@ class _FormHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 22),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF8E2DE2), Color(0xFF6A1FB5)],
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          IconButton(
-            onPressed: onBack,
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            visualDensity: VisualDensity.compact,
+    return ClipPath(
+      clipper: _HeaderWaveClipper(),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(8, 10, 12, 40),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF8E2DE2), Color(0xFF5B16A3)],
           ),
-          Expanded(
-            child: Column(
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Icon(
+                Icons.church,
+                size: 72,
+                color: Colors.white.withValues(alpha: 0.18),
+              ),
+            ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 4),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
+                IconButton(
+                  onPressed: onBack,
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  visualDensity: VisualDensity.compact,
+                ),
+                Expanded(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 4),
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style:
+                            const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
+                const SizedBox(width: 40),
               ],
             ),
-          ),
-          const Padding(
-            padding: EdgeInsets.only(top: 6, right: 4),
-            child: Icon(Icons.church, color: Colors.white54, size: 32),
-          ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+}
+
+/// Clips the header with a gentle wave along the bottom edge.
+class _HeaderWaveClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    path.lineTo(0, size.height - 24);
+    path.quadraticBezierTo(
+      size.width * 0.25,
+      size.height,
+      size.width * 0.5,
+      size.height - 12,
+    );
+    path.quadraticBezierTo(
+      size.width * 0.75,
+      size.height - 26,
+      size.width,
+      size.height - 6,
+    );
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+/// The "Location (Map)" field: a dashed thumbnail plus a "Choose on Map"
+/// button. Shows the chosen coordinates once set.
+class _LocationField extends StatelessWidget {
+  final double? latitude;
+  final double? longitude;
+  final VoidCallback onChoose;
+
+  const _LocationField({
+    required this.latitude,
+    required this.longitude,
+    required this.onChoose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasCoords = latitude != null && longitude != null;
+    return Row(
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: _kFormPurple.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _kFormPurple.withValues(alpha: 0.4),
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: const Icon(Icons.map_outlined, color: _kFormPurple),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              OutlinedButton.icon(
+                onPressed: onChoose,
+                icon: const Icon(Icons.location_on_outlined, size: 18),
+                label: const Text('Choose on Map'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _kFormPurple,
+                  side: BorderSide(
+                      color: _kFormPurple.withValues(alpha: 0.5)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+              ),
+              if (hasCoords)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${latitude!.toStringAsFixed(5)}, '
+                    '${longitude!.toStringAsFixed(5)}',
+                    style: const TextStyle(
+                        fontSize: 12, color: Colors.black54),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

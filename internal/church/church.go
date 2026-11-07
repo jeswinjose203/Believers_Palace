@@ -15,11 +15,14 @@ type Church struct {
 	ID              string         `json:"id"`
 	Name            string         `json:"name"`
 	Description     string         `json:"description,omitempty"`
+	About           string         `json:"about,omitempty"`
 	Address         string         `json:"address,omitempty"`
 	Phone           string         `json:"phone,omitempty"`
 	Email           string         `json:"email,omitempty"`
 	Logo            string         `json:"logo,omitempty"`
 	Images          []string       `json:"images"`
+	Latitude        *float64       `json:"latitude,omitempty"`
+	Longitude       *float64       `json:"longitude,omitempty"`
 	Priest          *PriestDetails `json:"priest,omitempty"`
 	AssociatePriest *PriestDetails `json:"associatePriest,omitempty"`
 	CreatedAt       time.Time      `json:"createdAt"`
@@ -40,11 +43,14 @@ type ListItem struct {
 type Request struct {
 	Name            string         `json:"name"`
 	Description     string         `json:"description"`
+	About           string         `json:"about"`
 	Address         string         `json:"address"`
 	Phone           string         `json:"phone"`
 	Email           string         `json:"email"`
 	Logo            string         `json:"logo"`
 	Images          []string       `json:"images"`
+	Latitude        *float64       `json:"latitude"`
+	Longitude       *float64       `json:"longitude"`
 	Priest          *PriestDetails `json:"priest"`
 	AssociatePriest *PriestDetails `json:"associatePriest"`
 }

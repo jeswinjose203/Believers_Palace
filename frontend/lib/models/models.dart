@@ -141,11 +141,14 @@ class Church {
   final String id;
   final String name;
   final String? description;
+  final String? about;
   final String? address;
   final String? phone;
   final String? email;
   final String? logo;
   final List<String> images;
+  final double? latitude;
+  final double? longitude;
   final PriestDetails? priest;
   final PriestDetails? associatePriest;
   final DateTime? createdAt;
@@ -155,11 +158,14 @@ class Church {
     required this.id,
     required this.name,
     this.description,
+    this.about,
     this.address,
     this.phone,
     this.email,
     this.logo,
     this.images = const [],
+    this.latitude,
+    this.longitude,
     this.priest,
     this.associatePriest,
     this.createdAt,
@@ -170,12 +176,15 @@ class Church {
         id: json['id'] as String,
         name: json['name'] as String,
         description: json['description'] as String?,
+        about: json['about'] as String?,
         address: json['address'] as String?,
         phone: json['phone'] as String?,
         email: json['email'] as String?,
         logo: json['logo'] as String?,
         images: (json['images'] as List?)?.map((e) => e as String).toList() ??
             const [],
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
         priest: json['priest'] != null
             ? PriestDetails.fromJson(json['priest'] as Map<String, dynamic>)
             : null,
@@ -194,11 +203,14 @@ class Church {
         'id': id,
         'name': name,
         'description': description,
+        'about': about,
         'address': address,
         'phone': phone,
         'email': email,
         'logo': logo,
         'images': images,
+        'latitude': latitude,
+        'longitude': longitude,
         'priest': priest?.toJson(),
         'associatePriest': associatePriest?.toJson(),
         'createdAt': createdAt?.toIso8601String(),

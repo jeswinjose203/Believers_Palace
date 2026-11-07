@@ -23,18 +23,19 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-const churchColumns = `id, name, description, address, phone, email, logo, images, priest, associate_priest, created_at, updated_at`
+const churchColumns = `id, name, description, about, address, phone, email, logo, images, latitude, longitude, priest, associate_priest, created_at, updated_at`
 
 func scanChurch(row pgx.Row) (*Church, error) {
 	var (
-		c                                  Church
-		description, address, phone, email *string
-		logo                               *string
-		imagesRaw, priestRaw, assocRaw     []byte
+		c                                         Church
+		description, about, address, phone, email *string
+		logo                                      *string
+		lat, lng                                  *float64
+		imagesRaw, priestRaw, assocRaw            []byte
 	)
 	err := row.Scan(
-		&c.ID, &c.Name, &description, &address, &phone, &email, &logo, &imagesRaw,
-		&priestRaw, &assocRaw, &c.CreatedAt, &c.UpdatedAt,
+		&c.ID, &c.Name, &description, &about, &address, &phone, &email, &logo, &imagesRaw,
+		&lat, &lng, &priestRaw, &assocRaw, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -42,6 +43,11 @@ func scanChurch(row pgx.Row) (*Church, error) {
 	if description != nil {
 		c.Description = *description
 	}
+	if about != nil {
+		c.About = *about
+	}
+	c.Latitude = lat
+	c.Longitude = lng
 	if c.Images, err = decodeStrings(imagesRaw); err != nil {
 		return nil, fmt.Errorf("decode images: %w", err)
 	}
@@ -121,8 +127,8 @@ func encodePriest(p *PriestDetails) (any, error) {
 // Create inserts a new church.
 func (r *Repository) Create(ctx context.Context, in Request) (*Church, error) {
 	const q = `
-		INSERT INTO churches (name, description, address, phone, email, logo, images, priest, associate_priest)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO churches (name, description, about, address, phone, email, logo, images, latitude, longitude, priest, associate_priest)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING ` + churchColumns
 
 	priest, err := encodePriest(in.Priest)
@@ -140,8 +146,8 @@ func (r *Repository) Create(ctx context.Context, in Request) (*Church, error) {
 	}
 
 	row := r.pool.QueryRow(ctx, q,
-		in.Name, nullify(in.Description), nullify(in.Address), nullify(in.Phone), nullify(in.Email),
-		nullify(in.Logo), images, priest, assoc,
+		in.Name, nullify(in.Description), nullify(in.About), nullify(in.Address), nullify(in.Phone), nullify(in.Email),
+		nullify(in.Logo), images, in.Latitude, in.Longitude, priest, assoc,
 	)
 	c, err := scanChurch(row)
 	if err != nil {
@@ -237,9 +243,9 @@ func (r *Repository) List(ctx context.Context, search string, limit, offset int)
 func (r *Repository) Update(ctx context.Context, id string, in Request) (*Church, error) {
 	const q = `
 		UPDATE churches
-		SET name = $1, description = $2, address = $3, phone = $4, email = $5,
-		    logo = $6, images = $7, priest = $8, associate_priest = $9, updated_at = now()
-		WHERE id = $10
+		SET name = $1, description = $2, about = $3, address = $4, phone = $5, email = $6,
+		    logo = $7, images = $8, latitude = $9, longitude = $10, priest = $11, associate_priest = $12, updated_at = now()
+		WHERE id = $13
 		RETURNING ` + churchColumns
 
 	priest, err := encodePriest(in.Priest)
@@ -257,8 +263,8 @@ func (r *Repository) Update(ctx context.Context, id string, in Request) (*Church
 	}
 
 	row := r.pool.QueryRow(ctx, q,
-		in.Name, nullify(in.Description), nullify(in.Address), nullify(in.Phone), nullify(in.Email),
-		nullify(in.Logo), images, priest, assoc, id,
+		in.Name, nullify(in.Description), nullify(in.About), nullify(in.Address), nullify(in.Phone), nullify(in.Email),
+		nullify(in.Logo), images, in.Latitude, in.Longitude, priest, assoc, id,
 	)
 	c, err := scanChurch(row)
 	if errors.Is(err, pgx.ErrNoRows) {
