@@ -35,6 +35,18 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
     _url = widget.initialUrl;
   }
 
+  @override
+  void didUpdateWidget(covariant ImagePickerField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If the parent supplies a different initial URL (e.g. after loading the
+    // full record for editing) and the user hasn't picked a new image in this
+    // field, reflect the updated value in the preview.
+    if (oldWidget.initialUrl != widget.initialUrl &&
+        _url == oldWidget.initialUrl) {
+      _url = widget.initialUrl;
+    }
+  }
+
   Future<void> _pickAndUpload() async {
     setState(() => _error = null);
 

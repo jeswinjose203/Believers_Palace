@@ -482,6 +482,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                       const SizedBox(height: 14),
                       _FieldLabel('Logo'),
                       ImagePickerField(
+                        key: const ValueKey('church_logo'),
                         label: '',
                         initialUrl: _logo,
                         onChanged: (url) => _logo = url,
@@ -552,6 +553,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                       const SizedBox(height: 14),
                       _FieldLabel('Profile Photo'),
                       ImagePickerField(
+                        key: const ValueKey('priest_photo'),
                         label: '',
                         initialUrl: _priestPic,
                         onChanged: (url) => _priestPic = url,
@@ -588,6 +590,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                       const SizedBox(height: 14),
                       _FieldLabel('Associate priest photo'),
                       ImagePickerField(
+                        key: const ValueKey('assoc_photo'),
                         label: '',
                         initialUrl: _assocPic,
                         onChanged: (url) => _assocPic = url,

@@ -366,13 +366,6 @@ class _ChurchCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    IconButton(
-                      tooltip: isMine ? 'Your church' : 'Set as my church',
-                      icon: Icon(
-                          isMine ? Icons.favorite : Icons.favorite_border),
-                      color: _kPurple,
-                      onPressed: onHeart,
-                    ),
                     if (canManage)
                       PopupMenuButton<String>(
                         icon: const Icon(Icons.more_vert, color: _kPurple),
@@ -413,19 +406,42 @@ class _ChurchCard extends StatelessWidget {
                 ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: onView,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _kPurpleDark,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: isMine ? null : onHeart,
+                        icon: Icon(
+                          isMine ? Icons.check_circle : Icons.add_location_alt_outlined,
+                          size: 18,
+                        ),
+                        label: Text(isMine ? 'Your church' : 'Set my church'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _kPurple,
+                          side: const BorderSide(color: _kPurple),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
                     ),
-                    child: const Text('View church  →'),
-                  ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: onView,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _kPurpleDark,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('View church  →'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
