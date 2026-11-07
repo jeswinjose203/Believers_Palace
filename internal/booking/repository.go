@@ -41,6 +41,13 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 
 const columns = `id, church_id, hall_id, user_id, start_date, end_date, purpose, notes, status, admin_notes, cancellation_reason, created_at`
 
+// columnsWithUser selects booking columns plus the requester's public profile
+// via a LEFT JOIN on users (aliased b and u). Used by list/get so admins can
+// see who made each booking.
+const columnsWithUser = `b.id, b.church_id, b.hall_id, b.user_id, b.start_date, b.end_date,
+	b.purpose, b.notes, b.status, b.admin_notes, b.cancellation_reason, b.created_at,
+	u.id, u.name, u.email, u.phone, u.profile_pic`
+
 func scan(row pgx.Row) (*Booking, error) {
 	var (
 		b                                  Booking
@@ -63,6 +70,47 @@ func scan(row pgx.Row) (*Booking, error) {
 	}
 	if cancel != nil {
 		b.CancellationReason = *cancel
+	}
+	return &b, nil
+}
+
+// scanWithUser scans a booking row that also carries the requester's profile
+// columns (from columnsWithUser). A NULL user id yields a nil User.
+func scanWithUser(row pgx.Row) (*Booking, error) {
+	var (
+		b                                  Booking
+		purpose, notes, adminNotes, cancel *string
+		uID, uName, uEmail                 *string
+		uPhone, uPic                       *string
+	)
+	if err := row.Scan(
+		&b.ID, &b.ChurchID, &b.HallID, &b.UserID, &b.StartDate, &b.EndDate,
+		&purpose, &notes, &b.Status, &adminNotes, &cancel, &b.CreatedAt,
+		&uID, &uName, &uEmail, &uPhone, &uPic,
+	); err != nil {
+		return nil, err
+	}
+	if purpose != nil {
+		b.Purpose = *purpose
+	}
+	if notes != nil {
+		b.Notes = *notes
+	}
+	if adminNotes != nil {
+		b.AdminNotes = *adminNotes
+	}
+	if cancel != nil {
+		b.CancellationReason = *cancel
+	}
+	if uID != nil {
+		r := &Requester{ID: *uID, Phone: uPhone, ProfilePic: uPic}
+		if uName != nil {
+			r.Name = *uName
+		}
+		if uEmail != nil {
+			r.Email = *uEmail
+		}
+		b.User = r
 	}
 	return &b, nil
 }
@@ -106,10 +154,11 @@ func (r *Repository) Create(ctx context.Context, churchID, hallID, userID string
 	return b, nil
 }
 
-// GetByID returns a booking by ID.
+// GetByID returns a booking by ID, including the requester's profile.
 func (r *Repository) GetByID(ctx context.Context, id string) (*Booking, error) {
-	const q = `SELECT ` + columns + ` FROM bookings WHERE id = $1`
-	b, err := scan(r.pool.QueryRow(ctx, q, id))
+	const q = `SELECT ` + columnsWithUser + ` FROM bookings b
+		LEFT JOIN users u ON u.id = b.user_id WHERE b.id = $1`
+	b, err := scanWithUser(r.pool.QueryRow(ctx, q, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -119,7 +168,8 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*Booking, error) {
 	return b, nil
 }
 
-// List returns bookings matching the filter plus the total count.
+// List returns bookings matching the filter plus the total count. Each booking
+// includes the requester's public profile (via a LEFT JOIN on users).
 func (r *Repository) List(ctx context.Context, f ListFilter) ([]Booking, int, error) {
 	var (
 		conds []string
@@ -127,19 +177,19 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Booking, int, er
 	)
 	if f.ChurchID != "" {
 		args = append(args, f.ChurchID)
-		conds = append(conds, fmt.Sprintf("church_id = $%d", len(args)))
+		conds = append(conds, fmt.Sprintf("b.church_id = $%d", len(args)))
 	}
 	if f.UserID != "" {
 		args = append(args, f.UserID)
-		conds = append(conds, fmt.Sprintf("user_id = $%d", len(args)))
+		conds = append(conds, fmt.Sprintf("b.user_id = $%d", len(args)))
 	}
 	if f.Status != "" {
 		args = append(args, f.Status)
-		conds = append(conds, fmt.Sprintf("status = $%d", len(args)))
+		conds = append(conds, fmt.Sprintf("b.status = $%d", len(args)))
 	}
 	if f.Search != "" {
 		args = append(args, "%"+f.Search+"%")
-		conds = append(conds, fmt.Sprintf("(purpose ILIKE $%d OR notes ILIKE $%d)", len(args), len(args)))
+		conds = append(conds, fmt.Sprintf("(b.purpose ILIKE $%d OR b.notes ILIKE $%d)", len(args), len(args)))
 	}
 
 	where := ""
@@ -148,14 +198,15 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Booking, int, er
 	}
 
 	var total int
-	if err := r.pool.QueryRow(ctx, "SELECT count(*) FROM bookings "+where, args...).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, "SELECT count(*) FROM bookings b "+where, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count bookings: %w", err)
 	}
 
 	args = append(args, f.Limit, f.Offset)
 	q := fmt.Sprintf(
-		"SELECT %s FROM bookings %s ORDER BY start_date DESC LIMIT $%d OFFSET $%d",
-		columns, where, len(args)-1, len(args),
+		`SELECT %s FROM bookings b LEFT JOIN users u ON u.id = b.user_id %s
+		 ORDER BY b.start_date DESC LIMIT $%d OFFSET $%d`,
+		columnsWithUser, where, len(args)-1, len(args),
 	)
 	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
@@ -165,7 +216,7 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Booking, int, er
 
 	items := make([]Booking, 0)
 	for rows.Next() {
-		b, err := scan(rows)
+		b, err := scanWithUser(rows)
 		if err != nil {
 			return nil, 0, fmt.Errorf("scan booking: %w", err)
 		}

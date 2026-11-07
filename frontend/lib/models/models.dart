@@ -326,6 +326,7 @@ class Booking {
   final String? adminNotes;
   final String? cancellationReason;
   final DateTime? createdAt;
+  final BookingRequester? user;
 
   Booking({
     required this.id,
@@ -340,6 +341,7 @@ class Booking {
     this.adminNotes,
     this.cancellationReason,
     this.createdAt,
+    this.user,
   });
 
   factory Booking.fromJson(Map<String, dynamic> json) => Booking(
@@ -357,6 +359,9 @@ class Booking {
         createdAt: json['createdAt'] != null
             ? DateTime.tryParse(json['createdAt'] as String)
             : null,
+        user: json['user'] != null
+            ? BookingRequester.fromJson(json['user'] as Map<String, dynamic>)
+            : null,
       );
 
   Map<String, dynamic> toJson() => {
@@ -366,6 +371,32 @@ class Booking {
         'purpose': purpose,
         'notes': notes,
       };
+}
+
+/// Public profile of the user who made a booking (admin-facing).
+class BookingRequester {
+  final String id;
+  final String name;
+  final String email;
+  final String? phone;
+  final String? profilePic;
+
+  BookingRequester({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.phone,
+    this.profilePic,
+  });
+
+  factory BookingRequester.fromJson(Map<String, dynamic> json) =>
+      BookingRequester(
+        id: json['id'] as String,
+        name: json['name'] as String? ?? '',
+        email: json['email'] as String? ?? '',
+        phone: json['phone'] as String?,
+        profilePic: json['profilePic'] as String?,
+      );
 }
 
 class Event {
