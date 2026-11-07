@@ -79,7 +79,7 @@ make docker-logs          # tail API logs
 make docker-down          # stop and remove containers
 ```
 
-The API is then available at http://localhost:8080 (or http://192.168.1.11:8080
+The API is then available at http://localhost:8080 (or http://localhost:8080
 from other devices on the same network).
 
 ## Getting Started (local, without Docker)
@@ -115,7 +115,7 @@ Key environment variables (see `.env.example` for the full list):
 | `CORS_ALLOWED_ORIGINS` | `*` (dev only)         | Comma-separated allowed origins; **required in production** |
 | `RATE_LIMIT_ENABLED` / `RATE_LIMIT_GENERAL_PER_MIN` / `RATE_LIMIT_AUTH_PER_MIN` | `true` / `120` / `10` | Per-IP rate limits (auth endpoints stricter); auto-disabled under `SKIP_JWT_VALIDATION` |
 | `LOG_LEVEL`        | `info`                     | `debug`/`info`/`warn`/`error`; JSON output in production |
-| `PUBLIC_BASE_URL`  | `http://192.168.1.11:8080` | External base URL for links in emails and uploaded-image URLs |
+| `PUBLIC_BASE_URL`  | `http://localhost:8080` | External base URL for links in emails and uploaded-image URLs |
 | `STORAGE_DIR`      | `./storage/certificates`   | Where uploaded PDFs are stored         |
 | `MAX_UPLOAD_BYTES` | `10485760` (10 MiB)        | Max certificate file size              |
 | `MEDIA_DIR`        | `./storage/media`          | Where uploaded images are stored       |
@@ -286,7 +286,7 @@ and GIF up to `MAX_IMAGE_BYTES` (default 5 MiB), stores the file under
 `MEDIA_DIR` with path-traversal protection, and returns:
 
 ```json
-{ "url": "http://192.168.1.11:8080/api/media/<key>", "fileName": "<key>", "mimeType": "image/png", "fileSize": 12345 }
+{ "url": "http://localhost:8080/api/media/<key>", "fileName": "<key>", "mimeType": "image/png", "fileSize": 12345 }
 ```
 
 Save the returned `url` into the relevant field via the normal create/update

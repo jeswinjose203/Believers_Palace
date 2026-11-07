@@ -5,7 +5,7 @@ A Flutter mobile/web frontend for the Believers Palace church management API.
 ## Setup
 
 1. Make sure Flutter is installed (`flutter --version` >= 3.24 / Dart ^3.5).
-2. Set the API base URL, or use the default `http://192.168.1.11:8080/api`.
+2. Set the API base URL, or use the default `http://localhost:8080/api`.
    To use `localhost` instead (desktop, web, or Android with
    `adb reverse tcp:8080 tcp:8080`):
 

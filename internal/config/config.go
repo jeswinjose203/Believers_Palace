@@ -109,7 +109,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		AppEnv:        getEnv("APP_ENV", "development"),
 		HTTPPort:      getEnv("HTTP_PORT", "8080"),
-		PublicBaseURL: strings.TrimRight(getEnv("PUBLIC_BASE_URL", "http://192.168.1.11:8080"), "/"),
+		PublicBaseURL: strings.TrimRight(getEnv("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5432"),
@@ -139,7 +139,7 @@ func Load() (*Config, error) {
 			SMTPPass: getEnv("SMTP_PASSWORD", ""),
 			From:     getEnv("MAIL_FROM", ""),
 		},
-		SkipJWTValidation: getEnvBool("SKIP_JWT_VALIDATION", false),
+		SkipJWTValidation:  getEnvBool("SKIP_JWT_VALIDATION", false),
 		CORSAllowedOrigins: getEnvList("CORS_ALLOWED_ORIGINS", nil),
 		RateLimit: RateLimitConfig{
 			Enabled: getEnvBool("RATE_LIMIT_ENABLED", true),

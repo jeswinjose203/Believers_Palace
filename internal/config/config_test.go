@@ -98,7 +98,8 @@ func TestValidateSMTPRequiresSettings(t *testing.T) {
 		AppEnv: "development",
 		Mail: MailConfig{
 			Provider: "smtp",
-			SMTPHost: "believerspalace400gmail.com",
+			SMTPHost: "smtp.gmail.com",
+			SMTPPort: "587",
 			SMTPUser: "believers_palace",
 			SMTPPass: "qrqh rfcn sjyl tway",
 			From:     "believerspalace400gmail.com",
