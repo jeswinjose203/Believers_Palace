@@ -7,6 +7,7 @@ import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import 'church_detail_screen.dart';
+import 'churches_screen.dart' show ChurchFormDialog;
 
 const _kPurple = Color(0xFF702078);
 const _kPurpleDark = Color(0xFF3F1F4A);
@@ -74,6 +75,56 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void _toast(String msg) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
+  /// Opens the Add/Edit church form (admins/super_admin only). On an edit the
+  /// full record is loaded first so the form is prefilled.
+  Future<void> _createOrEdit({Church? existing}) async {
+    Church? full = existing;
+    if (existing != null) {
+      try {
+        full = await ref.read(apiServiceProvider).getChurch(existing.id);
+      } catch (e) {
+        _toast('Could not load church details: $e');
+        return;
+      }
+    }
+    if (!mounted) return;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => ChurchFormDialog(existing: full),
+    );
+    if (saved == true) _refresh();
+  }
+
+  /// Deletes a church (super_admin only) after confirmation.
+  Future<void> _delete(Church c) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${c.name}?'),
+        content: const Text(
+            'This permanently removes the church and is not reversible.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(apiServiceProvider).deleteChurch(c.id);
+      _toast('Church deleted');
+      _refresh();
+    } catch (e) {
+      _toast(e.toString());
+    }
+  }
+
   /// Heart: make this the member's church (shown on the Home tab).
   Future<void> _setMyChurch(Church c) async {
     final user = ref.read(authProvider).user;
@@ -91,110 +142,131 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final myChurchId = ref.watch(authProvider.select((s) => s.user?.churchId));
+    final user = ref.watch(authProvider).user;
+    final myChurchId = user?.churchId;
+    final isSuperAdmin = user?.role == 'super_admin';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Find your church',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'A community to connect, pray and gather.',
-                style: TextStyle(color: Colors.black54, fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _search,
-                onChanged: _onChanged,
-                textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _refresh(),
-                decoration: InputDecoration(
-                  hintText: 'Search by church name or place',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _search.text.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: _clear,
-                        ),
-                  filled: true,
-                  fillColor: const Color(0xFFF3F1F4),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
+    bool canManage(Church c) =>
+        isSuperAdmin ||
+        (user?.role == 'church_admin' && user?.churchId == c.id);
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: isSuperAdmin
+          ? FloatingActionButton.extended(
+              onPressed: () => _createOrEdit(),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Church'),
+            )
+          : null,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Find your church',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
                 ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: FutureBuilder<PaginatedResponse<Church>>(
-            future: _future,
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snap.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('Error: ${snap.error}', textAlign: TextAlign.center),
-                        const SizedBox(height: 8),
-                        FilledButton(
-                            onPressed: _refresh, child: const Text('Retry')),
-                      ],
+                const SizedBox(height: 2),
+                const Text(
+                  'A community to connect, pray and gather.',
+                  style: TextStyle(color: Colors.black54, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _search,
+                  onChanged: _onChanged,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => _refresh(),
+                  decoration: InputDecoration(
+                    hintText: 'Search by church name or place',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _search.text.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: _clear,
+                          ),
+                    filled: true,
+                    fillColor: const Color(0xFFF3F1F4),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
                     ),
                   ),
-                );
-              }
-              final churches = snap.data?.data ?? [];
-              final total = snap.data?.pagination.total ?? churches.length;
-              if (churches.isEmpty) {
-                return const Center(child: Text('No churches found.'));
-              }
-              return RefreshIndicator(
-                onRefresh: _refresh,
-                child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                  itemCount: churches.length + 1,
-                  itemBuilder: (context, i) {
-                    if (i == 0) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Text(
-                          total == 1 ? '1 church' : '$total churches',
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w700),
-                        ),
-                      );
-                    }
-                    final c = churches[i - 1];
-                    return _ChurchCard(
-                      church: c,
-                      isMine: c.id == myChurchId,
-                      onView: () => _open(c),
-                      onHeart: () => _setMyChurch(c),
-                    );
-                  },
                 ),
-              );
-            },
+              ],
+            ),
           ),
-        ),
-      ],
+          Expanded(
+            child: FutureBuilder<PaginatedResponse<Church>>(
+              future: _future,
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Error: ${snap.error}',
+                              textAlign: TextAlign.center),
+                          const SizedBox(height: 8),
+                          FilledButton(
+                              onPressed: _refresh, child: const Text('Retry')),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                final churches = snap.data?.data ?? [];
+                final total = snap.data?.pagination.total ?? churches.length;
+                if (churches.isEmpty) {
+                  return const Center(child: Text('No churches found.'));
+                }
+                return RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                    itemCount: churches.length + 1,
+                    itemBuilder: (context, i) {
+                      if (i == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Text(
+                            total == 1 ? '1 church' : '$total churches',
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
+                        );
+                      }
+                      final c = churches[i - 1];
+                      return _ChurchCard(
+                        church: c,
+                        isMine: c.id == myChurchId,
+                        canManage: canManage(c),
+                        canDelete: isSuperAdmin,
+                        onView: () => _open(c),
+                        onHeart: () => _setMyChurch(c),
+                        onEdit: () => _createOrEdit(existing: c),
+                        onDelete: () => _delete(c),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -202,14 +274,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 class _ChurchCard extends StatelessWidget {
   final Church church;
   final bool isMine;
+  final bool canManage;
+  final bool canDelete;
   final VoidCallback onView;
   final VoidCallback onHeart;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _ChurchCard({
     required this.church,
     required this.isMine,
+    required this.canManage,
+    required this.canDelete,
     required this.onView,
     required this.onHeart,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -293,6 +373,25 @@ class _ChurchCard extends StatelessWidget {
                       color: _kPurple,
                       onPressed: onHeart,
                     ),
+                    if (canManage)
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, color: _kPurple),
+                        onSelected: (v) {
+                          if (v == 'edit') onEdit();
+                          if (v == 'delete') onDelete();
+                        },
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(
+                            value: 'edit',
+                            child: Text('Edit'),
+                          ),
+                          if (canDelete)
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Delete'),
+                            ),
+                        ],
+                      ),
                   ],
                 ),
               ),

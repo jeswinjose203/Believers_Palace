@@ -948,19 +948,23 @@ class _SectionHeaderRow extends StatelessWidget {
           child: Icon(icon, size: 18, color: _kFormPurple),
         ),
         const SizedBox(width: 10),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: _kFormPurple,
+        Flexible(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: _kFormPurple,
+            ),
           ),
         ),
         if (trailingLabel != null) ...[
           const SizedBox(width: 6),
-          Text(
-            trailingLabel!,
-            style: const TextStyle(color: Colors.black45, fontSize: 12),
+          Flexible(
+            child: Text(
+              trailingLabel!,
+              style: const TextStyle(color: Colors.black45, fontSize: 12),
+            ),
           ),
         ],
       ],

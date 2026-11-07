@@ -5,7 +5,6 @@ import '../core/auth_provider.dart';
 import '../widgets/verify_email_banner.dart';
 import 'admin_users_screen.dart';
 import 'certificates_screen.dart';
-import 'churches_screen.dart';
 import 'home_screen.dart';
 import 'my_bookings_screen.dart';
 import 'profile_screen.dart';
@@ -26,13 +25,15 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     final user = ref.watch(authProvider).user;
     final isSuperAdmin = user?.role == 'super_admin';
     // Only regular members get the church-aware home page; super admins and
-    // church staff keep the churches list.
+    // church staff do not have a personal "home" church tab.
     final useHome = user?.role == 'user';
 
     final pages = <Widget>[
-      // Members land on Search (index 0) right after login.
-      if (useHome) const SearchScreen(),
-      if (useHome) const HomeScreen() else const ChurchesScreen(),
+      // Everyone lands on the shared "Find your church" search page. Admins and
+      // super admins get church management actions (Add/Edit/Delete) inline on
+      // that same screen; regular members get the heart ("set my church").
+      const SearchScreen(),
+      if (useHome) const HomeScreen(),
       // Super admins manage bookings per church; they don't make their own.
       if (!isSuperAdmin) const MyBookingsScreen(),
       const CertificatesScreen(),
@@ -41,13 +42,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     ];
 
     final items = <BottomNavigationBarItem>[
+      const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
       if (useHome)
-        const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
-      if (useHome)
-        const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home')
-      else
-        const BottomNavigationBarItem(
-            icon: Icon(Icons.church), label: 'Churches'),
+        const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
       if (!isSuperAdmin)
         const BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today), label: 'My Bookings'),
