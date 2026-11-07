@@ -12,6 +12,7 @@ import 'church_bookings_screen.dart';
 import 'churches_screen.dart';
 import 'event_chat_screen.dart';
 import 'event_registrations_screen.dart';
+import 'hall_detail_screen.dart';
 
 const _kPurple = Color(0xFF702078);
 const _kPurpleDark = Color(0xFF55204F);
@@ -678,6 +679,20 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
 
   void _refresh() => setState(_reload);
 
+  /// Opens the full hall page where the user picks a date/time and taps
+  /// "Book Hall". On a successful booking we reuse the existing booking
+  /// callback so the parent switches to the Bookings tab and refreshes it.
+  Future<void> _openHall(Hall h) async {
+    final booked = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => HallDetailScreen(hall: h, canBook: widget.canBook),
+      ),
+    );
+    if (booked == true && mounted) {
+      widget.onBook(h.id);
+    }
+  }
+
   Future<void> _form({Hall? existing}) async {
     final name = TextEditingController(text: existing?.name ?? '');
     final description = TextEditingController(text: existing?.description ?? '');
@@ -810,7 +825,9 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
             side: const BorderSide(color: _kTintBorder),
           ),
           clipBehavior: Clip.antiAlias,
-          child: Column(
+          child: InkWell(
+            onTap: () => _openHall(h),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
@@ -861,20 +878,6 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
                             ],
                           ),
                         ),
-                        if (widget.canBook)
-                          TextButton(
-                            onPressed: () => widget.onBook(h.id),
-                            style: TextButton.styleFrom(
-                              backgroundColor: _kTint,
-                              foregroundColor: _kPurple,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 22, vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10)),
-                            ),
-                            child: const Text('Book',
-                                style: TextStyle(fontWeight: FontWeight.w600)),
-                          ),
                         if (widget.canManage)
                           _EditDeleteMenu(
                             onEdit: () => _form(existing: h),
@@ -892,6 +895,7 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),
