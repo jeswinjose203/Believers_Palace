@@ -27,6 +27,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _search = TextEditingController();
   Timer? _debounce;
   Future<PaginatedResponse<Church>>? _future;
+  // Incremented whenever a church is created/edited so the list cards are
+  // force-rebuilt and show the latest image immediately after Save.
+  int _reloadToken = 0;
 
   @override
   void initState() {
@@ -47,6 +50,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   Future<void> _refresh() async {
     setState(() => _future = _load());
+    try {
+      await _future;
+    } catch (_) {}
+  }
+
+  /// Refresh after a create/edit: evict cached network images and bump the
+  /// reload token so every card rebuilds and fetches its (possibly new) image
+  /// immediately, without needing to leave and re-enter the page.
+  Future<void> _refreshAfterEdit() async {
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+    setState(() {
+      _reloadToken++;
+      _future = _load();
+    });
     try {
       await _future;
     } catch (_) {}
@@ -92,7 +110,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       context: context,
       builder: (_) => ChurchFormDialog(existing: full),
     );
-    if (saved == true) _refresh();
+    if (saved == true) _refreshAfterEdit();
   }
 
   /// Deletes a church (super_admin only) after confirmation.
@@ -253,7 +271,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         // Key includes the image reference so the card (and its
                         // Image.network) rebuilds when the image changes.
                         key: ValueKey(
-                            '${c.id}|${c.images.isNotEmpty ? c.images.first : c.logo ?? ''}'),
+                            '$_reloadToken|${c.id}|${c.images.isNotEmpty ? c.images.first : c.logo ?? ''}'),
                         church: c,
                         isMine: c.id == myChurchId,
                         canManage: canManage(c),
