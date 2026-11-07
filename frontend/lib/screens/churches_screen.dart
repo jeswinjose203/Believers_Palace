@@ -366,114 +366,561 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.existing == null ? 'Add Church' : 'Edit Church'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: 'Name *'),
-            ),
-            TextField(
-              controller: _description,
-              minLines: 3,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                alignLabelWithHint: true,
+    final isEdit = widget.existing != null;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(12),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: const Color(0xFFF4F2FA),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _FormHeader(
+            title: isEdit ? 'Edit Church' : 'Add Church',
+            subtitle: 'Register a new church or prayer venue',
+            onBack: _saving ? null : () => Navigator.of(context).pop(false),
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _FormSection(
+                    icon: Icons.church_outlined,
+                    title: 'Basic Details',
+                    children: [
+                      _FieldLabel('Name', required: true),
+                      _OutlinedField(
+                        controller: _name,
+                        hint: 'Enter church name',
+                        icon: Icons.church_outlined,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Description'),
+                      _OutlinedField(
+                        controller: _description,
+                        hint: 'Brief description about the church',
+                        minLines: 3,
+                        maxLines: 5,
+                        maxLength: 250,
+                        showCounter: true,
+                      ),
+                    ],
+                  ),
+                  _FormSection(
+                    icon: Icons.location_on_outlined,
+                    title: 'Contact & Location',
+                    children: [
+                      _FieldLabel('Address'),
+                      _OutlinedField(
+                        controller: _address,
+                        hint: 'Enter full address',
+                        icon: Icons.location_on_outlined,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Phone'),
+                      _OutlinedField(
+                        controller: _phone,
+                        hint: 'Enter mobile number',
+                        icon: Icons.phone_outlined,
+                        keyboardType: TextInputType.phone,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Email'),
+                      _OutlinedField(
+                        controller: _email,
+                        hint: 'Enter email address',
+                        icon: Icons.email_outlined,
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                    ],
+                  ),
+                  _FormSection(
+                    icon: Icons.person_outline,
+                    title: 'Priest / Administrator',
+                    children: [
+                      _FieldLabel('Name'),
+                      _OutlinedField(
+                        controller: _priestName,
+                        hint: 'Enter name',
+                        icon: Icons.person_outline,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Phone'),
+                      _OutlinedField(
+                        controller: _priestPhone,
+                        hint: 'Enter mobile number',
+                        icon: Icons.phone_outlined,
+                        keyboardType: TextInputType.phone,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Email'),
+                      _OutlinedField(
+                        controller: _priestEmail,
+                        hint: 'Enter email address',
+                        icon: Icons.email_outlined,
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Profile Photo'),
+                      ImagePickerField(
+                        label: '',
+                        initialUrl: _priestPic,
+                        onChanged: (url) => _priestPic = url,
+                      ),
+                    ],
+                  ),
+                  _CollapsibleSection(
+                    icon: Icons.groups_outlined,
+                    title: 'Associate Priest',
+                    trailingLabel: '(Optional)',
+                    children: [
+                      _FieldLabel('Name'),
+                      _OutlinedField(
+                        controller: _assocName,
+                        hint: 'Enter name',
+                        icon: Icons.person_outline,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Phone'),
+                      _OutlinedField(
+                        controller: _assocPhone,
+                        hint: 'Enter mobile number',
+                        icon: Icons.phone_outlined,
+                        keyboardType: TextInputType.phone,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Email'),
+                      _OutlinedField(
+                        controller: _assocEmail,
+                        hint: 'Enter email address',
+                        icon: Icons.email_outlined,
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Associate priest photo'),
+                      ImagePickerField(
+                        label: '',
+                        initialUrl: _assocPic,
+                        onChanged: (url) => _assocPic = url,
+                      ),
+                    ],
+                  ),
+                  _FormSection(
+                    icon: Icons.photo_library_outlined,
+                    title: 'Gallery & Additional Information',
+                    children: [
+                      _FieldLabel('Logo'),
+                      ImagePickerField(
+                        label: '',
+                        initialUrl: _logo,
+                        onChanged: (url) => _logo = url,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Gallery Images'),
+                      MultiImagePickerField(
+                        label: '',
+                        initialUrls: _images,
+                        onChanged: (urls) =>
+                            _images = List<String>.from(urls),
+                      ),
+                    ],
+                  ),
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 4),
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                ],
               ),
             ),
-            TextField(
-              controller: _address,
-              decoration: const InputDecoration(labelText: 'Address'),
+          ),
+          _FormActionBar(
+            saving: _saving,
+            onCancel:
+                _saving ? null : () => Navigator.of(context).pop(false),
+            onSave: _saving ? null : _save,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+const Color _kFormPurple = Color(0xFF7B2FBE);
+
+/// Purple gradient header for the church form, matching the app design.
+class _FormHeader extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final VoidCallback? onBack;
+
+  const _FormHeader({
+    required this.title,
+    required this.subtitle,
+    this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 22),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF8E2DE2), Color(0xFF6A1FB5)],
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconButton(
+            onPressed: onBack,
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            visualDensity: VisualDensity.compact,
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
             ),
-            TextField(
-              controller: _phone,
-              decoration: const InputDecoration(labelText: 'Phone'),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(top: 6, right: 4),
+            child: Icon(Icons.church, color: Colors.white54, size: 32),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A white rounded card grouping related form fields under an icon + title.
+class _FormSection extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final List<Widget> children;
+
+  const _FormSection({
+    required this.icon,
+    required this.title,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SectionHeaderRow(icon: icon, title: title),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+/// A collapsible white card section (used for the optional associate priest).
+class _CollapsibleSection extends StatefulWidget {
+  final IconData icon;
+  final String title;
+  final String? trailingLabel;
+  final List<Widget> children;
+
+  const _CollapsibleSection({
+    required this.icon,
+    required this.title,
+    this.trailingLabel,
+    required this.children,
+  });
+
+  @override
+  State<_CollapsibleSection> createState() => _CollapsibleSectionState();
+}
+
+class _CollapsibleSectionState extends State<_CollapsibleSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _SectionHeaderRow(
+                    icon: widget.icon,
+                    title: widget.title,
+                    trailingLabel: widget.trailingLabel,
+                  ),
+                ),
+                Icon(
+                  _expanded ? Icons.expand_less : Icons.expand_more,
+                  color: _kFormPurple,
+                ),
+              ],
             ),
-            TextField(
-              controller: _email,
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
-            ImagePickerField(
-              label: 'Logo',
-              initialUrl: _logo,
-              onChanged: (url) => _logo = url,
-            ),
-            MultiImagePickerField(
-              label: 'Gallery images',
-              initialUrls: _images,
-              onChanged: (urls) => _images = List<String>.from(urls),
-            ),
+          ),
+          if (_expanded) ...[
             const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Priest',
-                  style: Theme.of(context).textTheme.titleSmall),
-            ),
-            TextField(
-              controller: _priestName,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            TextField(
-              controller: _priestPhone,
-              decoration: const InputDecoration(labelText: 'Phone'),
-            ),
-            TextField(
-              controller: _priestEmail,
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
-            ImagePickerField(
-              label: 'Priest photo',
-              initialUrl: _priestPic,
-              onChanged: (url) => _priestPic = url,
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Associate priest',
-                  style: Theme.of(context).textTheme.titleSmall),
-            ),
-            TextField(
-              controller: _assocName,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            TextField(
-              controller: _assocPhone,
-              decoration: const InputDecoration(labelText: 'Phone'),
-            ),
-            TextField(
-              controller: _assocEmail,
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
-            ImagePickerField(
-              label: 'Associate priest photo',
-              initialUrl: _assocPic,
-              onChanged: (url) => _assocPic = url,
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(_error!, style: const TextStyle(color: Colors.red)),
+            ...widget.children,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The circular-icon + title row shared by section headers.
+class _SectionHeaderRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? trailingLabel;
+
+  const _SectionHeaderRow({
+    required this.icon,
+    required this.title,
+    this.trailingLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: _kFormPurple.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 18, color: _kFormPurple),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: _kFormPurple,
+          ),
+        ),
+        if (trailingLabel != null) ...[
+          const SizedBox(width: 6),
+          Text(
+            trailingLabel!,
+            style: const TextStyle(color: Colors.black45, fontSize: 12),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// A small field label with an optional required asterisk.
+class _FieldLabel extends StatelessWidget {
+  final String text;
+  final bool required;
+
+  const _FieldLabel(this.text, {this.required = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: RichText(
+        text: TextSpan(
+          text: text,
+          style: const TextStyle(
+            color: Colors.black87,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+          children: [
+            if (required)
+              const TextSpan(
+                text: ' *',
+                style: TextStyle(color: Colors.red),
               ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: _saving ? null : _save,
-          child: _saving
-              ? const SizedBox(
-                  width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Save'),
-        ),
-      ],
+    );
+  }
+}
+
+/// An outlined text field with an optional leading icon and character counter,
+/// styled to match the target design.
+class _OutlinedField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final IconData? icon;
+  final int minLines;
+  final int maxLines;
+  final int? maxLength;
+  final bool showCounter;
+  final TextInputType? keyboardType;
+
+  const _OutlinedField({
+    required this.controller,
+    required this.hint,
+    this.icon,
+    this.minLines = 1,
+    this.maxLines = 1,
+    this.maxLength,
+    this.showCounter = false,
+    this.keyboardType,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    OutlineInputBorder border(Color c) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: c),
+        );
+    return TextField(
+      controller: controller,
+      minLines: minLines,
+      maxLines: maxLines,
+      maxLength: showCounter ? maxLength : null,
+      keyboardType: keyboardType,
+      style: const TextStyle(fontSize: 14),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.black38, fontSize: 14),
+        isDense: true,
+        counterText: showCounter ? null : '',
+        prefixIcon: icon == null
+            ? null
+            : Icon(icon, size: 18, color: _kFormPurple),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        filled: true,
+        fillColor: const Color(0xFFFAF9FC),
+        enabledBorder: border(Colors.black12),
+        focusedBorder: border(_kFormPurple),
+        border: border(Colors.black12),
+      ),
+    );
+  }
+}
+
+/// The sticky bottom action bar with Cancel and Save buttons.
+class _FormActionBar extends StatelessWidget {
+  final bool saving;
+  final VoidCallback? onCancel;
+  final VoidCallback? onSave;
+
+  const _FormActionBar({
+    required this.saving,
+    this.onCancel,
+    this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.black12)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: onCancel,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _kFormPurple,
+                side: const BorderSide(color: _kFormPurple),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Cancel',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: onSave,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _kFormPurple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Save',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

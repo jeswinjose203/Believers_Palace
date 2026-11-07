@@ -20,7 +20,7 @@ const _kTintBorder = Color(0xFFE4D3E6);
 
 /// Church detail with role-aware management.
 ///
-/// Layout: image gallery, name + "Book a Hall", pill tabs (About,
+/// Layout: image gallery, name, pill tabs (About,
 /// Announcements, Halls, Events, Bookings) and the tab content.
 ///
 /// - super_admin / church_admin (own church): full control of halls, bookings,
@@ -218,7 +218,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
       ),
       body: NestedScrollView(
         headerSliverBuilder: (context, innerScrolled) => [
-          SliverToBoxAdapter(child: _buildHeader(canBook)),
+          SliverToBoxAdapter(child: _buildHeader()),
           SliverPersistentHeader(
             pinned: true,
             delegate: _PillTabsDelegate(_tabController),
@@ -271,7 +271,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
     );
   }
 
-  Widget _buildHeader(bool canBook) {
+  Widget _buildHeader() {
     final images = _church.images.isNotEmpty
         ? _church.images
         : [
@@ -320,21 +320,6 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
                   ],
                 ),
               ),
-              if (canBook) ...[
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: () => _book(),
-                  icon: const Icon(Icons.calendar_today_outlined, size: 16),
-                  label: const Text('Book a Hall'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _kPurple,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
