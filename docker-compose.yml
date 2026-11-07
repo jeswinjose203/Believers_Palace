@@ -65,11 +65,16 @@ services:
       MAIL_FROM: ${MAIL_FROM}
     ports:
       - "${HTTP_PORT:-8080}:8080"
+    volumes:
+      # Persist uploaded images (MEDIA_DIR) and certificates (STORAGE_DIR)
+      # across container rebuilds/restarts. Both live under /app/storage.
+      - media_data:/app/storage
     networks:
       - app_net
 
 volumes:
   db_data:
+  media_data:
 
 networks:
   app_net:
