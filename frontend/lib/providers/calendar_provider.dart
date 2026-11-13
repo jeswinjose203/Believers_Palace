@@ -63,20 +63,49 @@ class CalendarNotifier extends StateNotifier<CalendarUiState> {
   }
  
   Future<void> refreshSchedule() async {
-    final from = DateTime(state.focusedDay.year, state.focusedDay.month, 1)
-        .subtract(const Duration(days: 7));
-    final to = DateTime(state.focusedDay.year, state.focusedDay.month + 1, 1)
-        .add(const Duration(days: 37));
+    final sel = state.selectedDay;
+    final DateTime from;
+    final DateTime to;
+    final sundayStart = state.preferences?.weekStartsOn == 'sunday';
+    switch (state.viewMode) {
+      case CalendarViewMode.week:
+        final ws = weekStart(sel, sundayStart: sundayStart);
+        from = ws;
+        to = ws.add(const Duration(days: 7));
+        break;
+      case CalendarViewMode.day:
+        from = DateTime(sel.year, sel.month, sel.day);
+        to = from.add(const Duration(days: 1));
+        break;
+      case CalendarViewMode.month:
+        from = DateTime(sel.year, sel.month, 1).subtract(const Duration(days: 7));
+        to = DateTime(sel.year, sel.month + 1, 1).add(const Duration(days: 37));
+        break;
+    }
     final items = await _api.getCalendarSchedule(from, to);
     state = state.copyWith(schedule: items);
   }
  
-  void setViewMode(CalendarViewMode mode) {
+  Future<void> setViewMode(CalendarViewMode mode) async {
     state = state.copyWith(viewMode: mode);
+    await refreshSchedule();
   }
  
-  void selectDay(DateTime day) {
+  static DateTime weekStart(DateTime day, {required bool sundayStart}) {
+    if (sundayStart) {
+      final back = day.weekday % 7;
+      return DateTime(day.year, day.month, day.day).subtract(Duration(days: back));
+    }
+    return DateTime(day.year, day.month, day.day)
+        .subtract(Duration(days: day.weekday - 1));
+  }
+ 
+  Future<void> selectDay(DateTime day) async {
     state = state.copyWith(selectedDay: day, focusedDay: day);
+    if (state.viewMode == CalendarViewMode.week ||
+        state.viewMode == CalendarViewMode.day) {
+      await refreshSchedule();
+    }
   }
 }
  

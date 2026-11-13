@@ -542,6 +542,12 @@ class ApiService {
   Future<CalendarGoal> createCalendarGoal(Map<String, dynamic> body) =>
       _client.post('/users/me/calendar/goals', CalendarGoal.fromJson, body: body);
  
+  Future<CalendarGoal> updateCalendarGoal(String id, Map<String, dynamic> body) =>
+      _client.patch('/users/me/calendar/goals/$id', CalendarGoal.fromJson, body: body);
+ 
+  Future<void> deleteCalendarGoal(String id) =>
+      _client.delete('/users/me/calendar/goals/$id');
+ 
   Future<CheckInResponse> checkInGoal(String goalId, String dateYmd, {String? note}) =>
       _client.put(
         '/users/me/calendar/goals/$goalId/checkins/$dateYmd',

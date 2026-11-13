@@ -39,6 +39,24 @@ func TestCurrentStreak(t *testing.T) {
     }
 }
  
+func TestGoalCheckInWindow(t *testing.T) {
+    start := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+    g := Goal{
+        Status:     GoalActive,
+        TargetDays: 7,
+        StartDate:  &start,
+        CreatedAt:  start,
+    }
+    gStart, gEnd, ok := goalCheckInWindow(g)
+    if !ok {
+        t.Fatal("expected active window")
+    }
+    wantEnd := time.Date(2026, 3, 7, 0, 0, 0, 0, time.UTC)
+    if !gStart.Equal(start) || !gEnd.Equal(wantEnd) {
+        t.Fatalf("window %v..%v want %v..%v", gStart, gEnd, start, wantEnd)
+    }
+}
+ 
 func TestProgressForGoal(t *testing.T) {
     if progressForGoal(TrackingTotal, 5, 2) != 5 {
         t.Fatal("total mode should use check-in count")

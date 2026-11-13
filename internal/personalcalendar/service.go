@@ -228,6 +228,11 @@ func (s *Service) CreateGoal(ctx context.Context, id auth.Identity, in GoalReque
     if in.TargetDays == nil || *in.TargetDays < 1 {
         return nil, invalid("targetDays must be at least 1")
     }
+    if in.StartDate == nil {
+        now := time.Now().UTC()
+        d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+        in.StartDate = &d
+    }
     g, err := s.repo.CreateGoal(ctx, id.UserID, in)
     if err != nil {
         return nil, err
@@ -267,7 +272,41 @@ func (s *Service) ListGoals(ctx context.Context, id auth.Identity, status string
  
 // UpdateGoal updates a goal.
 func (s *Service) UpdateGoal(ctx context.Context, id auth.Identity, goalID string, in GoalRequest) (*Goal, error) {
-    g, err := s.repo.UpdateGoal(ctx, id.UserID, goalID, in)
+    cur, err := s.repo.GetGoal(ctx, id.UserID, goalID)
+    if err != nil {
+        return nil, err
+    }
+    if strings.TrimSpace(in.Title) != "" {
+        cur.Title = strings.TrimSpace(in.Title)
+    }
+    if in.Description != "" {
+        cur.Description = in.Description
+    }
+    if in.TargetDays != nil && *in.TargetDays > 0 {
+        cur.TargetDays = *in.TargetDays
+    }
+    if in.TrackingMode != nil {
+        cur.TrackingMode = *in.TrackingMode
+    }
+    if in.StartDate != nil {
+        cur.StartDate = in.StartDate
+    }
+    if in.EndDate != nil {
+        cur.EndDate = in.EndDate
+    }
+    if in.Status != nil {
+        cur.Status = *in.Status
+    }
+    merged := GoalRequest{
+        Title:        cur.Title,
+        Description:  cur.Description,
+        TargetDays:   &cur.TargetDays,
+        TrackingMode: &cur.TrackingMode,
+        StartDate:    cur.StartDate,
+        EndDate:      cur.EndDate,
+        Status:       &cur.Status,
+    }
+    g, err := s.repo.UpdateGoal(ctx, id.UserID, goalID, merged)
     if err != nil {
         return nil, err
     }
@@ -470,8 +509,12 @@ func (s *Service) Schedule(ctx context.Context, id auth.Identity, from, to time.
         return nil, err
     }
     for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
-        day := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
+        day := dayUTC(d)
         for _, g := range goals {
+            gStart, gEnd, ok := goalCheckInWindow(g)
+            if !ok || day.Before(gStart) || day.After(gEnd) {
+                continue
+            }
             checked, err := s.repo.HasCheckIn(ctx, g.ID, day)
             if err != nil {
                 return nil, err
