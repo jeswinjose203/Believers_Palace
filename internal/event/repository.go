@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -130,6 +131,28 @@ func (r *Repository) ListByChurch(ctx context.Context, churchID, search string, 
 		return nil, 0, fmt.Errorf("iterate events: %w", err)
 	}
 	return items, total, nil
+}
+ 
+// ListByChurchInRange returns church events overlapping [from, to].
+func (r *Repository) ListByChurchInRange(ctx context.Context, churchID string, from, to time.Time) ([]Event, error) {
+    const q = `SELECT ` + columns + ` FROM events
+        WHERE church_id = $1 AND start_date <= $3
+        AND (end_date IS NULL OR end_date >= $2)
+        ORDER BY start_date`
+    rows, err := r.pool.Query(ctx, q, churchID, from, to)
+    if err != nil {
+        return nil, fmt.Errorf("list events in range: %w", err)
+    }
+    defer rows.Close()
+    var items []Event
+    for rows.Next() {
+        e, err := scan(rows)
+        if err != nil {
+            return nil, err
+        }
+        items = append(items, *e)
+    }
+    return items, rows.Err()
 }
 
 // Update replaces an event's fields and returns the updated record.

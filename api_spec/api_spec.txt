@@ -2226,3 +2226,33 @@ components:
         details:
           type: object
           additionalProperties: true
+ 
+  /users/me/calendar/preferences:
+    get:
+      tags: [Calendar]
+      summary: Get personal calendar preferences (creates defaults if missing)
+    patch:
+      tags: [Calendar]
+      summary: Update personal calendar preferences
+  /users/me/calendar/events:
+    get:
+      tags: [Calendar]
+      summary: List personal calendar events
+    post:
+      tags: [Calendar]
+      summary: Create personal calendar event
+  /users/me/calendar/schedule:
+    get:
+      tags: [Calendar]
+      summary: Aggregated schedule (personal, tasks, bookings, church events, holidays, goals)
+  /users/me/calendar/goals:
+    get:
+      tags: [Calendar]
+      summary: List goals
+    post:
+      tags: [Calendar]
+      summary: Create goal
+  /calendar/holidays:
+    get:
+      tags: [Calendar]
+      summary: Public holidays by year and country code

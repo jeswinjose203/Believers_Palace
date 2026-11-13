@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/auth_provider.dart';
+import 'services/calendar_notification_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_screen.dart';
 
@@ -20,9 +21,12 @@ class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(authProvider.notifier).init());
+    Future.microtask(() async {
+      await ref.read(authProvider.notifier).init();
+      await CalendarNotificationService.instance.init();
+    });
   }
-
+ 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);

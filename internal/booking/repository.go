@@ -227,6 +227,27 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Booking, int, er
 	}
 	return items, total, nil
 }
+ 
+// ListOverlappingForUser returns bookings for a user that overlap [from, to].
+func (r *Repository) ListOverlappingForUser(ctx context.Context, userID string, from, to time.Time) ([]Booking, error) {
+    const q = `SELECT ` + columns + ` FROM bookings
+        WHERE user_id = $1 AND start_date <= $3 AND end_date >= $2
+        ORDER BY start_date`
+    rows, err := r.pool.Query(ctx, q, userID, from, to)
+    if err != nil {
+        return nil, fmt.Errorf("list overlapping bookings: %w", err)
+    }
+    defer rows.Close()
+    var items []Booking
+    for rows.Next() {
+        b, err := scan(rows)
+        if err != nil {
+            return nil, err
+        }
+        items = append(items, *b)
+    }
+    return items, rows.Err()
+}
 
 // UpdateStatus sets the status and admin notes and returns the updated booking.
 func (r *Repository) UpdateStatus(ctx context.Context, id string, status Status, adminNotes string) (*Booking, error) {

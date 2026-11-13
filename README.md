@@ -33,10 +33,11 @@ believers_palace/
 │   ├── hall/               # bookable halls
 │   ├── booking/            # hall bookings + lifecycle
 │   ├── event/              # events + registrations
+│   ├── personalcalendar/   # per-user calendar, tasks, goals, schedule
 │   ├── cemetery/           # cemetery plots + service requests
 │   ├── certificate/        # per-user PDF certificate storage
 │   └── server/             # router + middleware wiring
-├── migrations/             # SQL migrations (0001..0008)
+├── migrations/             # SQL migrations (0001..0017)
 ├── .env.example
 ├── Makefile
 └── go.mod
@@ -312,6 +313,16 @@ curl -X POST "http://localhost:8080/api/users/$USER_ID/certificates" \
   -F 'certificateNumber=BAP-001' \
   -F 'fullName=Jane Doe'
 ```
+## Personal calendar (migration 0017)
+ 
+Authenticated users have a private calendar at `/api/users/me/calendar/*`:
+ 
+- Personal events (categories, colors, recurrence, local reminder metadata)
+- Tasks with due dates
+- Goals with daily check-ins and achievements
+- `GET /users/me/calendar/schedule` aggregates personal items, the user’s hall bookings, all church events for their selected church, public holidays (default India via Nager.Date), and goal check-in markers
+ 
+The Flutter app adds a **Calendar** bottom-nav tab. Local reminders use `flutter_local_notifications` (Android: `POST_NOTIFICATIONS` and exact-alarm permissions in `AndroidManifest.xml`). Run `flutter pub get` in `frontend/` after pulling.
 
 ## Testing
 

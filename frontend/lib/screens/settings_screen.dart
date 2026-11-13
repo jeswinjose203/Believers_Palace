@@ -1,29 +1,95 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+ 
 import '../core/auth_provider.dart';
+import '../models/calendar_models.dart';
 import '../services/api_service.dart';
 import 'profile_screen.dart';
-
+ 
 /// Settings page, opened from Profile > Settings.
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
-
+ 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
-
+ 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _toast(String msg) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-
+ 
   void _comingSoon(String what) => _toast('$what is not available yet');
-
+ 
+  Future<void> _calendarPreferences() async {
+    CalendarPreferences? prefs;
+    try {
+      prefs = await ref.read(apiServiceProvider).getCalendarPreferences();
+    } catch (e) {
+      _toast('$e');
+      return;
+    }
+    var week = prefs.weekStartsOn;
+    var df = prefs.dateFormat;
+    var country = prefs.holidayCountry;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('Calendar preferences'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: week,
+                decoration: const InputDecoration(labelText: 'Week starts on'),
+                items: const [
+                  DropdownMenuItem(value: 'monday', child: Text('Monday')),
+                  DropdownMenuItem(value: 'sunday', child: Text('Sunday')),
+                ],
+                onChanged: (v) => setSt(() => week = v ?? week),
+              ),
+              DropdownButtonFormField<String>(
+                value: df,
+                decoration: const InputDecoration(labelText: 'Date format'),
+                items: const [
+                  DropdownMenuItem(value: 'dmy', child: Text('DD/MM/YYYY')),
+                  DropdownMenuItem(value: 'mdy', child: Text('MM/DD/YYYY')),
+                  DropdownMenuItem(value: 'ymd', child: Text('YYYY-MM-DD')),
+                ],
+                onChanged: (v) => setSt(() => df = v ?? df),
+              ),
+              TextField(
+                decoration: const InputDecoration(labelText: 'Holiday country (ISO)'),
+                controller: TextEditingController(text: country),
+                onChanged: (v) => country = v.toUpperCase(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(apiServiceProvider).patchCalendarPreferences({
+        'weekStartsOn': week,
+        'dateFormat': df,
+        'holidayCountry': country,
+      });
+      _toast('Calendar preferences saved');
+    } catch (e) {
+      _toast('$e');
+    }
+  }
+ 
   double get _cacheMb =>
       PaintingBinding.instance.imageCache.currentSizeBytes / (1024 * 1024);
-
+ 
   // ---- Account ------------------------------------------------------------
-
+ 
   /// The backend has no "change password while signed in" endpoint, so this
   /// uses the existing reset flow: a reset link is emailed to the user.
   Future<void> _changePassword() async {
@@ -54,7 +120,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _toast(e.toString());
     }
   }
-
+ 
   Future<void> _logoutEverywhere() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -85,9 +151,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _toast(e.toString());
     }
   }
-
+ 
   // ---- Preferences --------------------------------------------------------
-
+ 
   Future<void> _language() async {
     await showDialog<void>(
       context: context,
@@ -112,9 +178,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
   }
-
+ 
   // ---- Other --------------------------------------------------------------
-
+ 
   void _clearCache() {
     final cache = PaintingBinding.instance.imageCache;
     cache.clear();
@@ -122,7 +188,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() {});
     _toast('Cache cleared');
   }
-
+ 
   void _legal(String title) {
     showDialog<void>(
       context: context,
@@ -141,7 +207,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
   }
-
+ 
   Widget _section(String title) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
         child: Text(
@@ -153,7 +219,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ),
       );
-
+ 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -242,6 +308,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       value: 'Light',
                       onTap: () => _toast('Only the light theme is available'),
                     ),
+                    SettingsRow(
+                      icon: Icons.calendar_month_outlined,
+                      title: 'Calendar',
+                      subtitle: 'Week start, date format, holidays',
+                      onTap: _calendarPreferences,
+                    ),
                   ]),
                   _section('Privacy & Security'),
                   SettingsCard(children: [
@@ -290,3 +362,4 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 }
+ 

@@ -26,6 +26,7 @@ import (
 	"believers_palace/internal/httpx"
 	"believers_palace/internal/mailer"
 	"believers_palace/internal/media"
+	"believers_palace/internal/personalcalendar"
 	"believers_palace/internal/user"
 )
 
@@ -128,7 +129,11 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	}
 	mediaSvc := media.NewService(mediaStorage, cfg.PublicBaseURL, cfg.Storage.MaxImageBytes)
 	mediaHandler := media.NewHandler(mediaSvc)
-
+ 
+    personalCalRepo := personalcalendar.NewRepository(pool)
+    personalCalSvc := personalcalendar.NewService(personalCalRepo, bookingRepo, eventRepo)
+    personalCalHandler := personalcalendar.NewHandler(personalCalSvc)
+ 
 	// Health check.
 	r.Get("/health", func(w http.ResponseWriter, req *http.Request) {
 		if err := pool.Ping(req.Context()); err != nil {
@@ -161,6 +166,8 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 		api.Group(func(protected chi.Router) {
 			protected.Use(authMiddleware)
 			protected.Mount("/users", userHandler.UserRoutes())
+            protected.Mount("/users/me/calendar", personalCalHandler.Routes())
+            protected.Mount("/calendar", personalCalHandler.HolidayRoutes())
 			protected.Mount("/users/{userId}/certificates", certificateHandler.UserRoutes())
 			protected.Mount("/churches", churchHandler.Routes())
 
