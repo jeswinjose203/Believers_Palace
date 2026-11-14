@@ -7,7 +7,7 @@ import '../core/calendar_time.dart';
 import '../models/calendar_models.dart';
 import '../providers/calendar_provider.dart';
 import '../services/api_service.dart';
-import '../services/calendar_notification_service.dart';
+import '../services/calendar_reminder_sync.dart';
  
 class CalendarScreen extends ConsumerStatefulWidget {
   const CalendarScreen({super.key});
@@ -57,13 +57,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   }
  
   Future<void> _syncNotifications() async {
-    final api = ref.read(apiServiceProvider);
-    final events = await api.listCalendarEvents(limit: 100);
-    final tasks = await api.listCalendarTasks(limit: 100);
-    await CalendarNotificationService.instance.rescheduleAll(
-      events: events.data,
-      tasks: tasks.data,
-    );
+    if (!mounted) return;
+    final result = await syncCalendarReminders(ref);
+    if (!mounted) return;
+    showCalendarReminderPermissionHint(context, result);
   }
  
   void _toast(String msg) =>
@@ -167,7 +164,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                 ),
                 const Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Reminders (minutes before)'),
+                  child: Text('Reminders (minutes before start — e.g. 5 = 5 min earlier)'),
                 ),
                 Wrap(
                   spacing: 8,
@@ -816,7 +813,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                 ),
                 const Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Reminders (minutes before)'),
+                  child: Text('Reminders (minutes before start — e.g. 5 = 5 min earlier)'),
                 ),
                 Wrap(
                   spacing: 8,

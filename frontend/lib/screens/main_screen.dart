@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
- 
+
 import '../core/auth_provider.dart';
+import '../services/calendar_reminder_sync.dart';
 import '../widgets/verify_email_banner.dart';
 import 'admin_users_screen.dart';
 import 'certificates_screen.dart';
@@ -19,9 +20,36 @@ class MainScreen extends ConsumerStatefulWidget {
   ConsumerState<MainScreen> createState() => _MainScreenState();
 }
  
-class _MainScreenState extends ConsumerState<MainScreen> {
+class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObserver {
   int _index = 0;
- 
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncReminders());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _syncReminders();
+    }
+  }
+
+  Future<void> _syncReminders() async {
+    if (!ref.read(authProvider).isAuthenticated) return;
+    final result = await syncCalendarReminders(ref);
+    if (!mounted) return;
+    showCalendarReminderPermissionHint(context, result);
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
