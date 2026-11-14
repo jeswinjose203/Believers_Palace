@@ -35,7 +35,8 @@ func (s *Service) ParseScheduleRange(r *http.Request) (time.Time, time.Time, err
 		if toDay.Before(fromDay) {
 			return time.Time{}, time.Time{}, errors.New("invalid date range")
 		}
-		return dayRangeInLoc(fromDay, toDay, loc)
+		start, end := dayRangeInLoc(fromDay, toDay, loc)
+		return start, end, nil
 	}
 
 	fromS := r.URL.Query().Get("from")
@@ -56,9 +57,10 @@ func (s *Service) ParseScheduleRange(r *http.Request) (time.Time, time.Time, err
 	if toDay.Before(fromDay) {
 		return time.Time{}, time.Time{}, errors.New("invalid time range")
 	}
-	return dayRangeInLoc(
+	start, end := dayRangeInLoc(
 		time.Date(fromDay.Year(), fromDay.Month(), fromDay.Day(), 0, 0, 0, 0, loc),
 		time.Date(toDay.Year(), toDay.Month(), toDay.Day(), 0, 0, 0, 0, loc),
 		loc,
 	)
+	return start, end, nil
 }
