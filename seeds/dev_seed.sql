@@ -19,3 +19,48 @@ VALUES (
     true
 )
 ON CONFLICT (id) DO NOTHING;
+
+-- Sample church for local catechism testing (fixed ID).
+INSERT INTO churches (id, name, address)
+VALUES (
+    '00000000-0000-0000-0000-000000000010',
+    'St. Mary Parish (Dev)',
+    '1 Faith Way'
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO catechism_classes (
+    id, church_id, name, description, level, min_age, max_age,
+    teacher_name, schedule, location, start_date, end_date, capacity, status
+)
+VALUES (
+    '00000000-0000-0000-0000-000000000020',
+    '00000000-0000-0000-0000-000000000010',
+    'First Communion 2026',
+    'Preparation classes for first Holy Communion.',
+    'first_communion',
+    7,
+    10,
+    'Fr. Sample',
+    '[{"day":"Saturday","time":"10:00"}]'::jsonb,
+    'Parish hall',
+    CURRENT_DATE,
+    CURRENT_DATE + INTERVAL '180 days',
+    25,
+    'open'
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO catechism_enrollments (
+    id, class_id, guardian_id, student_name, date_of_birth, notes, status
+)
+VALUES (
+    '00000000-0000-0000-0000-000000000021',
+    '00000000-0000-0000-0000-000000000020',
+    '00000000-0000-0000-0000-000000000001',
+    'Sample Child',
+    '2016-05-15',
+    'Dev seed enrollment',
+    'pending'
+)
+ON CONFLICT (id) DO NOTHING;
