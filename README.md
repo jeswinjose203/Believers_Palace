@@ -2,8 +2,8 @@
 
 A church/community management REST API built with Go and PostgreSQL. It
 implements the Church Management API specification (v1.6.0): authentication,
-users, churches, announcements, halls, bookings, events, cemetery services, and
-per-user certificate storage.
+users, churches, announcements, halls, bookings, events, catechism (faith
+formation classes), cemetery services, and per-user certificate storage.
 
 ## Tech Stack
 
@@ -33,11 +33,12 @@ believers_palace/
 │   ├── hall/               # bookable halls
 │   ├── booking/            # hall bookings + lifecycle
 │   ├── event/              # events + registrations
+│   ├── catechism/          # faith-formation classes, enrollments, lessons
 │   ├── personalcalendar/   # per-user calendar, tasks, goals, schedule
 │   ├── cemetery/           # cemetery plots + service requests
 │   ├── certificate/        # per-user PDF certificate storage
 │   └── server/             # router + middleware wiring
-├── migrations/             # SQL migrations (0001..0017)
+├── migrations/             # SQL migrations (0001..0018)
 ├── .env.example
 ├── Makefile
 └── go.mod
@@ -56,13 +57,14 @@ Five roles: `user`, `priest`, `associate_priest`, `church_admin`, `super_admin`.
 - `church_admin` is scoped to their own church (enforced in both routing and
   the service layer): full administrative control of that church's resources.
 - `priest` and `associate_priest` are church staff scoped to their own church.
-  They may manage pastoral **content** — announcements and events — for their
-  church. They do NOT have administrative powers (hall CRUD, booking status
+  They may manage pastoral **content** — announcements, events, and catechism
+  classes — for their church. They do NOT have administrative powers (hall CRUD, booking status
   changes, cemetery plots, cemetery request status, user role changes remain
   `church_admin` / `super_admin` only).
 - Regular users may create bookings and cemetery service requests, register for
-  events, and manage their own profile and certificates. They see only their
-  own bookings, service requests, and certificates.
+  events, enroll students in open catechism classes, and manage their own profile
+  and certificates. They see only their own bookings, service requests,
+  catechism enrollments, and certificates.
 
 Booking integrity: a hall cannot be double-booked for overlapping time ranges.
 Overlaps with active (`pending`/`approved`) bookings are rejected with `409`,
@@ -149,9 +151,10 @@ Base path: `/api`. All routes except `/auth/*` require a
 
 List endpoints accept `page`/`limit` pagination and a `search` query parameter
 for case-insensitive text matching (churches by name/address; announcements by
-title/content; halls and events by name/description/location; bookings by
-purpose/notes; cemetery plots by number/section/location; cemetery service
-requests by name/deceased/description).
+title/content; halls and events by name/description/location; catechism classes by
+name/description and sessions by title/topic; enrollments by student name;
+bookings by purpose/notes; cemetery plots by number/section/location; cemetery
+service requests by name/deceased/description).
 
 ### Authentication
 | Method | Path                     | Description                                   |
@@ -250,6 +253,50 @@ chat by polling.
 | PATCH  | `/bookings/{bookingId}/status`     | church_admin / super_admin     |
 | PATCH  | `/bookings/{bookingId}/cancel`     | owner / church admin           |
 
+### Catechism
+| Method | Path | Access |
+|--------|------|--------|
+| GET/POST | `/churches/{churchId}/catechism-classes` | list: any authenticated; create: church staff / super_admin |
+| GET/PUT/DELETE | `/catechism-classes/{classId}` | get: any authenticated; write: church staff / super_admin |
+| GET/POST | `/catechism-classes/{classId}/enrollments` | list: staff see all, users see own; create: any authenticated |
+| GET | `/catechism-enrollments` | current user's enrollments |
+| PATCH | `/catechism-enrollments/{id}/status` | church staff / super_admin (approve / reject / complete) |
+| PATCH | `/catechism-enrollments/{id}/withdraw` | owner or church staff |
+| GET/POST | `/catechism-classes/{classId}/sessions` | list: approved guardian or staff; create: staff |
+| PUT/DELETE | `/catechism-sessions/{sessionId}` | church staff / super_admin |
+
+Church staff (`church_admin`, `priest`, `associate_priest`, `super_admin`) manage
+catechism for their own church only. Users browse open classes, submit enrollments
+for their children, and view or withdraw their own enrollments. Enrollment statuses
+flow `pending` → `approved` / `rejected` / `withdrawn`, and staff may mark
+`completed` after the class status is `completed`. Capacity and duplicate active
+enrollments (same student name + date of birth in one class) are enforced in a
+database transaction and return `409` when violated. Enrolling in a class that is
+not `open` returns `400`.
+
+Class list supports `status` and `level` filters in addition to `search`. List
+items include `enrolledCount`, `availableSeats`, and `enrolled` (for the caller).
+
+```bash
+# Create a class (staff)
+curl -X POST "http://localhost:8080/api/churches/$CHURCH_ID/catechism-classes" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"Confirmation 2026","level":"confirmation","startDate":"2026-09-01","endDate":"2027-04-30","capacity":30,"status":"open"}'
+
+# Enroll a student
+curl -X POST "http://localhost:8080/api/catechism-classes/$CLASS_ID/enrollments" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"studentName":"Maria Gomez","dateOfBirth":"2012-03-10"}'
+
+# Approve enrollment (staff)
+curl -X PATCH "http://localhost:8080/api/catechism-enrollments/$ENROLLMENT_ID/status" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"status":"approved"}'
+```
+
+The Flutter client adds a **Catechism** bottom-nav tab (when the user has a church)
+and a **Catechism** pill tab on the church detail page (`frontend/lib/features/catechism/`).
+
 ### Cemetery
 | Method | Path                                                | Access                        |
 |--------|-----------------------------------------------------|-------------------------------|
@@ -322,7 +369,10 @@ Authenticated users have a private calendar at `/api/users/me/calendar/*`:
 - Goals with daily check-ins and achievements
 - `GET /users/me/calendar/schedule` aggregates personal items, the user’s hall bookings, all church events for their selected church, public holidays (default India via Nager.Date), and goal check-in markers
  
-The Flutter app adds a **Calendar** bottom-nav tab. Local reminders use `flutter_local_notifications` (Android: `POST_NOTIFICATIONS` and exact-alarm permissions in `AndroidManifest.xml`). Run `flutter pub get` in `frontend/` after pulling.
+The Flutter app adds **Calendar** and **Catechism** bottom-nav tabs (catechism
+when a church is selected). Local reminders use `flutter_local_notifications`
+(Android: `POST_NOTIFICATIONS` and exact-alarm permissions in `AndroidManifest.xml`).
+Run `flutter pub get` in `frontend/` after pulling.
 
 ## Testing
 

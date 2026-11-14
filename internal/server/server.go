@@ -16,6 +16,7 @@ import (
 	"believers_palace/internal/announcement"
 	"believers_palace/internal/auth"
 	"believers_palace/internal/booking"
+	"believers_palace/internal/catechism"
 	"believers_palace/internal/cemetery"
 	"believers_palace/internal/certificate"
 	"believers_palace/internal/chat"
@@ -103,6 +104,10 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	eventSvc := event.NewService(eventRepo, churchRepo)
 	eventHandler := event.NewHandler(eventSvc)
 
+	catechismRepo := catechism.NewRepository(pool)
+	catechismSvc := catechism.NewService(catechismRepo, churchRepo)
+	catechismHandler := catechism.NewHandler(catechismSvc)
+
 	chatRepo := chat.NewRepository(pool)
 	chatSvc := chat.NewService(
 		chatRepo,
@@ -181,6 +186,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 			protected.Mount("/churches/{churchId}/halls", hallHandler.ChurchRoutes())
 			protected.Mount("/churches/{churchId}/bookings", bookingHandler.ChurchRoutes())
 			protected.Mount("/churches/{churchId}/events", eventHandler.ChurchRoutes())
+			protected.Mount("/churches/{churchId}/catechism-classes", catechismHandler.ChurchRoutes())
 			protected.Mount("/churches/{churchId}/cemetery-plots", cemeteryHandler.PlotChurchRoutes())
 			protected.Mount("/churches/{churchId}/cemetery-service-requests", cemeteryHandler.RequestChurchRoutes())
 
@@ -189,6 +195,9 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 			protected.Mount("/halls", hallHandler.Routes())
 			protected.Mount("/bookings", bookingHandler.Routes())
 			protected.Mount("/events", eventHandler.RoutesWith(chatHandler.EventRoutes()))
+			protected.Mount("/catechism-classes", catechismHandler.ClassRoutes())
+			protected.Mount("/catechism-enrollments", catechismHandler.EnrollmentRoutes())
+			protected.Mount("/catechism-sessions", catechismHandler.SessionRoutes())
 			protected.Mount("/communities", communityHandler.Routes())
 			protected.Mount("/cemetery-service-requests", cemeteryHandler.RequestRoutes())
 			protected.Mount("/cemetery-plots", cemeteryHandler.PlotRoutes())

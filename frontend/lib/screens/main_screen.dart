@@ -11,6 +11,8 @@ import 'home_screen.dart';
 import 'my_bookings_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
+import '../features/catechism/screens/catechism_list_screen.dart';
+import '../features/catechism/screens/my_enrollments_screen.dart';
  
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -29,6 +31,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     // Only regular members get the church-aware home page; super admins and
     // church staff do not have a personal "home" church tab.
     final useHome = user?.role == 'user';
+    final churchId = user?.churchId;
+    final hasChurch = churchId != null && churchId.isNotEmpty;
  
     final pages = <Widget>[
       // Everyone lands on the shared "Find your church" search page. Admins and
@@ -37,6 +41,10 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       const SearchScreen(),
       const CommunitiesScreen(),
       const CalendarScreen(),
+      if (hasChurch)
+        CatechismListScreen(churchId: churchId!)
+      else
+        const MyEnrollmentsScreen(),
       if (useHome) const HomeScreen(),
       // Super admins manage bookings per church; they don't make their own.
       if (!isSuperAdmin) const MyBookingsScreen(),
@@ -51,6 +59,10 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           icon: Icon(Icons.groups), label: 'Communities'),
       const BottomNavigationBarItem(
           icon: Icon(Icons.calendar_month), label: 'Calendar'),
+      BottomNavigationBarItem(
+        icon: const Icon(Icons.menu_book_outlined),
+        label: hasChurch ? 'Catechism' : 'Enrollments',
+      ),
       if (useHome)
         const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
       if (!isSuperAdmin)
