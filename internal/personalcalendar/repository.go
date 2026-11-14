@@ -52,14 +52,14 @@ func scanEvent(row pgx.Row) (*Event, error) {
 }
  
 func (r *Repository) GetPreferences(ctx context.Context, userID string) (*Preferences, error) {
-    const q = `SELECT theme, date_format, week_starts_on, holiday_country, category_colors
+    const q = `SELECT theme, date_format, week_starts_on, holiday_country, timezone, category_colors
         FROM user_calendar_preferences WHERE user_id = $1`
     var (
         p           Preferences
         colorsBytes []byte
     )
     err := r.pool.QueryRow(ctx, q, userID).Scan(
-        &p.Theme, &p.DateFormat, &p.WeekStartsOn, &p.HolidayCountry, &colorsBytes,
+        &p.Theme, &p.DateFormat, &p.WeekStartsOn, &p.HolidayCountry, &p.Timezone, &colorsBytes,
     )
     if errors.Is(err, pgx.ErrNoRows) {
         return nil, ErrNotFound
@@ -71,6 +71,9 @@ func (r *Repository) GetPreferences(ctx context.Context, userID string) (*Prefer
     if p.CategoryColors == nil {
         p.CategoryColors = DefaultCategoryColors()
     }
+    if p.Timezone == "" {
+        p.Timezone = defaultTimezone
+    }
     return &p, nil
 }
  
@@ -80,25 +83,33 @@ func (r *Repository) UpsertPreferences(ctx context.Context, userID string, p Pre
         return nil, err
     }
     const q = `
-        INSERT INTO user_calendar_preferences (user_id, theme, date_format, week_starts_on, holiday_country, category_colors)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO user_calendar_preferences (user_id, theme, date_format, week_starts_on, holiday_country, timezone, category_colors)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (user_id) DO UPDATE SET
             theme = EXCLUDED.theme,
             date_format = EXCLUDED.date_format,
             week_starts_on = EXCLUDED.week_starts_on,
             holiday_country = EXCLUDED.holiday_country,
+            timezone = EXCLUDED.timezone,
             category_colors = EXCLUDED.category_colors,
             updated_at = now()
-        RETURNING theme, date_format, week_starts_on, holiday_country, category_colors`
+        RETURNING theme, date_format, week_starts_on, holiday_country, timezone, category_colors`
     var colorsOut []byte
     out := &Preferences{}
-    err = r.pool.QueryRow(ctx, q, userID, p.Theme, p.DateFormat, p.WeekStartsOn, p.HolidayCountry, colors).Scan(
-        &out.Theme, &out.DateFormat, &out.WeekStartsOn, &out.HolidayCountry, &colorsOut,
+    tzName := p.Timezone
+    if tzName == "" {
+        tzName = defaultTimezone
+    }
+    err = r.pool.QueryRow(ctx, q, userID, p.Theme, p.DateFormat, p.WeekStartsOn, p.HolidayCountry, tzName, colors).Scan(
+        &out.Theme, &out.DateFormat, &out.WeekStartsOn, &out.HolidayCountry, &out.Timezone, &colorsOut,
     )
     if err != nil {
         return nil, fmt.Errorf("upsert preferences: %w", err)
     }
     _ = json.Unmarshal(colorsOut, &out.CategoryColors)
+    if out.Timezone == "" {
+        out.Timezone = defaultTimezone
+    }
     return out, nil
 }
  
@@ -305,7 +316,7 @@ func (r *Repository) ListTasks(ctx context.Context, userID string, limit, offset
 }
  
 func (r *Repository) ListTasksDueInRange(ctx context.Context, userID string, from, to time.Time) ([]Task, error) {
-    q := `SELECT ` + taskCols + ` FROM calendar_tasks WHERE user_id = $1 AND due_date >= $2::date AND due_date <= $3::date ORDER BY due_date`
+    q := `SELECT ` + taskCols + ` FROM calendar_tasks WHERE user_id = $1 AND due_date >= $2 AND due_date <= $3 ORDER BY due_date`
     rows, err := r.pool.Query(ctx, q, userID, from, to)
     if err != nil {
         return nil, err

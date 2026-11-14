@@ -567,17 +567,24 @@ class ApiService {
  
   Future<PersonalCalendarEvent> createCalendarEvent(Map<String, dynamic> body) =>
       _client.post('/users/me/calendar/events', PersonalCalendarEvent.fromJson, body: body);
- 
+
+  Future<PersonalCalendarEvent> getCalendarEvent(String id) =>
+      _client.get('/users/me/calendar/events/$id', PersonalCalendarEvent.fromJson);
+
   Future<PersonalCalendarEvent> updateCalendarEvent(String id, Map<String, dynamic> body) =>
       _client.patch('/users/me/calendar/events/$id', PersonalCalendarEvent.fromJson, body: body);
  
   Future<void> deleteCalendarEvent(String id) =>
       _client.delete('/users/me/calendar/events/$id');
  
-  Future<List<ScheduleItem>> getCalendarSchedule(DateTime from, DateTime to) async {
+  Future<List<ScheduleItem>> getCalendarSchedule(DateTime from, DateTime toExclusive) async {
+    String ymd(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final fromDay = DateTime(from.year, from.month, from.day);
+    final toDay = toExclusive.subtract(const Duration(days: 1));
     final json = await _client.getRaw(
       '/users/me/calendar/schedule',
-      query: {'from': from.toUtc().toIso8601String(), 'to': to.toUtc().toIso8601String()},
+      query: {'fromDate': ymd(fromDay), 'toDate': ymd(toDay.isBefore(fromDay) ? fromDay : toDay)},
     );
     return (json['data'] as List<dynamic>)
         .map((e) => ScheduleItem.fromJson(e as Map<String, dynamic>))

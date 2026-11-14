@@ -197,7 +197,7 @@ func (h *Handler) deleteTask(w http.ResponseWriter, r *http.Request) {
  
 func (h *Handler) schedule(w http.ResponseWriter, r *http.Request) {
     id := auth.MustFromContext(r.Context())
-    from, to, err := parseRange(r)
+    from, to, err := h.svc.ParseScheduleRange(r)
     if err != nil {
         httpx.ErrorCode(w, http.StatusBadRequest, err.Error(), "bad_request")
         return
@@ -326,22 +326,6 @@ func (h *Handler) holidays(w http.ResponseWriter, r *http.Request) {
     httpx.JSON(w, http.StatusOK, map[string]any{"data": items})
 }
  
-func parseRange(r *http.Request) (time.Time, time.Time, error) {
-    fromS := r.URL.Query().Get("from")
-    toS := r.URL.Query().Get("to")
-    if fromS == "" || toS == "" {
-        return time.Time{}, time.Time{}, errors.New("from and to are required (RFC3339)")
-    }
-    from, err := time.Parse(time.RFC3339, fromS)
-    if err != nil {
-        return time.Time{}, time.Time{}, errors.New("invalid from")
-    }
-    to, err := time.Parse(time.RFC3339, toS)
-    if err != nil {
-        return time.Time{}, time.Time{}, errors.New("invalid to")
-    }
-    return from, to, nil
-}
  
 func (h *Handler) writeError(w http.ResponseWriter, err error) {
     var ve *ValidationError

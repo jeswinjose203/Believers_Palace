@@ -102,10 +102,7 @@ class CalendarNotifier extends StateNotifier<CalendarUiState> {
  
   Future<void> selectDay(DateTime day) async {
     state = state.copyWith(selectedDay: day, focusedDay: day);
-    if (state.viewMode == CalendarViewMode.week ||
-        state.viewMode == CalendarViewMode.day) {
-      await refreshSchedule();
-    }
+    await refreshSchedule();
   }
 }
  
