@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
  
 import '../core/api_client.dart';
 import '../models/calendar_models.dart';
+import '../models/community_models.dart';
 import '../models/models.dart';
  
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
@@ -327,6 +328,71 @@ class ApiService {
  
   Future<void> deleteEventMessage(String eventId, String messageId) =>
       _client.delete('/events/$eventId/messages/$messageId');
+
+  // Communities
+  Future<List<Community>> listCommunities() async {
+    final json = await _client.getRaw('/communities');
+    return (json['data'] as List)
+        .map((item) => Community.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Community> createCommunity(String name, String description) =>
+      _client.post('/communities', Community.fromJson,
+          body: {'name': name, 'description': description});
+
+  Future<CommunityMembership> requestCommunityMembership(String id) =>
+      _client.post('/communities/$id/requests', CommunityMembership.fromJson);
+
+  Future<List<CommunityMembership>> listCommunityRequests(String id) async {
+    final json = await _client.getRaw('/communities/$id/requests');
+    return (json['data'] as List)
+        .map((item) =>
+            CommunityMembership.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<CommunityMembership>> listCommunityMembers(String id) async {
+    final json = await _client.getRaw('/communities/$id/members');
+    return (json['data'] as List)
+        .map((item) =>
+            CommunityMembership.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> reviewCommunityRequest(
+          String communityId, String requestId, bool approve) =>
+      _client.postVoid(
+          '/communities/$communityId/requests/$requestId/${approve ? 'approve' : 'decline'}');
+
+  Future<void> removeCommunityMember(String communityId, String userId) =>
+      _client.delete('/communities/$communityId/members/$userId');
+
+  Future<void> leaveCommunity(String communityId) =>
+      _client.delete('/communities/$communityId/leave');
+
+  Future<CommunityCursorPage> listCommunityMessages(
+    String id, {
+    int? before,
+    int? after,
+    int limit = 50,
+  }) =>
+      _client.get(
+        '/communities/$id/messages',
+        CommunityCursorPage.fromJson,
+        query: {
+          if (before != null) 'before': before,
+          if (after != null) 'after': after,
+          'limit': limit,
+        },
+      );
+
+  Future<CommunityMessage> postCommunityMessage(String id, String content) =>
+      _client.post('/communities/$id/messages', CommunityMessage.fromJson,
+          body: {'content': content});
+
+  Future<void> deleteCommunityMessage(String id, String messageId) =>
+      _client.delete('/communities/$id/messages/$messageId');
  
   // Cemetery plots
   Future<PaginatedResponse<CemeteryPlot>> listCemeteryPlots(

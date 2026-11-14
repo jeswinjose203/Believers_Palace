@@ -1193,5 +1193,65 @@ Success: 200 OK -> { "status": "ok" }
 Errors : 503 Service Unavailable -> { "message": "database unavailable" }
 
 ================================================================================
+11. COMMUNITIES
+================================================================================
+All routes require:  Authorization: Bearer <JWT>
+
+Community visibility:
+  All authenticated users may discover communities and request membership.
+  The creator is the community admin. Only active members may read or post
+  messages. Only the community admin may review requests, remove members, or
+  moderate messages. Members may delete their own messages and leave.
+
+11.1 List communities
+Method: GET  URL: /api/communities
+Success: 200 OK -> { "data": [ community objects ] }
+Each object includes id, creatorId, name, description, and createdAt. The
+requester's status ("active", "pending", or "declined") and isAdmin are
+included when true/non-empty; nonmembers have neither field.
+
+11.2 Create a community
+Method: POST  URL: /api/communities
+Body: { "name": "Choir", "description": "Optional description" }
+Success: 201 Created -> community object; the creator is made an active admin.
+Errors: 400 bad_request
+
+11.3 Request membership
+Method: POST  URL: /api/communities/{communityId}/requests
+Success: 201 Created -> pending membership request
+Errors: 404 not_found, 409 conflict (already active or pending)
+
+11.4 Review membership requests (admin only)
+  GET  /api/communities/{communityId}/requests
+       -> 200 OK { "data": [ pending membership objects ] }
+  POST /api/communities/{communityId}/requests/{requestId}/approve
+       -> 204 No Content
+  POST /api/communities/{communityId}/requests/{requestId}/decline
+       -> 204 No Content
+Errors: 403 forbidden, 404 not_found
+
+11.5 List and remove members
+  GET /api/communities/{communityId}/members
+       -> 200 OK { "data": [ active membership objects ] } (active members only)
+  DELETE /api/communities/{communityId}/members/{userId}
+       -> 204 No Content (admin only; admins cannot remove themselves)
+  DELETE /api/communities/{communityId}/leave
+       -> 204 No Content (an admin leaving transfers admin to another active
+          member; the only admin cannot leave until another member is active)
+Errors: 403 forbidden, 404 not_found
+
+11.6 Community messages
+  GET    /api/communities/{communityId}/messages?latest=1&limit=50
+  GET    /api/communities/{communityId}/messages?before={seq}&limit=50
+  GET    /api/communities/{communityId}/messages?after={seq}&limit=50
+       -> 200 OK { "data": [ oldest-first messages ], "hasMore": boolean }
+  POST   /api/communities/{communityId}/messages
+       Body: { "content": "Hello!" }
+       -> 201 Created -> message object
+  DELETE /api/communities/{communityId}/messages/{messageId}
+       -> 204 No Content (message author or community admin)
+Errors: 400 bad_request, 403 not_member/forbidden, 404 not_found
+
+================================================================================
 END OF API REFERENCE
 ================================================================================
