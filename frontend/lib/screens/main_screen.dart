@@ -6,6 +6,7 @@ import '../widgets/verify_email_banner.dart';
 import 'admin_users_screen.dart';
 import 'certificates_screen.dart';
 import 'calendar_screen.dart';
+import 'communities_screen.dart';
 import 'home_screen.dart';
 import 'my_bookings_screen.dart';
 import 'profile_screen.dart';
@@ -34,6 +35,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       // super admins get church management actions (Add/Edit/Delete) inline on
       // that same screen; regular members get the heart ("set my church").
       const SearchScreen(),
+      const CommunitiesScreen(),
       const CalendarScreen(),
       if (useHome) const HomeScreen(),
       // Super admins manage bookings per church; they don't make their own.
@@ -45,6 +47,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
  
     final items = <BottomNavigationBarItem>[
       const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
+      const BottomNavigationBarItem(
+          icon: Icon(Icons.groups), label: 'Communities'),
       const BottomNavigationBarItem(
           icon: Icon(Icons.calendar_month), label: 'Calendar'),
       if (useHome)

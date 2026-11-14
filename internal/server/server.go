@@ -20,6 +20,7 @@ import (
 	"believers_palace/internal/certificate"
 	"believers_palace/internal/chat"
 	"believers_palace/internal/church"
+	"believers_palace/internal/community"
 	"believers_palace/internal/config"
 	"believers_palace/internal/event"
 	"believers_palace/internal/hall"
@@ -111,6 +112,10 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	)
 	chatHandler := chat.NewHandler(chatSvc)
 
+	communityRepo := community.NewRepository(pool)
+	communitySvc := community.NewService(communityRepo, userDisplayResolver{userRepo})
+	communityHandler := community.NewHandler(communitySvc)
+
 	cemeteryRepo := cemetery.NewRepository(pool)
 	cemeterySvc := cemetery.NewService(cemeteryRepo, churchRepo)
 	cemeteryHandler := cemetery.NewHandler(cemeterySvc)
@@ -184,6 +189,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 			protected.Mount("/halls", hallHandler.Routes())
 			protected.Mount("/bookings", bookingHandler.Routes())
 			protected.Mount("/events", eventHandler.RoutesWith(chatHandler.EventRoutes()))
+			protected.Mount("/communities", communityHandler.Routes())
 			protected.Mount("/cemetery-service-requests", cemeteryHandler.RequestRoutes())
 			protected.Mount("/cemetery-plots", cemeteryHandler.PlotRoutes())
 			protected.Mount("/certificates", certificateHandler.Routes())
