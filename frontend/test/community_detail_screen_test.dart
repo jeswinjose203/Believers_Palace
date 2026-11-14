@@ -10,18 +10,27 @@ import 'package:believers_palace/screens/communities_screen.dart';
 import 'package:believers_palace/services/api_service.dart';
 
 class _CommunityApiService extends ApiService {
-  _CommunityApiService() : super(ApiClient());
+  _CommunityApiService({this.incomingMessages = const []}) : super(ApiClient());
+
+  final List<CommunityMessage> incomingMessages;
+  final List<int?> afterCursors = [];
+  bool _initialLatestRequested = false;
 
   @override
   Future<List<Community>> listCommunities() async => [];
 
   @override
-  Future<Community> createCommunity(String name, String description) async =>
+  Future<Community> createCommunity(
+    String name,
+    String description, {
+    String? image,
+  }) async =>
       Community(
         id: 'community-1',
         creatorId: 'owner-1',
         name: name,
         description: description,
+        image: image,
         createdAt: DateTime.utc(2026),
         status: 'active',
         isAdmin: true,
@@ -33,8 +42,29 @@ class _CommunityApiService extends ApiService {
     int? before,
     int? after,
     int limit = 50,
-  }) async =>
-      const CommunityCursorPage(data: [], hasMore: false);
+  }) async {
+    if (before != null) {
+      final older =
+          incomingMessages.where((message) => message.seq < before).toList();
+      return CommunityCursorPage(
+        data: older.take(limit).toList(),
+        hasMore: older.length > limit,
+      );
+    }
+    if (after == null && !_initialLatestRequested) {
+      _initialLatestRequested = true;
+      return const CommunityCursorPage(data: [], hasMore: false);
+    }
+    afterCursors.add(after);
+    final matches = after == null
+        ? incomingMessages
+        : incomingMessages.where((message) => message.seq > after).toList();
+    final window = matches.take(limit + 1).toList();
+    return CommunityCursorPage(
+      data: window.take(limit).toList(),
+      hasMore: window.length > limit,
+    );
+  }
 
   @override
   Future<List<CommunityMembership>> listCommunityRequests(String id) async =>
@@ -85,6 +115,8 @@ void main() {
 
     await tester.tap(find.text('Create'));
     await tester.pumpAndSettle();
+
+    expect(find.text('Community picture (optional)'), findsOneWidget);
     await tester.enterText(find.byType(TextField).at(0), 'Test community');
     await tester.enterText(find.byType(TextField).at(1), 'A new group');
     await tester.tap(find.descendant(
@@ -122,6 +154,51 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Test community'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('polling catches up all pages from an empty chat cursor',
+      (tester) async {
+    final messages = List.generate(
+      125,
+      (index) => CommunityMessage(
+        id: 'message-${index + 1}',
+        communityId: 'community-1',
+        seq: index + 1,
+        userId: 'member-1',
+        authorName: 'Member',
+        content: 'Message ${index + 1}',
+        createdAt: DateTime.utc(2026, 1, 1, 12, 0, index),
+      ),
+    );
+    final api = _CommunityApiService(incomingMessages: messages);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          apiServiceProvider.overrideWithValue(api),
+        ],
+        child: MaterialApp(
+          home: CommunityDetailScreen(
+            community: Community(
+              id: 'community-1',
+              creatorId: 'owner-1',
+              name: 'Test community',
+              description: '',
+              createdAt: DateTime.utc(2026),
+              status: 'active',
+              isAdmin: false,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+
+    expect(api.afterCursors, [0, 50, 100]);
+    expect(find.text('Message 125'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

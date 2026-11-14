@@ -39,21 +39,25 @@ func parseCursorQuery(r *http.Request) (CursorQuery, bool, error) {
 		return CursorQuery{}, false, nil
 	}
 	q := CursorQuery{Limit: DefaultCursorLimit}
-	parse := func(name string) (int64, error) {
+	parse := func(name string, allowZero bool) (int64, error) {
 		if !v.Has(name) {
 			return 0, nil
 		}
 		n, err := strconv.ParseInt(v.Get(name), 10, 64)
-		if err != nil || n < 1 {
+		if err != nil || n < 0 || (!allowZero && n == 0) {
+			if allowZero {
+				return 0, invalid(name + " must be a non-negative integer")
+			}
 			return 0, invalid(name + " must be a positive integer")
 		}
 		return n, nil
 	}
 	var err error
-	if q.Before, err = parse("before"); err != nil {
+	if q.Before, err = parse("before", false); err != nil {
 		return q, true, err
 	}
-	if q.After, err = parse("after"); err != nil {
+	q.AfterSet = v.Has("after")
+	if q.After, err = parse("after", true); err != nil {
 		return q, true, err
 	}
 	if v.Has("limit") {

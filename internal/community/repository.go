@@ -19,20 +19,20 @@ func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: po
 
 func scanCommunity(row pgx.Row) (*Community, error) {
 	var c Community
-	err := row.Scan(&c.ID, &c.CreatorID, &c.Name, &c.Description, &c.CreatedAt)
+	err := row.Scan(&c.ID, &c.CreatorID, &c.Name, &c.Description, &c.Image, &c.CreatedAt)
 	return &c, err
 }
 
-func (r *Repository) Create(ctx context.Context, userID, name, description string) (*Community, error) {
+func (r *Repository) Create(ctx context.Context, userID, name, description string, image *string) (*Community, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin community creation: %w", err)
 	}
 	defer tx.Rollback(ctx)
 	var c Community
-	err = tx.QueryRow(ctx, `INSERT INTO communities (creator_id,name,description) VALUES ($1,$2,$3)
-		RETURNING id,creator_id,name,description,created_at`, userID, name, description).
-		Scan(&c.ID, &c.CreatorID, &c.Name, &c.Description, &c.CreatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO communities (creator_id,name,description,image) VALUES ($1,$2,$3,$4)
+		RETURNING id,creator_id,name,description,image,created_at`, userID, name, description, image).
+		Scan(&c.ID, &c.CreatorID, &c.Name, &c.Description, &c.Image, &c.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create community: %w", err)
 	}
@@ -49,7 +49,7 @@ func (r *Repository) Create(ctx context.Context, userID, name, description strin
 }
 
 func (r *Repository) List(ctx context.Context, userID string) ([]Community, error) {
-	rows, err := r.pool.Query(ctx, `SELECT c.id,c.creator_id,c.name,c.description,c.created_at,
+	rows, err := r.pool.Query(ctx, `SELECT c.id,c.creator_id,c.name,c.description,c.image,c.created_at,
 		COALESCE(m.status,''),COALESCE(m.is_admin,false) FROM communities c
 		LEFT JOIN community_memberships m ON m.community_id=c.id AND m.user_id=$1
 		ORDER BY c.created_at DESC`, userID)
@@ -60,7 +60,7 @@ func (r *Repository) List(ctx context.Context, userID string) ([]Community, erro
 	out := make([]Community, 0)
 	for rows.Next() {
 		var c Community
-		if err := rows.Scan(&c.ID, &c.CreatorID, &c.Name, &c.Description, &c.CreatedAt, &c.Status, &c.IsAdmin); err != nil {
+		if err := rows.Scan(&c.ID, &c.CreatorID, &c.Name, &c.Description, &c.Image, &c.CreatedAt, &c.Status, &c.IsAdmin); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -69,7 +69,7 @@ func (r *Repository) List(ctx context.Context, userID string) ([]Community, erro
 }
 
 func (r *Repository) Get(ctx context.Context, id string) (*Community, error) {
-	c, err := scanCommunity(r.pool.QueryRow(ctx, `SELECT id,creator_id,name,description,created_at FROM communities WHERE id=$1`, id))
+	c, err := scanCommunity(r.pool.QueryRow(ctx, `SELECT id,creator_id,name,description,image,created_at FROM communities WHERE id=$1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -245,7 +245,7 @@ func (r *Repository) ListMessages(ctx context.Context, cid string, q CursorQuery
 		sql = `SELECT ` + messageColumns + ` FROM community_messages WHERE community_id=$1 AND seq<$2 ORDER BY seq DESC LIMIT $3`
 		args = []any{cid, q.Before, q.Limit + 1}
 	}
-	if q.After > 0 {
+	if q.AfterSet || q.After > 0 {
 		sql = `SELECT ` + messageColumns + ` FROM community_messages WHERE community_id=$1 AND seq>$2 ORDER BY seq ASC LIMIT $3`
 		args = []any{cid, q.After, q.Limit + 1}
 		desc = false

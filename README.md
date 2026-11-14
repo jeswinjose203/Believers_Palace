@@ -37,7 +37,7 @@ believers_palace/
 │   ├── cemetery/           # cemetery plots + service requests
 │   ├── certificate/        # per-user PDF certificate storage
 │   └── server/             # router + middleware wiring
-├── migrations/             # SQL migrations (0001..0017)
+├── migrations/             # SQL migrations (0001..0019)
 ├── .env.example
 ├── Makefile
 └── go.mod

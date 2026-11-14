@@ -9,6 +9,7 @@ import '../core/api_client.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../widgets/group_chat_bubble.dart';
 
 /// Per-event chat. If the event requires registration, only registered users
 /// (and church staff) can read and post; otherwise any signed-in user can.
@@ -62,6 +63,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
   int _nextLocalId = 0;
 
   bool _polling = false;
+  bool _appResumed = true;
   Timer? _timer;
 
   @override
@@ -84,9 +86,11 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _appResumed = true;
       _pollNow();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
+      _appResumed = false;
       _timer?.cancel();
     }
   }
@@ -99,8 +103,8 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
 
   Future<void> _loadLatest() async {
     try {
-      final page = await _api.listEventMessagesCursor(widget.event.id,
-          limit: _pageSize);
+      final page =
+          await _api.listEventMessagesCursor(widget.event.id, limit: _pageSize);
       if (!mounted) return;
       setState(() {
         _messages = page.data;
@@ -137,7 +141,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
 
   void _scheduleNext() {
     _timer?.cancel();
-    if (!mounted || _notRegistered) return;
+    if (!mounted || _notRegistered || !_appResumed) return;
     var delay = _pollInterval;
     if (_failures > 0) {
       final secs = _pollInterval.inSeconds * (1 << _failures.clamp(0, 5));
@@ -157,11 +161,11 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
       var hasMore = true;
       // Catch up in chunks if more than one page arrived while away.
       for (var i = 0; i < 5 && hasMore; i++) {
-        final after = _messages.isEmpty ? null : _messages.last.seq;
+        final after = _messages.isEmpty ? 0 : _messages.last.seq;
         final page = await _api.listEventMessagesCursor(widget.event.id,
             after: after, limit: _pageSize);
         if (!mounted) return;
-        hasMore = page.hasMore && after != null;
+        hasMore = page.hasMore;
         if (page.data.isNotEmpty) {
           added = [...added, ..._merge(page.data, live: true)];
         } else {
@@ -239,8 +243,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
         _scroll.animateTo(0,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut);
+            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
       }
     });
   }
@@ -391,28 +394,38 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
             final fromEnd = total - 1 - i; // index in oldest-first order
             if (fromEnd >= _messages.length) {
               final p = _pending[fromEnd - _messages.length];
-              return _MessageBubble(
+              return GroupChatBubble(
                 key: ValueKey('p${p.localId}'),
                 content: p.content,
                 authorName: '',
                 mine: true,
                 timeLabel: '',
-                status: p.failed ? _Status.failed : _Status.sending,
-                onTap: p.failed ? () => _send(retry: p) : null,
-                onLongPress: p.failed
-                    ? () => setState(() => _pending.remove(p))
-                    : null,
+                status:
+                    p.failed ? ChatSendStatus.failed : ChatSendStatus.sending,
+                onRetry: p.failed ? () => _send(retry: p) : null,
+                onLongPress:
+                    p.failed ? () => setState(() => _pending.remove(p)) : null,
                 animate: true,
               );
             }
             final m = _messages[fromEnd];
+            final previous = fromEnd > 0 ? _messages[fromEnd - 1] : null;
+            final sentAt = m.createdAt.toLocal();
+            final previousSentAt = previous?.createdAt.toLocal();
+            final dateDivider = previousSentAt == null ||
+                    sentAt.year != previousSentAt.year ||
+                    sentAt.month != previousSentAt.month ||
+                    sentAt.day != previousSentAt.day
+                ? DateFormat.yMMMd().format(sentAt)
+                : null;
             final canDelete = _canDelete(m, me);
-            return _MessageBubble(
+            return GroupChatBubble(
               key: ValueKey(m.id),
               content: m.content,
               authorName: m.authorName,
               mine: me != null && m.userId == me.id,
-              timeLabel: timeFmt.format(m.createdAt.toLocal()),
+              timeLabel: timeFmt.format(sentAt),
+              dateDivider: dateDivider,
               animate: _fresh.contains(m.id),
               onDelete: canDelete ? () => _delete(m) : null,
               onLongPress: canDelete ? () => _delete(m) : null,
@@ -458,146 +471,30 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
                 minLines: 1,
                 maxLines: 4,
                 textInputAction: TextInputAction.send,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Message',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+                  filled: true,
+                  fillColor:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(26),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
                 onSubmitted: (_) => _send(),
               ),
             ),
             const SizedBox(width: 8),
             IconButton.filled(
-              icon: const Icon(Icons.send),
+              icon: const Icon(Icons.send_rounded),
               onPressed: _send,
             ),
           ],
         ),
       ),
     );
-  }
-}
-
-enum _Status { sent, sending, failed }
-
-class _MessageBubble extends StatelessWidget {
-  final String content;
-  final String authorName;
-  final bool mine;
-  final String timeLabel;
-  final _Status status;
-  final bool animate;
-  final VoidCallback? onDelete;
-  final VoidCallback? onTap;
-  final VoidCallback? onLongPress;
-
-  const _MessageBubble({
-    super.key,
-    required this.content,
-    required this.authorName,
-    required this.mine,
-    required this.timeLabel,
-    this.status = _Status.sent,
-    this.animate = false,
-    this.onDelete,
-    this.onTap,
-    this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final bubbleColor = status == _Status.failed
-        ? scheme.errorContainer
-        : mine
-            ? scheme.primaryContainer
-            : scheme.surfaceContainerHighest;
-
-    final bubble = Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.75,
-          ),
-          decoration: BoxDecoration(
-            color: bubbleColor,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (!mine && authorName.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    authorName,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              Text(content),
-              const SizedBox(height: 2),
-              _footer(context),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (!animate) return bubble;
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-      builder: (context, t, child) => Opacity(
-        opacity: t,
-        child: Transform.translate(offset: Offset(0, (1 - t) * 12), child: child),
-      ),
-      child: bubble,
-    );
-  }
-
-  Widget _footer(BuildContext context) {
-    final style = Theme.of(context).textTheme.labelSmall;
-    switch (status) {
-      case _Status.sending:
-        return const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [_Dots(size: 4)],
-        );
-      case _Status.failed:
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline,
-                size: 14, color: Theme.of(context).colorScheme.error),
-            const SizedBox(width: 4),
-            Text('Not sent · tap to retry', style: style),
-          ],
-        );
-      case _Status.sent:
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(timeLabel, style: style),
-            if (onDelete != null) ...[
-              const SizedBox(width: 6),
-              GestureDetector(
-                onTap: onDelete,
-                child: Icon(Icons.delete_outline,
-                    size: 14, color: Theme.of(context).colorScheme.outline),
-              ),
-            ],
-          ],
-        );
-    }
   }
 }
 
@@ -641,7 +538,7 @@ class _DotsState extends State<_Dots> with SingleTickerProviderStateMixin {
             margin: EdgeInsets.symmetric(horizontal: widget.size * 0.3),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: color.withOpacity(0.3 + 0.7 * t),
+              color: color.withValues(alpha: 0.3 + 0.7 * t),
             ),
           );
         }),

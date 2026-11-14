@@ -18,7 +18,7 @@ const (
 )
 
 type store interface {
-	Create(context.Context, string, string, string) (*Community, error)
+	Create(context.Context, string, string, string, *string) (*Community, error)
 	List(context.Context, string) ([]Community, error)
 	Get(context.Context, string) (*Community, error)
 	Membership(context.Context, string, string) (string, bool, error)
@@ -57,7 +57,16 @@ func (s *Service) Create(ctx context.Context, id auth.Identity, in CreateRequest
 	if len(in.Description) > 2000 {
 		return nil, &ValidationError{"community description is too long"}
 	}
-	return s.repo.Create(ctx, id.UserID, name, strings.TrimSpace(in.Description))
+	image := in.Image
+	if image != nil {
+		trimmed := strings.TrimSpace(*image)
+		if trimmed == "" {
+			image = nil
+		} else {
+			image = &trimmed
+		}
+	}
+	return s.repo.Create(ctx, id.UserID, name, strings.TrimSpace(in.Description), image)
 }
 
 func (s *Service) List(ctx context.Context, id auth.Identity) ([]Community, error) {
@@ -161,7 +170,7 @@ func (s *Service) Leave(ctx context.Context, id auth.Identity, cid string) error
 	return s.repo.Leave(ctx, cid, id.UserID)
 }
 func (s *Service) ListMessages(ctx context.Context, id auth.Identity, cid string, q CursorQuery) (*CursorPage, error) {
-	if q.Before > 0 && q.After > 0 {
+	if q.Before > 0 && (q.AfterSet || q.After > 0) {
 		return nil, &ValidationError{"use either before or after, not both"}
 	}
 	if q.Limit < 1 {

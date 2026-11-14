@@ -3,6 +3,7 @@ class Community {
   final String creatorId;
   final String name;
   final String description;
+  final String? image;
   final DateTime createdAt;
   final String status;
   final bool isAdmin;
@@ -12,6 +13,7 @@ class Community {
     required this.creatorId,
     required this.name,
     required this.description,
+    this.image,
     required this.createdAt,
     this.status = '',
     this.isAdmin = false,
@@ -22,6 +24,7 @@ class Community {
         creatorId: json['creatorId'] as String,
         name: json['name'] as String,
         description: json['description'] as String? ?? '',
+        image: json['image'] as String?,
         createdAt: DateTime.parse(json['createdAt'] as String),
         status: json['status'] as String? ?? '',
         isAdmin: json['isAdmin'] as bool? ?? false,

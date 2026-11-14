@@ -128,7 +128,7 @@ func TestDBAfterCursorSeesAll(t *testing.T) {
 	var after int64
 	seen := 0
 	for {
-		page, hasMore, err := repo.ListCursor(context.Background(), eventID, CursorQuery{After: after, Limit: 20})
+		page, hasMore, err := repo.ListCursor(context.Background(), eventID, CursorQuery{After: after, AfterSet: true, Limit: 20})
 		if err != nil {
 			t.Fatalf("list cursor: %v", err)
 		}

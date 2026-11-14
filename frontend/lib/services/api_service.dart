@@ -301,7 +301,8 @@ class ApiService {
       );
  
   /// Cursor-based chat listing. With neither [before] nor [after], returns the
-  /// latest [limit] messages. [before]/[after] are message `seq` values.
+  /// latest [limit] messages. An explicit [after] of zero starts from the
+  /// beginning of a conversation.
   Future<ChatCursorPage> listEventMessagesCursor(
     String eventId, {
     int? before,
@@ -337,9 +338,17 @@ class ApiService {
         .toList();
   }
 
-  Future<Community> createCommunity(String name, String description) =>
+  Future<Community> createCommunity(
+    String name,
+    String description, {
+    String? image,
+  }) =>
       _client.post('/communities', Community.fromJson,
-          body: {'name': name, 'description': description});
+          body: {
+            'name': name,
+            'description': description,
+            if (image != null && image.isNotEmpty) 'image': image,
+          });
 
   Future<CommunityMembership> requestCommunityMembership(String id) =>
       _client.post('/communities/$id/requests', CommunityMembership.fromJson);

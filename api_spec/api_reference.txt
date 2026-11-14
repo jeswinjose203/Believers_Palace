@@ -18,6 +18,7 @@ Health check (no /api):      GET http://localhost:8080/health
 Content type:
   - All JSON endpoints accept and return  application/json
   - Certificate upload uses               multipart/form-data
+  - Image upload uses                     multipart/form-data
   - Certificate download returns          application/pdf (binary stream)
 
 Authentication:
@@ -1207,12 +1208,17 @@ Community visibility:
 Method: GET  URL: /api/communities
 Success: 200 OK -> { "data": [ community objects ] }
 Each object includes id, creatorId, name, description, and createdAt. The
+optional image field contains the public community picture URL when set.
 requester's status ("active", "pending", or "declined") and isAdmin are
 included when true/non-empty; nonmembers have neither field.
 
 11.2 Create a community
 Method: POST  URL: /api/communities
-Body: { "name": "Choir", "description": "Optional description" }
+Body: { "name": "Choir", "description": "Optional description",
+        "image": "https://.../community-image.jpg" }
+The image field is optional; upload an image first with
+POST /api/media/upload (multipart/form-data, file field) and pass its returned
+URL here.
 Success: 201 Created -> community object; the creator is made an active admin.
 Errors: 400 bad_request
 
@@ -1245,6 +1251,7 @@ Errors: 403 forbidden, 404 not_found
   GET    /api/communities/{communityId}/messages?before={seq}&limit=50
   GET    /api/communities/{communityId}/messages?after={seq}&limit=50
        -> 200 OK { "data": [ oldest-first messages ], "hasMore": boolean }
+       after=0 is valid for clients catching up from an empty chat.
   POST   /api/communities/{communityId}/messages
        Body: { "content": "Hello!" }
        -> 201 Created -> message object

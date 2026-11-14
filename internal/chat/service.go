@@ -127,7 +127,7 @@ func (s *Service) List(ctx context.Context, id auth.Identity, eventID string, li
 // ListCursor returns a cursor-based window of messages (see CursorQuery). The
 // same access rules as List apply.
 func (s *Service) ListCursor(ctx context.Context, id auth.Identity, eventID string, q CursorQuery) (*CursorPage, error) {
-	if q.Before > 0 && q.After > 0 {
+	if q.Before > 0 && (q.AfterSet || q.After > 0) {
 		return nil, invalid("use either before or after, not both")
 	}
 	if q.Limit < 1 {
