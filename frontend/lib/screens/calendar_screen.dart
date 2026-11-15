@@ -354,7 +354,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   Future<void> _addGoal() async {
     final title = TextEditingController();
     final target = TextEditingController(text: '7');
-    var mode = 'total';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -365,14 +364,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             children: [
               TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
               TextField(controller: target, decoration: const InputDecoration(labelText: 'Target days'), keyboardType: TextInputType.number),
-              DropdownButtonFormField<String>(
-                value: mode,
-                items: const [
-                  DropdownMenuItem(value: 'total', child: Text('Total check-ins')),
-                  DropdownMenuItem(value: 'streak', child: Text('Streak')),
-                ],
-                onChanged: (v) => setSt(() => mode = v ?? 'total'),
-              ),
             ],
           ),
           actions: [
@@ -389,7 +380,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await ref.read(apiServiceProvider).createCalendarGoal({
         'title': title.text.trim(),
         'targetDays': int.tryParse(target.text) ?? 7,
-        'trackingMode': mode,
         'startDate': CalendarTime.localDateTimeToUtcIso(start),
       });
       await _loadSideData();
@@ -403,7 +393,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   Future<void> _editGoal(CalendarGoal g) async {
     final title = TextEditingController(text: g.title);
     final target = TextEditingController(text: '${g.targetDays}');
-    var mode = g.trackingMode;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -417,14 +406,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                 controller: target,
                 decoration: const InputDecoration(labelText: 'Target days'),
                 keyboardType: TextInputType.number,
-              ),
-              DropdownButtonFormField<String>(
-                value: mode,
-                items: const [
-                  DropdownMenuItem(value: 'total', child: Text('Total check-ins')),
-                  DropdownMenuItem(value: 'streak', child: Text('Streak')),
-                ],
-                onChanged: (v) => setSt(() => mode = v ?? mode),
               ),
             ],
           ),
@@ -440,7 +421,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await ref.read(apiServiceProvider).updateCalendarGoal(g.id, {
         'title': title.text.trim(),
         'targetDays': int.tryParse(target.text) ?? g.targetDays,
-        'trackingMode': mode,
       });
       await _loadSideData();
       await ref.read(calendarProvider.notifier).refreshSchedule();
@@ -1120,13 +1100,41 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             ),
           ),
           ..._goals.map((g) {
-            final progress = g.trackingMode == 'streak'
-                ? g.currentStreak / g.targetDays
-                : g.progressFraction;
+            final progress = g.progressFraction;
+            final streakLabel = g.currentStreak > 0
+                ? '${g.currentStreak} day streak'
+                : null;
             return Card(
               child: ListTile(
-                title: Text(g.title),
-                subtitle: Text('${g.checkInCount}/${g.targetDays} days • ${g.status}'),
+                title: Row(
+                  children: [
+                    Expanded(child: Text(g.title)),
+                    if (streakLabel != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.local_fire_department,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${g.currentStreak}',
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                subtitle: Text(
+                  streakLabel != null
+                      ? '${g.checkInCount}/${g.targetDays} days • $streakLabel • ${g.status}'
+                      : '${g.checkInCount}/${g.targetDays} days • ${g.status}',
+                ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

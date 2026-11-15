@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS achievement_definitions (
 );
  
 INSERT INTO achievement_definitions (code, title, description, icon) VALUES
-    ('goal_complete', 'Goal completed', 'You finished a personal goal', 'emoji_events'),
+    ('month_warrior', 'Month warrior', 'Completed a 30-day challenge', 'workspace_premium'),
     ('first_goal', 'First steps', 'Completed your first goal', 'military_tech'),
     ('streak_7', 'Week warrior', 'Completed a 7-day streak goal', 'local_fire_department')
 ON CONFLICT (code) DO NOTHING;

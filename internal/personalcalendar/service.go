@@ -269,14 +269,16 @@ func (s *Service) CreateGoal(ctx context.Context, id auth.Identity, in GoalReque
         d := calendarDateUTC(*in.EndDate, loc)
         in.EndDate = &d
     }
+    total := TrackingTotal
+    in.TrackingMode = &total
     g, err := s.repo.CreateGoal(ctx, id.UserID, in)
     if err != nil {
         return nil, err
     }
-    return s.enrichGoal(ctx, g)
+    return s.enrichGoal(ctx, id, g)
 }
- 
-func (s *Service) enrichGoal(ctx context.Context, g *Goal) (*Goal, error) {
+
+func (s *Service) enrichGoal(ctx context.Context, id auth.Identity, g *Goal) (*Goal, error) {
     dates, err := s.repo.ListCheckInDates(ctx, g.ID)
     if err != nil {
         return nil, err
@@ -286,7 +288,12 @@ func (s *Service) enrichGoal(ctx context.Context, g *Goal) (*Goal, error) {
         return nil, err
     }
     g.CheckInCount = count
-    g.CurrentStreak = currentStreakEndingOn(dates, calendarDateUTC(time.Now(), loadLocation(defaultTimezone)))
+    prefs, err := s.GetOrCreatePreferences(ctx, id)
+    if err != nil {
+        return nil, err
+    }
+    loc := loadLocation(prefs.Timezone)
+    g.CurrentStreak = currentStreakEndingOn(dates, calendarDateUTC(time.Now(), loc))
     return g, nil
 }
  
@@ -297,7 +304,7 @@ func (s *Service) ListGoals(ctx context.Context, id auth.Identity, status string
         return nil, 0, err
     }
     for i := range items {
-        g, err := s.enrichGoal(ctx, &items[i])
+        g, err := s.enrichGoal(ctx, id, &items[i])
         if err != nil {
             return nil, 0, err
         }
@@ -321,9 +328,6 @@ func (s *Service) UpdateGoal(ctx context.Context, id auth.Identity, goalID strin
     if in.TargetDays != nil && *in.TargetDays > 0 {
         cur.TargetDays = *in.TargetDays
     }
-    if in.TrackingMode != nil {
-        cur.TrackingMode = *in.TrackingMode
-    }
     if in.StartDate != nil {
         cur.StartDate = in.StartDate
     }
@@ -333,6 +337,8 @@ func (s *Service) UpdateGoal(ctx context.Context, id auth.Identity, goalID strin
     if in.Status != nil {
         cur.Status = *in.Status
     }
+    total := TrackingTotal
+    cur.TrackingMode = total
     merged := GoalRequest{
         Title:        cur.Title,
         Description:  cur.Description,
@@ -346,7 +352,7 @@ func (s *Service) UpdateGoal(ctx context.Context, id auth.Identity, goalID strin
     if err != nil {
         return nil, err
     }
-    return s.enrichGoal(ctx, g)
+    return s.enrichGoal(ctx, id, g)
 }
  
 // DeleteGoal removes a goal.
@@ -376,21 +382,27 @@ func (s *Service) CheckIn(ctx context.Context, id auth.Identity, goalID string, 
     if err := s.repo.UpsertCheckIn(ctx, goalID, day, note); err != nil {
         return nil, err
     }
-    g, err = s.enrichGoal(ctx, g)
+    g, err = s.enrichGoal(ctx, id, g)
     if err != nil {
         return nil, err
     }
- 
+
     var newAch []Achievement
-    progress := progressForGoal(g.TrackingMode, g.CheckInCount, g.CurrentStreak)
-    if progress >= g.TargetDays && g.Status == GoalActive {
-        now := time.Now().UTC()
+    now := time.Now().UTC()
+    if g.CurrentStreak >= 7 {
+        if ok, _ := s.repo.TryUnlockAchievement(ctx, id.UserID, "streak_7", nil); ok {
+            newAch = append(newAch, Achievement{Code: "streak_7", Title: "Week warrior", Description: "7-day check-in streak", Icon: "local_fire_department", UnlockedAt: &now, Unlocked: true})
+        }
+    }
+    if g.CheckInCount >= g.TargetDays && g.Status == GoalActive {
         _ = s.repo.MarkGoalCompleted(ctx, goalID, now)
         g.Status = GoalCompleted
         g.CompletedAt = &now
- 
-        if ok, _ := s.repo.TryUnlockAchievement(ctx, id.UserID, "goal_complete", &goalID); ok {
-            newAch = append(newAch, Achievement{Code: "goal_complete", Title: g.Title, Description: "Goal completed", Icon: "emoji_events", GoalID: &goalID, UnlockedAt: &now, Unlocked: true})
+
+        if g.TargetDays >= 30 {
+            if ok, _ := s.repo.TryUnlockAchievement(ctx, id.UserID, "month_warrior", nil); ok {
+                newAch = append(newAch, Achievement{Code: "month_warrior", Title: "Month warrior", Description: "Completed a 30-day challenge", Icon: "workspace_premium", UnlockedAt: &now, Unlocked: true})
+            }
         }
         completed, _ := s.repo.CountCompletedGoals(ctx, id.UserID)
         if completed == 1 {
@@ -398,16 +410,11 @@ func (s *Service) CheckIn(ctx context.Context, id auth.Identity, goalID string, 
                 newAch = append(newAch, Achievement{Code: "first_goal", Title: "First steps", Description: "Completed your first goal", Icon: "military_tech", UnlockedAt: &now, Unlocked: true})
             }
         }
-        if g.TrackingMode == TrackingStreak && g.TargetDays >= 7 {
-            if ok, _ := s.repo.TryUnlockAchievement(ctx, id.UserID, "streak_7", nil); ok {
-                newAch = append(newAch, Achievement{Code: "streak_7", Title: "Week warrior", Description: "Completed a 7-day streak goal", Icon: "local_fire_department", UnlockedAt: &now, Unlocked: true})
-            }
-        }
         g, err = s.repo.GetGoal(ctx, id.UserID, goalID)
         if err != nil {
             return nil, err
         }
-        g, err = s.enrichGoal(ctx, g)
+        g, err = s.enrichGoal(ctx, id, g)
         if err != nil {
             return nil, err
         }
@@ -432,9 +439,9 @@ func (s *Service) RemoveCheckIn(ctx context.Context, id auth.Identity, goalID st
     if err != nil {
         return nil, err
     }
-    return s.enrichGoal(ctx, g)
+    return s.enrichGoal(ctx, id, g)
 }
- 
+
 // ListAchievements returns achievement catalog with unlock state.
 func (s *Service) ListAchievements(ctx context.Context, id auth.Identity) ([]Achievement, error) {
     return s.repo.ListAchievements(ctx, id.UserID)
