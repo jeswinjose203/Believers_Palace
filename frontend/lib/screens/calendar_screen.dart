@@ -23,11 +23,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   List<CalendarTask> _tasks = [];
   List<CalendarGoal> _goals = [];
   List<CalendarAchievement> _achievements = [];
+  List<PersonalCalendarEvent> _events = [];
+  List<ScheduleItem> _upcomingEvents = [];
+  bool _upcomingExpanded = false;
  
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll());
   }
  
@@ -54,6 +57,37 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       _goals = goals.data;
       _achievements = achievements;
     });
+    await _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    final api = ref.read(apiServiceProvider);
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day);
+    final to = from.add(const Duration(days: 8));
+    final schedule = await api.getCalendarSchedule(from, to);
+    final listed = await api.listCalendarEvents(limit: 200, order: 'asc');
+    final upcoming = _upcomingPersonalFromSchedule(schedule);
+    if (!mounted) return;
+    setState(() {
+      _events = listed.data;
+      _upcomingEvents = upcoming;
+    });
+  }
+
+  List<ScheduleItem> _upcomingPersonalFromSchedule(List<ScheduleItem> all) {
+    final now = DateTime.now();
+    final end = now.add(const Duration(days: 7));
+    return all
+        .where((i) {
+          if (i.kind != 'personal_event') return false;
+          final t = i.startAt;
+          return t != null &&
+              t.isAfter(now.subtract(const Duration(hours: 1))) &&
+              t.isBefore(end);
+        })
+        .toList()
+      ..sort((a, b) => a.startAt!.compareTo(b.startAt!));
   }
  
   Future<void> _syncNotifications() async {
@@ -209,6 +243,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         'reminderMinutes': reminders.toList()..sort(),
       });
       await ref.read(calendarProvider.notifier).refreshSchedule();
+      await _loadEvents();
       await _syncNotifications();
       _toast('Event created');
     } catch (e) {
@@ -586,13 +621,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         return ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            Text('Upcoming (7 days)', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            ..._upcoming(ui.schedule),
-            const Divider(height: 24),
             Text(DateFormat.yMMMd().format(ui.selectedDay),
                 style: Theme.of(context).textTheme.titleMedium),
-            ..._itemsForDay(ui.selectedDay).map(_scheduleTile),
+            const SizedBox(height: 8),
+            if (_itemsForDay(ui.selectedDay).isEmpty)
+              const Text('Nothing on this day')
+            else
+              ..._itemsForDay(ui.selectedDay).map(_scheduleTile),
           ],
         );
     }
@@ -652,19 +687,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         if (items.isEmpty) const Text('Nothing on this day'),
       ],
     );
-  }
- 
-  List<Widget> _upcoming(List<ScheduleItem> all) {
-    final now = DateTime.now();
-    final end = now.add(const Duration(days: 7));
-    final items = all.where((i) {
-      final t = i.startAt ?? i.dueDate ?? i.date;
-      return t != null && t.isAfter(now.subtract(const Duration(hours: 1))) && t.isBefore(end);
-    }).take(12);
-    if (items.isEmpty) {
-      return [const Text('Nothing scheduled')];
-    }
-    return items.map(_scheduleTile).toList();
   }
  
   Widget _scheduleTile(ScheduleItem i) {
@@ -858,6 +880,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         'reminderMinutes': reminders.toList()..sort(),
       });
       await ref.read(calendarProvider.notifier).refreshSchedule();
+      await _loadEvents();
       await _syncNotifications();
       _toast('Event updated');
     } catch (err) {
@@ -879,6 +902,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     if (ok != true) return;
     await ref.read(apiServiceProvider).deleteCalendarEvent(id);
     await ref.read(calendarProvider.notifier).refreshSchedule();
+    await _loadEvents();
     await _syncNotifications();
   }
  
@@ -907,6 +931,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
           controller: _tabs,
           tabs: const [
             Tab(text: 'Calendar'),
+            Tab(text: 'Events'),
             Tab(text: 'Tasks'),
             Tab(text: 'Goals'),
             Tab(text: 'Trophies'),
@@ -931,6 +956,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
               controller: _tabs,
               children: [
                 _buildCalendarTab(),
+                _eventsTab(),
                 _tasksTab(),
                 _goalsTab(),
                 _trophiesTab(),
@@ -939,6 +965,95 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     );
   }
  
+  Widget _eventsTab() {
+    final dateFmt = DateFormat.yMMMd().add_jm();
+    return RefreshIndicator(
+      onRefresh: _loadEvents,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: _addEvent,
+              icon: const Icon(Icons.add),
+              label: const Text('New event'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Material(
+            elevation: 0,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(12),
+            child: Column(
+              children: [
+                ListTile(
+                  title: Text('Upcoming (7 days)', style: Theme.of(context).textTheme.titleMedium),
+                  trailing: Icon(_upcomingExpanded ? Icons.expand_less : Icons.expand_more),
+                  onTap: () => setState(() => _upcomingExpanded = !_upcomingExpanded),
+                ),
+                if (_upcomingExpanded) ...[
+                  const Divider(height: 1),
+                  if (_upcomingEvents.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('No personal events in the next 7 days'),
+                    )
+                  else
+                    ..._upcomingEvents.map((i) {
+                      final when = i.startAt?.toLocal();
+                      return ListTile(
+                        leading: const Icon(Icons.event),
+                        title: Text(i.title ?? 'Untitled'),
+                        subtitle: Text(
+                          when != null ? dateFmt.format(when) : '',
+                        ),
+                        onTap: i.id != null ? () => _managePersonalEvent(i.id!) : null,
+                      );
+                    }),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Your events', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (_events.isEmpty)
+            const Text('No events yet. Tap New event to create one.')
+          else
+            ..._events.map((e) {
+              final start = e.startAt.toLocal();
+              final end = e.endAt.toLocal();
+              final range = e.allDay
+                  ? DateFormat.yMMMd().format(start)
+                  : '${dateFmt.format(start)} – ${DateFormat.jm().format(end)}';
+              return Card(
+                child: ListTile(
+                  title: Text(e.title),
+                  subtitle: Text('$range • ${e.category}'),
+                  trailing: PopupMenuButton<String>(
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    ],
+                    onSelected: (v) async {
+                      switch (v) {
+                        case 'edit':
+                          await _editPersonalEvent(e.id);
+                        case 'delete':
+                          await _deletePersonalEvent(e.id);
+                      }
+                    },
+                  ),
+                  onTap: () => _editPersonalEvent(e.id),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
   Widget _tasksTab() => ListView(
         padding: const EdgeInsets.all(12),
         children: [

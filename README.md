@@ -318,13 +318,14 @@ curl -X POST "http://localhost:8080/api/users/$USER_ID/certificates" \
 Authenticated users have a private calendar at `/api/users/me/calendar/*`:
  
 - Personal events (categories, colors, recurrence, local reminder metadata; edit/delete in app)
+- `GET /users/me/calendar/events` — optional query: `search`, `category`, `fromDate`/`toDate` (`YYYY-MM-DD`), `upcomingDays`, `order` (`asc`|`desc`)
 - Tasks with due **date and time** (`due_date` is `TIMESTAMPTZ`, default timezone `Asia/Kolkata`)
 - Goals with daily check-ins and achievements (check in for the **selected calendar day**, not only “today”)
 - `GET /users/me/calendar/schedule` — prefer query `fromDate` / `toDate` (`YYYY-MM-DD`, inclusive, user timezone) plus aggregated bookings, church events, holidays, and goal check-in markers
  
 Apply migration **0020** (`calendar_tasks.due_date` → timestamptz, `user_calendar_preferences.timezone`).
  
-The Flutter app adds a **Calendar** bottom-nav tab. Local reminders use `flutter_local_notifications` with timezone `Asia/Kolkata`, event lead times from `reminderMinutes`, and task due-time alerts (Android: `POST_NOTIFICATIONS` and `SCHEDULE_EXACT_ALARM` in `AndroidManifest.xml`). Run `flutter pub get` in `frontend/` after pulling.
+The Flutter app adds a **Calendar** bottom-nav tab with **Events** sub-tab: collapsible upcoming (7 days) personal events, full dated event list with edit/delete, and a simplified main calendar month view (selected day only). Local reminders use `flutter_local_notifications` with timezone `Asia/Kolkata`, event lead times from `reminderMinutes`, and task due-time alerts (Android: `POST_NOTIFICATIONS` and `SCHEDULE_EXACT_ALARM` in `AndroidManifest.xml`). Run `flutter pub get` in `frontend/` after pulling.
 
 ## Testing
 

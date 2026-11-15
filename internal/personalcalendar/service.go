@@ -114,9 +114,9 @@ func (s *Service) CreateEvent(ctx context.Context, id auth.Identity, in EventReq
     return s.repo.CreateEvent(ctx, id.UserID, in)
 }
  
-// ListEvents lists events with optional search.
-func (s *Service) ListEvents(ctx context.Context, id auth.Identity, search, category string, limit, offset int) ([]Event, int, error) {
-    return s.repo.ListEvents(ctx, id.UserID, search, category, limit, offset)
+// ListEvents lists events with optional search, date range, and ordering.
+func (s *Service) ListEvents(ctx context.Context, id auth.Identity, q EventListQuery, limit, offset int) ([]Event, int, error) {
+    return s.repo.ListEvents(ctx, id.UserID, q, limit, offset)
 }
  
 // ListExpandedEvents returns occurrences in a time window.

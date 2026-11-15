@@ -87,8 +87,13 @@ func (h *Handler) patchPreferences(w http.ResponseWriter, r *http.Request) {
  
 func (h *Handler) listEvents(w http.ResponseWriter, r *http.Request) {
     id := auth.MustFromContext(r.Context())
+    q, err := ParseEventListQuery(r)
+    if err != nil {
+        httpx.ErrorCode(w, http.StatusBadRequest, err.Error(), "bad_request")
+        return
+    }
     pp := httpx.ParsePageParams(r)
-    items, total, err := h.svc.ListEvents(r.Context(), id, r.URL.Query().Get("search"), r.URL.Query().Get("category"), pp.Limit, pp.Offset)
+    items, total, err := h.svc.ListEvents(r.Context(), id, q, pp.Limit, pp.Offset)
     if err != nil {
         h.writeError(w, err)
         return

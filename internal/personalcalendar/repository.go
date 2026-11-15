@@ -158,25 +158,37 @@ func (r *Repository) GetEvent(ctx context.Context, userID, eventID string) (*Eve
     return e, nil
 }
  
-func (r *Repository) ListEvents(ctx context.Context, userID, search, category string, limit, offset int) ([]Event, int, error) {
+func (r *Repository) ListEvents(ctx context.Context, userID string, q EventListQuery, limit, offset int) ([]Event, int, error) {
     args := []any{userID}
     where := "WHERE user_id = $1"
-    if search != "" {
-        args = append(args, "%"+search+"%")
+    if q.Search != "" {
+        args = append(args, "%"+q.Search+"%")
         where += fmt.Sprintf(" AND (title ILIKE $%d OR description ILIKE $%d)", len(args), len(args))
     }
-    if category != "" {
-        args = append(args, category)
+    if q.Category != "" {
+        args = append(args, q.Category)
         where += fmt.Sprintf(" AND category = $%d", len(args))
+    }
+    if q.From != nil {
+        args = append(args, *q.From)
+        where += fmt.Sprintf(" AND start_at >= $%d", len(args))
+    }
+    if q.To != nil {
+        args = append(args, *q.To)
+        where += fmt.Sprintf(" AND start_at <= $%d", len(args))
     }
     var total int
     if err := r.pool.QueryRow(ctx, "SELECT count(*) FROM calendar_events "+where, args...).Scan(&total); err != nil {
         return nil, 0, err
     }
+    order := "DESC"
+    if q.OrderAsc {
+        order = "ASC"
+    }
     args = append(args, limit, offset)
-    q := fmt.Sprintf(`SELECT %s FROM calendar_events %s ORDER BY start_at DESC LIMIT $%d OFFSET $%d`,
-        eventCols, where, len(args)-1, len(args))
-    rows, err := r.pool.Query(ctx, q, args...)
+    sql := fmt.Sprintf(`SELECT %s FROM calendar_events %s ORDER BY start_at %s LIMIT $%d OFFSET $%d`,
+        eventCols, where, order, len(args)-1, len(args))
+    rows, err := r.pool.Query(ctx, sql, args...)
     if err != nil {
         return nil, 0, err
     }
@@ -191,7 +203,7 @@ func (r *Repository) ListEvents(ctx context.Context, userID, search, category st
     }
     return items, total, rows.Err()
 }
- 
+
 func (r *Repository) ListEventsForUser(ctx context.Context, userID string) ([]Event, error) {
     q := `SELECT ` + eventCols + ` FROM calendar_events WHERE user_id = $1 ORDER BY start_at`
     rows, err := r.pool.Query(ctx, q, userID)

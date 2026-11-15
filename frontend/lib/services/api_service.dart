@@ -551,6 +551,10 @@ class ApiService {
   Future<PaginatedResponse<PersonalCalendarEvent>> listCalendarEvents({
     String? search,
     String? category,
+    String? fromDate,
+    String? toDate,
+    int? upcomingDays,
+    String order = 'desc',
     int page = 1,
     int limit = 50,
   }) =>
@@ -560,6 +564,10 @@ class ApiService {
         query: {
           if (search != null && search.isNotEmpty) 'search': search,
           if (category != null && category.isNotEmpty) 'category': category,
+          if (fromDate != null && fromDate.isNotEmpty) 'fromDate': fromDate,
+          if (toDate != null && toDate.isNotEmpty) 'toDate': toDate,
+          if (upcomingDays != null) 'upcomingDays': upcomingDays,
+          'order': order,
           'page': page,
           'limit': limit,
         },
