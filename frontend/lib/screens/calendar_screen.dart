@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
  
+import '../core/auth_provider.dart';
 import '../core/calendar_time.dart';
 import '../models/calendar_models.dart';
 import '../providers/calendar_provider.dart';
@@ -58,6 +59,17 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       _achievements = achievements;
     });
     await _loadEvents();
+  }
+
+  void _clearLocalSideData() {
+    setState(() {
+      _tasks = [];
+      _goals = [];
+      _achievements = [];
+      _events = [];
+      _upcomingEvents = [];
+      _search = '';
+    });
   }
 
   Future<void> _loadEvents() async {
@@ -909,6 +921,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
  
   @override
   Widget build(BuildContext context) {
+    ref.listen(authProvider.select((s) => s.user?.id), (prev, next) {
+      if (prev == next) return;
+      _clearLocalSideData();
+      if (next != null) {
+        Future.microtask(_loadAll);
+      }
+    });
     final ui = ref.watch(calendarProvider);
     return Scaffold(
       appBar: AppBar(

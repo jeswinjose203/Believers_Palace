@@ -315,7 +315,9 @@ curl -X POST "http://localhost:8080/api/users/$USER_ID/certificates" \
 ```
 ## Personal calendar (migrations 0017, 0020)
  
-Authenticated users have a private calendar at `/api/users/me/calendar/*`:
+Authenticated users have a **per-user** private calendar at `/api/users/me/calendar/*`. Events, tasks, goals, check-ins, achievements, and preferences are stored with `user_id` and are never shared between accounts. The aggregated **schedule** also includes defaults only: public holidays (country from the user's preferences) and church platform events for the church selected on the user's profile (`users.church_id`, not the JWT claim). After logout or switching accounts, the Flutter app clears in-memory calendar state and local reminders.
+ 
+Endpoints:
  
 - Personal events (categories, colors, recurrence, local reminder metadata; edit/delete in app)
 - `GET /users/me/calendar/events` — optional query: `search`, `category`, `fromDate`/`toDate` (`YYYY-MM-DD`), `upcomingDays`, `order` (`asc`|`desc`)

@@ -25,17 +25,34 @@ type bookingLister interface {
 type eventLister interface {
     ListByChurchInRange(ctx context.Context, churchID string, from, to time.Time) ([]event.Event, error)
 }
- 
+
+// churchIDResolver returns the user's selected church from profile (not JWT).
+type churchIDResolver interface {
+    ChurchIDOf(ctx context.Context, userID string) (string, bool, error)
+}
+
 // Service holds personal calendar business logic.
 type Service struct {
-    repo     *Repository
-    bookings bookingLister
-    events   eventLister
+    repo      *Repository
+    bookings  bookingLister
+    events    eventLister
+    userChurch churchIDResolver
 }
- 
+
 // NewService creates a personal calendar service.
-func NewService(repo *Repository, bookings bookingLister, events eventLister) *Service {
-    return &Service{repo: repo, bookings: bookings, events: events}
+func NewService(repo *Repository, bookings bookingLister, events eventLister, userChurch churchIDResolver) *Service {
+    return &Service{repo: repo, bookings: bookings, events: events, userChurch: userChurch}
+}
+
+func (s *Service) scheduleChurchID(ctx context.Context, userID string) string {
+    if s.userChurch == nil {
+        return ""
+    }
+    churchID, ok, err := s.userChurch.ChurchIDOf(ctx, userID)
+    if err != nil || !ok || churchID == "" {
+        return ""
+    }
+    return churchID
 }
  
 // GetOrCreatePreferences returns preferences, inserting defaults on first access.
@@ -536,8 +553,9 @@ func (s *Service) Schedule(ctx context.Context, id auth.Identity, from, to time.
         }
     }
  
-    if s.events != nil && id.ChurchID != "" {
-        chEvents, err := s.events.ListByChurchInRange(ctx, id.ChurchID, from, to)
+    churchID := s.scheduleChurchID(ctx, id.UserID)
+    if s.events != nil && churchID != "" {
+        chEvents, err := s.events.ListByChurchInRange(ctx, churchID, from, to)
         if err != nil {
             return nil, err
         }

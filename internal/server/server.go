@@ -136,7 +136,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	mediaHandler := media.NewHandler(mediaSvc)
  
     personalCalRepo := personalcalendar.NewRepository(pool)
-    personalCalSvc := personalcalendar.NewService(personalCalRepo, bookingRepo, eventRepo)
+    personalCalSvc := personalcalendar.NewService(personalCalRepo, bookingRepo, eventRepo, userRepo)
     personalCalHandler := personalcalendar.NewHandler(personalCalSvc)
  
 	// Health check.

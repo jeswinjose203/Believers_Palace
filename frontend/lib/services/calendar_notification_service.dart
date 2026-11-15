@@ -78,6 +78,12 @@ class CalendarNotificationService {
     await rescheduleAll(events: events, tasks: const []);
   }
 
+  /// Drops scheduled reminders when the user signs out.
+  Future<void> clearForLogout() async {
+    if (!_ready) return;
+    await _plugin.cancelAll();
+  }
+
   tz.TZDateTime _eventStartIst(PersonalCalendarEvent e) {
     return tz.TZDateTime.from(e.startAt, _ist);
   }
