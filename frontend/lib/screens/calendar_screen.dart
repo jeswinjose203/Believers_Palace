@@ -67,7 +67,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     final to = from.add(const Duration(days: 8));
     final schedule = await api.getCalendarSchedule(from, to);
     final listed = await api.listCalendarEvents(limit: 200, order: 'asc');
-    final upcoming = _upcomingPersonalFromSchedule(schedule);
+    final upcoming = _upcomingEventsFromSchedule(schedule);
     if (!mounted) return;
     setState(() {
       _events = listed.data;
@@ -75,19 +75,25 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     });
   }
 
-  List<ScheduleItem> _upcomingPersonalFromSchedule(List<ScheduleItem> all) {
+  List<ScheduleItem> _upcomingEventsFromSchedule(List<ScheduleItem> all) {
     final now = DateTime.now();
     final end = now.add(const Duration(days: 7));
+    bool upcomingKind(String kind) =>
+        kind == 'personal_event' || kind == 'church_event';
     return all
         .where((i) {
-          if (i.kind != 'personal_event') return false;
-          final t = i.startAt;
+          if (!upcomingKind(i.kind)) return false;
+          final t = i.startAt ?? i.date;
           return t != null &&
               t.isAfter(now.subtract(const Duration(hours: 1))) &&
               t.isBefore(end);
         })
         .toList()
-      ..sort((a, b) => a.startAt!.compareTo(b.startAt!));
+      ..sort((a, b) {
+        final at = a.startAt ?? a.date ?? DateTime(0);
+        final bt = b.startAt ?? b.date ?? DateTime(0);
+        return at.compareTo(bt);
+      });
   }
  
   Future<void> _syncNotifications() async {
@@ -384,7 +390,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         'title': title.text.trim(),
         'targetDays': int.tryParse(target.text) ?? 7,
         'trackingMode': mode,
-        'startDate': CalendarTime.localDateToYmd(start),
+        'startDate': CalendarTime.localDateTimeToUtcIso(start),
       });
       await _loadSideData();
       await ref.read(calendarProvider.notifier).refreshSchedule();
@@ -997,18 +1003,24 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                   if (_upcomingEvents.isEmpty)
                     const Padding(
                       padding: EdgeInsets.all(16),
-                      child: Text('No personal events in the next 7 days'),
+                      child: Text(
+                        'No upcoming events in the next 7 days (set My church to see church events)',
+                      ),
                     )
                   else
                     ..._upcomingEvents.map((i) {
-                      final when = i.startAt?.toLocal();
+                      final when = (i.startAt ?? i.date)?.toLocal();
+                      final isPersonal = i.kind == 'personal_event';
+                      final kindLabel = isPersonal ? 'Your event' : 'Church event';
                       return ListTile(
-                        leading: const Icon(Icons.event),
+                        leading: Icon(isPersonal ? Icons.event : Icons.church),
                         title: Text(i.title ?? 'Untitled'),
                         subtitle: Text(
-                          when != null ? dateFmt.format(when) : '',
+                          when != null ? '$kindLabel • ${dateFmt.format(when)}' : kindLabel,
                         ),
-                        onTap: i.id != null ? () => _managePersonalEvent(i.id!) : null,
+                        onTap: isPersonal && i.id != null
+                            ? () => _managePersonalEvent(i.id!)
+                            : null,
                       );
                     }),
                 ],

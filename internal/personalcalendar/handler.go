@@ -228,9 +228,14 @@ func (h *Handler) listGoals(w http.ResponseWriter, r *http.Request) {
  
 func (h *Handler) createGoal(w http.ResponseWriter, r *http.Request) {
     id := auth.MustFromContext(r.Context())
-    var in GoalRequest
-    if err := httpx.DecodeJSON(r, &in); err != nil {
+    var raw flexibleGoalRequest
+    if err := httpx.DecodeJSON(r, &raw); err != nil {
         httpx.ErrorCode(w, http.StatusBadRequest, "invalid JSON body", "bad_request")
+        return
+    }
+    in, err := raw.toGoalRequest()
+    if err != nil {
+        httpx.ErrorCode(w, http.StatusBadRequest, err.Error(), "bad_request")
         return
     }
     g, err := h.svc.CreateGoal(r.Context(), id, in)
@@ -243,9 +248,14 @@ func (h *Handler) createGoal(w http.ResponseWriter, r *http.Request) {
  
 func (h *Handler) updateGoal(w http.ResponseWriter, r *http.Request) {
     id := auth.MustFromContext(r.Context())
-    var in GoalRequest
-    if err := httpx.DecodeJSON(r, &in); err != nil {
+    var raw flexibleGoalRequest
+    if err := httpx.DecodeJSON(r, &raw); err != nil {
         httpx.ErrorCode(w, http.StatusBadRequest, "invalid JSON body", "bad_request")
+        return
+    }
+    in, err := raw.toGoalRequest()
+    if err != nil {
+        httpx.ErrorCode(w, http.StatusBadRequest, err.Error(), "bad_request")
         return
     }
     g, err := h.svc.UpdateGoal(r.Context(), id, chi.URLParam(r, "goalId"), in)
