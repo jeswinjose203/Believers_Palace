@@ -5,6 +5,8 @@ import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/image_picker_field.dart';
+import 'calendar_screen.dart';
+import 'certificates_screen.dart';
 import 'churches_screen.dart';
 import 'my_bookings_screen.dart';
 import 'settings_screen.dart';
@@ -138,16 +140,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   MaterialPageRoute(builder: (_) => const SettingsScreen()),
                 ),
               ),
+              _MenuRow(
+                icon: Icons.calendar_month,
+                title: 'Calendar',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CalendarScreen()),
+                ),
+              ),
               if (!isSuperAdmin)
                 _MenuRow(
                   icon: Icons.bookmark_border,
-                  title: 'My Activities',
-                  subtitle: 'Hall bookings',
+                  title: 'My Bookings',
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const MyBookingsScreen()),
+                    MaterialPageRoute(builder: (_) => const MyBookingsScreen()),
                   ),
                 ),
+              _MenuRow(
+                icon: Icons.school,
+                title: 'Certificates',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CertificatesScreen()),
+                ),
+              ),
               _MenuRow(
                 icon: Icons.favorite_border,
                 title: 'My Family',
@@ -455,7 +469,6 @@ class _InfoRow extends StatelessWidget {
 class _MenuRow extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String? subtitle;
   final VoidCallback onTap;
   final Color? color;
   final bool showChevron;
@@ -464,7 +477,6 @@ class _MenuRow extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
-    this.subtitle,
     this.color,
     this.showChevron = true,
   });
@@ -491,10 +503,6 @@ class _MenuRow extends StatelessWidget {
                       color: color,
                     ),
                   ),
-                  if (subtitle != null)
-                    Text(subtitle!,
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.black54)),
                 ],
               ),
             ),
