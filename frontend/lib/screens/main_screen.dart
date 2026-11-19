@@ -6,6 +6,7 @@ import '../services/calendar_reminder_sync.dart';
 import '../widgets/verify_email_banner.dart';
 import 'admin_users_screen.dart';
 import 'communities_screen.dart';
+import 'marketplace_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
@@ -62,6 +63,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
       // that same screen; regular members get the heart ("set my church").
       const SearchScreen(),
       const CommunitiesScreen(),
+      const MarketplaceScreen(),
       if (isSuperAdmin) const AdminUsersScreen(),
       const ProfileScreen(),
     ];
@@ -72,6 +74,8 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
       const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
       const BottomNavigationBarItem(
           icon: Icon(Icons.groups), label: 'Communities'),
+      const BottomNavigationBarItem(
+          icon: Icon(Icons.storefront), label: 'Marketplace'),
       if (isSuperAdmin)
         const BottomNavigationBarItem(
             icon: Icon(Icons.admin_panel_settings), label: 'Users'),

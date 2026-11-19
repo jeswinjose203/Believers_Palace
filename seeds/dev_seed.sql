@@ -19,3 +19,24 @@ VALUES (
     true
 )
 ON CONFLICT (id) DO NOTHING;
+
+-- Marketplace sample categories (idempotent).
+INSERT INTO marketplace_categories (id, name, scope, sort_order, active)
+VALUES
+    ('00000000-0000-0000-0001-000000000001', 'General', 'community', 0, true),
+    ('00000000-0000-0000-0001-000000000002', 'Books & Media', 'community', 1, true),
+    ('00000000-0000-0000-0001-000000000010', 'Church Store', 'shop', 0, true)
+ON CONFLICT (name, scope) DO NOTHING;
+
+INSERT INTO shop_products (id, category_id, title, description, images, price_cents, active, created_by)
+VALUES (
+    '00000000-0000-0000-0002-000000000001',
+    '00000000-0000-0000-0001-000000000010',
+    'Sample Worship Hymnal',
+    'Development seed product for the official shop catalog.',
+    '[]'::jsonb,
+    1999,
+    true,
+    '00000000-0000-0000-0000-000000000001'
+)
+ON CONFLICT (id) DO NOTHING;

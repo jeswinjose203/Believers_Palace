@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api_client.dart';
 import '../models/calendar_models.dart';
 import '../models/community_models.dart';
+import '../models/marketplace_models.dart';
 import '../models/models.dart';
  
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
@@ -651,4 +652,174 @@ class ApiService {
         .map((e) => CalendarAchievement.fromJson(e as Map<String, dynamic>))
         .toList();
   }
+
+  // Marketplace — categories
+  Future<List<MarketplaceCategory>> listMarketplaceCategories(
+    String scope, {
+    bool all = false,
+  }) async {
+    final json = await _client.getRaw(
+      '/marketplace/categories',
+      query: {'scope': scope, if (all) 'all': 'true'},
+    );
+    return (json['data'] as List)
+        .map((e) => MarketplaceCategory.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<MarketplaceCategory> createMarketplaceCategory(
+    String scope, {
+    required String name,
+    int sortOrder = 0,
+    bool active = true,
+  }) =>
+      _client.post(
+        '/marketplace/categories?scope=$scope',
+        MarketplaceCategory.fromJson,
+        body: {'name': name, 'sortOrder': sortOrder, 'active': active},
+      );
+
+  Future<MarketplaceCategory> updateMarketplaceCategory(
+    String id, {
+    required String name,
+    int? sortOrder,
+    bool? active,
+  }) =>
+      _client.put(
+        '/marketplace/categories/$id',
+        MarketplaceCategory.fromJson,
+        body: {
+          'name': name,
+          if (sortOrder != null) 'sortOrder': sortOrder,
+          if (active != null) 'active': active,
+        },
+      );
+
+  Future<void> deleteMarketplaceCategory(String id) =>
+      _client.delete('/marketplace/categories/$id');
+
+  // Community advertisements
+  Future<PaginatedResponse<CommunityAd>> browseCommunityAds({
+    String? search,
+    String? categoryId,
+    int? minPrice,
+    int? maxPrice,
+    bool excludeSold = false,
+    int page = 1,
+    int limit = 20,
+  }) =>
+      _client.get(
+        '/marketplace/community-ads',
+        (json) => PaginatedResponse.fromJson(json, CommunityAd.fromJson),
+        query: {
+          if (search != null && search.isNotEmpty) 'search': search,
+          if (categoryId != null && categoryId.isNotEmpty) 'categoryId': categoryId,
+          if (minPrice != null) 'minPrice': minPrice,
+          if (maxPrice != null) 'maxPrice': maxPrice,
+          if (excludeSold) 'excludeSold': 'true',
+          'page': page,
+          'limit': limit,
+        },
+      );
+
+  Future<PaginatedResponse<CommunityAd>> listMyCommunityAds({
+    int page = 1,
+    int limit = 20,
+  }) =>
+      _client.get(
+        '/marketplace/community-ads/mine',
+        (json) => PaginatedResponse.fromJson(json, CommunityAd.fromJson),
+        query: {'page': page, 'limit': limit},
+      );
+
+  Future<PaginatedResponse<CommunityAd>> listCommunityAdsAdmin({
+    String status = 'pending_approval',
+    String? search,
+    int page = 1,
+    int limit = 20,
+  }) =>
+      _client.get(
+        '/marketplace/community-ads/admin',
+        (json) => PaginatedResponse.fromJson(json, CommunityAd.fromJson),
+        query: {
+          'status': status,
+          if (search != null && search.isNotEmpty) 'search': search,
+          'page': page,
+          'limit': limit,
+        },
+      );
+
+  Future<CommunityAd> getCommunityAd(String id) =>
+      _client.get('/marketplace/community-ads/$id', CommunityAd.fromJson);
+
+  Future<CommunityAd> createCommunityAd(Map<String, dynamic> body) =>
+      _client.post('/marketplace/community-ads', CommunityAd.fromJson, body: body);
+
+  Future<CommunityAd> updateCommunityAd(String id, Map<String, dynamic> body) =>
+      _client.put('/marketplace/community-ads/$id', CommunityAd.fromJson, body: body);
+
+  Future<void> deleteCommunityAd(String id) =>
+      _client.delete('/marketplace/community-ads/$id');
+
+  Future<CommunityAd> approveCommunityAd(String id) =>
+      _client.post('/marketplace/community-ads/$id/approve', CommunityAd.fromJson);
+
+  Future<CommunityAd> rejectCommunityAd(String id, {String? reason}) =>
+      _client.post(
+        '/marketplace/community-ads/$id/reject',
+        CommunityAd.fromJson,
+        body: reason != null ? {'reason': reason} : null,
+      );
+
+  Future<CommunityAd> markCommunityAdSold(String id) =>
+      _client.post('/marketplace/community-ads/$id/sold', CommunityAd.fromJson);
+
+  // Shop products
+  Future<PaginatedResponse<ShopProduct>> browseShopProducts({
+    String? search,
+    String? categoryId,
+    int? minPrice,
+    int? maxPrice,
+    int page = 1,
+    int limit = 20,
+  }) =>
+      _client.get(
+        '/marketplace/shop/products',
+        (json) => PaginatedResponse.fromJson(json, ShopProduct.fromJson),
+        query: {
+          if (search != null && search.isNotEmpty) 'search': search,
+          if (categoryId != null && categoryId.isNotEmpty) 'categoryId': categoryId,
+          if (minPrice != null) 'minPrice': minPrice,
+          if (maxPrice != null) 'maxPrice': maxPrice,
+          'page': page,
+          'limit': limit,
+        },
+      );
+
+  Future<PaginatedResponse<ShopProduct>> listShopProductsAdmin({
+    String? search,
+    int page = 1,
+    int limit = 20,
+  }) =>
+      _client.get(
+        '/marketplace/shop/products/admin',
+        (json) => PaginatedResponse.fromJson(json, ShopProduct.fromJson),
+        query: {
+          if (search != null && search.isNotEmpty) 'search': search,
+          'page': page,
+          'limit': limit,
+        },
+      );
+
+  Future<ShopProduct> getShopProduct(String id) =>
+      _client.get('/marketplace/shop/products/$id', ShopProduct.fromJson);
+
+  Future<ShopProduct> createShopProduct(Map<String, dynamic> body) =>
+      _client.post('/marketplace/shop/products', ShopProduct.fromJson, body: body);
+
+  Future<ShopProduct> updateShopProduct(String id, Map<String, dynamic> body) =>
+      _client.put('/marketplace/shop/products/$id', ShopProduct.fromJson, body: body);
+
+  Future<void> deleteShopProduct(String id) =>
+      _client.delete('/marketplace/shop/products/$id');
 }

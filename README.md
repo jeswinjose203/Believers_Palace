@@ -36,8 +36,9 @@ believers_palace/
 │   ├── personalcalendar/   # per-user calendar, tasks, goals, schedule
 │   ├── cemetery/           # cemetery plots + service requests
 │   ├── certificate/        # per-user PDF certificate storage
+│   ├── marketplace/        # community ads + shop catalog
 │   └── server/             # router + middleware wiring
-├── migrations/             # SQL migrations (0001..0019)
+├── migrations/             # SQL migrations (0001..0021)
 ├── .env.example
 ├── Makefile
 └── go.mod
@@ -295,6 +296,26 @@ endpoint. Images are served publicly at `GET /media/{key}` (no `Authorization`
 header) so they load directly in `<img>`/`NetworkImage`. The returned URL is
 built from `PUBLIC_BASE_URL`, so set that to your externally reachable base URL
 in production.
+
+### Marketplace (migration 0021)
+
+Authenticated **Marketplace** for member-to-member sales and a separate **shop**
+catalog. Community listings require admin approval before they appear in browse;
+users manage their own ads. Admins manage categories (per `community` / `shop`
+scope), moderate ads, and CRUD shop products.
+
+| Method | Path | Access |
+|--------|------|--------|
+| GET | `/marketplace/categories?scope=community\|shop` | any authenticated |
+| POST/PUT/DELETE | `/marketplace/categories[...]` | church_admin / super_admin |
+| GET | `/marketplace/community-ads` | browse approved (+ sold) |
+| GET/POST | `/marketplace/community-ads/mine`, `POST /marketplace/community-ads` | owner flows |
+| GET | `/marketplace/community-ads/admin` | admin moderation queue |
+| POST | `/marketplace/community-ads/{id}/approve\|reject\|sold` | admin or owner (sold) |
+| GET | `/marketplace/shop/products` | active shop catalog |
+| POST/PUT/DELETE | `/marketplace/shop/products[...]` | church_admin / super_admin |
+
+See [interfaces.md](interfaces.md) for query parameters and payloads.
 
 ### Example
 
