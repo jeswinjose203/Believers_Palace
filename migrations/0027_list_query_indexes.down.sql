@@ -1,0 +1,5 @@
+DROP INDEX idx_bookings_church_start;
+DROP INDEX idx_bookings_user_start;
+DROP INDEX idx_announcements_church_effective_date;
+DROP INDEX idx_events_church_start;
+DROP INDEX idx_communities_created_id;

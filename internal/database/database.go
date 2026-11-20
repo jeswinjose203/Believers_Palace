@@ -20,6 +20,9 @@ func New(ctx context.Context, dsn string, minConns, maxConns int32) (*pgxpool.Po
 	poolCfg.MaxConnLifetime = time.Hour
 	poolCfg.MaxConnLifetimeJitter = 10 * time.Minute
 	poolCfg.MaxConnIdleTime = 30 * time.Minute
+	if poolCfg.ConnConfig.ConnectTimeout == 0 {
+		poolCfg.ConnConfig.ConnectTimeout = 5 * time.Second
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {

@@ -19,7 +19,7 @@ const (
 
 type store interface {
 	Create(context.Context, string, string, string, *string) (*Community, error)
-	List(context.Context, string) ([]Community, error)
+	List(context.Context, string, ...ListOptions) ([]Community, error)
 	Get(context.Context, string) (*Community, error)
 	Membership(context.Context, string, string) (string, bool, error)
 	RequestMembership(context.Context, string, string) (*Membership, error)
@@ -69,8 +69,8 @@ func (s *Service) Create(ctx context.Context, id auth.Identity, in CreateRequest
 	return s.repo.Create(ctx, id.UserID, name, strings.TrimSpace(in.Description), image)
 }
 
-func (s *Service) List(ctx context.Context, id auth.Identity) ([]Community, error) {
-	return s.repo.List(ctx, id.UserID)
+func (s *Service) List(ctx context.Context, id auth.Identity, options ...ListOptions) ([]Community, error) {
+	return s.repo.List(ctx, id.UserID, options...)
 }
 
 func (s *Service) requireCommunity(ctx context.Context, cid string) (*Community, error) {
@@ -85,9 +85,6 @@ func (s *Service) membership(ctx context.Context, id auth.Identity, cid string) 
 	return status == "active", admin && status == "active", err
 }
 func (s *Service) requireMember(ctx context.Context, id auth.Identity, cid string) (bool, error) {
-	if _, err := s.requireCommunity(ctx, cid); err != nil {
-		return false, err
-	}
 	active, admin, err := s.membership(ctx, id, cid)
 	if err != nil {
 		return false, err

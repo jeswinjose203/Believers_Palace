@@ -23,8 +23,11 @@ class CommunitiesScreen extends ConsumerStatefulWidget {
 }
 
 class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
-  List<Community> _communities = [];
+  final _pages = <bool, CommunityPage>{};
+  final _loadingMore = <bool>{};
+  int _loadVersion = 0;
   bool _loading = true;
+  bool _refreshing = false;
   String? _error;
 
   @override
@@ -34,20 +37,65 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
+    final version = ++_loadVersion;
+    final api = ref.read(apiServiceProvider);
+    setState(() {
+      _refreshing = true;
+      _loadingMore.clear();
+    });
     try {
-      final items = await ref.read(apiServiceProvider).listCommunities();
-      if (!mounted) return;
+      final pages = await Future.wait([
+        api.listCommunityPage(joined: false),
+        api.listCommunityPage(joined: true),
+      ]);
+      if (!mounted || version != _loadVersion) return;
       setState(() {
-        _communities = items;
+        _pages[false] = pages[0];
+        _pages[true] = pages[1];
         _loading = false;
+        _refreshing = false;
         _error = null;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _loading = false;
+        _refreshing = false;
         _error = e.toString();
       });
+    }
+  }
+
+  Future<void> _loadMore(bool joined) async {
+    final page = _pages[joined];
+    final cursor = page?.nextCursor;
+    if (_refreshing ||
+        page == null ||
+        cursor == null ||
+        _loadingMore.contains(joined)) {
+      return;
+    }
+    final version = _loadVersion;
+    setState(() => _loadingMore.add(joined));
+    try {
+      final next = await ref.read(apiServiceProvider).listCommunityPage(
+            joined: joined,
+            cursor: cursor,
+          );
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _pages[joined] = (
+          items: [...page.items, ...next.items],
+          nextCursor: next.nextCursor,
+        );
+      });
+    } catch (error) {
+      if (mounted && version == _loadVersion) _showError(error);
+    } finally {
+      if (mounted && version == _loadVersion) {
+        setState(() => _loadingMore.remove(joined));
+      }
     }
   }
 
@@ -77,12 +125,12 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
     final user = ref.read(authProvider).user;
     final notifications = ref.read(chatNotificationServiceProvider);
     if (user != null) notifications.markCommunityRead(user.id, community.id);
-    await Navigator.of(context).push<bool>(MaterialPageRoute(
+    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => CommunityDetailScreen(community: community),
     ));
     if (mounted) {
       if (user != null) notifications.markCommunityRead(user.id, community.id);
-      _load();
+      if (changed == true) _load();
     }
   }
 
@@ -92,9 +140,6 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
-    final joined = _communities
-        .where((community) => community.isAdmin || community.status == 'active')
-        .toList();
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -117,12 +162,12 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
                 ? Center(child: Text('Could not load communities: $_error'))
                 : TabBarView(
                     children: [
-                      _communityList(_communities, joinedOnly: false),
+                      _communityList(joinedOnly: false),
                       ValueListenableBuilder(
                         valueListenable:
                             ref.read(chatNotificationServiceProvider).previews,
                         builder: (_, previews, __) =>
-                            _communityList(joined, joinedOnly: true),
+                            _communityList(joinedOnly: true),
                       ),
                     ],
                   ),
@@ -130,7 +175,10 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
     );
   }
 
-  Widget _communityList(List<Community> items, {required bool joinedOnly}) {
+  Widget _communityList({required bool joinedOnly}) {
+    final page = _pages[joinedOnly];
+    final items = page?.items ?? const <Community>[];
+    final hasMore = page?.nextCursor != null;
     final emptyText = joinedOnly
         ? 'You haven’t joined any communities yet.'
         : 'No communities yet.';
@@ -147,15 +195,27 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
           : ListView.builder(
               key: PageStorageKey(joinedOnly),
               physics: const AlwaysScrollableScrollPhysics(),
-              itemCount: items.length,
+              padding: const EdgeInsets.only(bottom: 80),
+              itemCount: items.length + (hasMore ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index == items.length) {
+                  return Center(
+                    child: TextButton(
+                      onPressed: _loadingMore.contains(joinedOnly)
+                          ? null
+                          : () => _loadMore(joinedOnly),
+                      child: Text(_loadingMore.contains(joinedOnly)
+                          ? 'Loading…'
+                          : 'Load more'),
+                    ),
+                  );
+                }
                 final community = items[index];
                 final user = ref.read(authProvider).user;
                 final preview = joinedOnly && user?.emailVerified == true
                     ? ref
                         .read(chatNotificationServiceProvider)
-                        .communityPreview(
-                        user?.id, community.id)
+                        .communityPreview(user?.id, community.id)
                     : null;
                 final label = community.isAdmin
                     ? 'Admin'

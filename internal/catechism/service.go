@@ -232,7 +232,7 @@ func (s *Service) UpdateEnrollmentStatus(ctx context.Context, id auth.Identity, 
 			return nil, invalid("only pending enrollments can be approved or rejected")
 		}
 	}
-	return s.repo.UpdateEnrollmentStatus(ctx, enrollmentID, status)
+	return s.repo.UpdateEnrollmentStatus(ctx, enrollmentID, enrollment.Status, status)
 }
 
 // WithdrawEnrollment marks an enrollment withdrawn (owner or staff).
@@ -252,7 +252,7 @@ func (s *Service) WithdrawEnrollment(ctx context.Context, id auth.Identity, enro
 	if enrollment.Status != EnrollPending && enrollment.Status != EnrollApproved {
 		return nil, invalid("only pending or approved enrollments can be withdrawn")
 	}
-	return s.repo.UpdateEnrollmentStatus(ctx, enrollmentID, EnrollWithdrawn)
+	return s.repo.UpdateEnrollmentStatus(ctx, enrollmentID, enrollment.Status, EnrollWithdrawn)
 }
 
 // ListSessions returns sessions for a class if the caller is staff or an approved guardian.

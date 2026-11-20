@@ -2,6 +2,7 @@ package community
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -52,7 +53,7 @@ func seedCommunity(t *testing.T, pool *pgxpool.Pool) (string, string) {
 
 func TestDBCommunityImagePersists(t *testing.T) {
 	pool := newCommunityTestPool(t)
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 
 	ctx := context.Background()
 	var userID string
@@ -85,14 +86,20 @@ func TestDBCommunityImagePersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list communities: %v", err)
 	}
-	if len(communities) != 1 || communities[0].Image == nil || *communities[0].Image != image {
-		t.Fatalf("listed communities = %+v, want community image %q", communities, image)
+	for _, item := range communities {
+		if item.ID == created.ID {
+			if item.Image == nil || *item.Image != image {
+				t.Fatalf("listed community image = %v, want %q", item.Image, image)
+			}
+			return
+		}
 	}
+	t.Fatal("created community is missing from the list")
 }
 
 func TestDBConcurrentCommunityMessagesHaveGaplessCursor(t *testing.T) {
 	pool := newCommunityTestPool(t)
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 	repo := NewRepository(pool)
 	communityID, userID := seedCommunity(t, pool)
 
@@ -152,5 +159,44 @@ func TestDBConcurrentCommunityMessagesHaveGaplessCursor(t *testing.T) {
 	}
 	if seenMessages != count {
 		t.Fatalf("cursor returned %d messages; want %d", seenMessages, count)
+	}
+}
+
+func TestDBConcurrentAdminDeparturesKeepAnAdmin(t *testing.T) {
+	pool := newCommunityTestPool(t)
+	t.Cleanup(pool.Close)
+	communityID, first := seedCommunity(t, pool)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	var second string
+	if err := pool.QueryRow(ctx, `INSERT INTO users (name,email,password_hash)
+		VALUES ('Second admin',gen_random_uuid()::text || '@example.test','test') RETURNING id`).
+		Scan(&second); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, second)
+	})
+	if _, err := pool.Exec(ctx, `INSERT INTO community_memberships (community_id,user_id,status,is_admin)
+		VALUES ($1,$2,'active',true)`, communityID, second); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewRepository(pool)
+	outcomes := make(chan error, 2)
+	go func() { outcomes <- repo.Leave(ctx, communityID, first) }()
+	go func() { outcomes <- repo.Leave(ctx, communityID, second) }()
+	left, stayed := 0, 0
+	for range 2 {
+		switch err := <-outcomes; {
+		case err == nil:
+			left++
+		case errors.Is(err, ErrLastAdmin):
+			stayed++
+		default:
+			t.Errorf("unexpected departure error: %v", err)
+		}
+	}
+	if left != 1 || stayed != 1 {
+		t.Fatalf("departures = %d, retained admins = %d", left, stayed)
 	}
 }

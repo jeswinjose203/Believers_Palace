@@ -108,6 +108,16 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*User, error) {
 	return u, nil
 }
 
+// DisplayByID returns the name and profile photo used in public author snapshots.
+func (r *Repository) DisplayByID(ctx context.Context, id string) (name string, profilePic *string, err error) {
+	err = r.pool.QueryRow(ctx, `SELECT name,profile_pic FROM users WHERE id=$1`, id).
+		Scan(&name, &profilePic)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return
+}
+
 // GetByEmail returns a user by email.
 func (r *Repository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	const q = `SELECT ` + userColumns + ` FROM users WHERE email = $1`

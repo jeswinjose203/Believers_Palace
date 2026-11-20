@@ -49,6 +49,7 @@ func run() error {
 		Addr:              ":" + cfg.HTTPPort,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
+		MaxHeaderBytes:    32 << 10,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,

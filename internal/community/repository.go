@@ -48,11 +48,21 @@ func (r *Repository) Create(ctx context.Context, userID, name, description strin
 	return &c, nil
 }
 
-func (r *Repository) List(ctx context.Context, userID string) ([]Community, error) {
-	rows, err := r.pool.Query(ctx, `SELECT c.id,c.creator_id,c.name,c.description,c.image,c.created_at,
+func (r *Repository) List(ctx context.Context, userID string, options ...ListOptions) ([]Community, error) {
+	query := `SELECT c.id,c.creator_id,c.name,c.description,c.image,c.created_at,
 		COALESCE(m.status,''),COALESCE(m.is_admin,false) FROM communities c
-		LEFT JOIN community_memberships m ON m.community_id=c.id AND m.user_id=$1
-		ORDER BY c.created_at DESC`, userID)
+		LEFT JOIN community_memberships m ON m.community_id=c.id AND m.user_id=$1`
+	args := []any{userID}
+	if len(options) != 0 {
+		page := options[0]
+		query += ` WHERE (NOT $2 OR m.status='active')
+			AND ($3::timestamptz IS NULL OR (c.created_at,c.id) < ($3,$4::uuid))
+			ORDER BY c.created_at DESC,c.id DESC LIMIT $5`
+		args = append(args, page.Joined, page.Before, page.ID, page.Limit)
+	} else {
+		query += " ORDER BY c.created_at DESC,c.id DESC"
+	}
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list communities: %w", err)
 	}
@@ -80,9 +90,11 @@ func (r *Repository) Get(ctx context.Context, id string) (*Community, error) {
 }
 
 func (r *Repository) Membership(ctx context.Context, communityID, userID string) (status string, admin bool, err error) {
-	err = r.pool.QueryRow(ctx, `SELECT status,is_admin FROM community_memberships WHERE community_id=$1 AND user_id=$2`, communityID, userID).Scan(&status, &admin)
+	err = r.pool.QueryRow(ctx, `SELECT COALESCE(m.status,''),COALESCE(m.is_admin,false)
+		FROM communities c LEFT JOIN community_memberships m ON m.community_id=c.id AND m.user_id=$2
+		WHERE c.id=$1`, communityID, userID).Scan(&status, &admin)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil
+		return "", false, ErrNotFound
 	}
 	return
 }
@@ -155,11 +167,16 @@ func (r *Repository) RemoveMember(ctx context.Context, communityID, userID strin
 }
 
 func (r *Repository) Leave(ctx context.Context, communityID, userID string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	// A departure can lock both the departing membership and a successor.
+	// Serialize departures without taking the community row lock used by chat writes.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('community-leave:' || $1, 0))`, communityID); err != nil {
+		return fmt.Errorf("serialize community departures: %w", err)
+	}
 	var status string
 	var admin bool
 	err = tx.QueryRow(ctx, `SELECT status,is_admin FROM community_memberships WHERE community_id=$1 AND user_id=$2 FOR UPDATE`, communityID, userID).Scan(&status, &admin)

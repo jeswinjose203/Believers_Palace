@@ -20,6 +20,7 @@ var ErrClassFull = errors.New("class is full")
 
 // ErrDuplicateEnrollment is returned when the student already has an active enrollment.
 var ErrDuplicateEnrollment = errors.New("duplicate active enrollment")
+var ErrEnrollmentChanged = errors.New("enrollment status changed, refresh and try again")
 
 // Repository provides access to catechism data.
 type Repository struct {
@@ -260,7 +261,7 @@ func scanEnrollment(row pgx.Row) (*Enrollment, error) {
 
 // CreateEnrollment inserts an enrollment inside a transaction with capacity and duplicate checks.
 func (r *Repository) CreateEnrollment(ctx context.Context, classID, guardianID string, in EnrollmentRequest) (*Enrollment, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
 	}
@@ -269,11 +270,14 @@ func (r *Repository) CreateEnrollment(ctx context.Context, classID, guardianID s
 	var status ClassStatus
 	var capacity int
 	if err := tx.QueryRow(ctx, `
-		SELECT status, capacity FROM catechism_classes WHERE id = $1 FOR UPDATE
+		SELECT status, capacity FROM catechism_classes WHERE id = $1 FOR NO KEY UPDATE
 	`, classID).Scan(&status, &capacity); errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	} else if err != nil {
 		return nil, err
+	}
+	if status != StatusOpen {
+		return nil, ErrClassNotOpen
 	}
 
 	var count int
@@ -412,14 +416,14 @@ func (r *Repository) ListEnrollmentsByGuardian(
 }
 
 // UpdateEnrollmentStatus sets enrollment status.
-func (r *Repository) UpdateEnrollmentStatus(ctx context.Context, id string, status EnrollmentStatus) (*Enrollment, error) {
+func (r *Repository) UpdateEnrollmentStatus(ctx context.Context, id string, expected, status EnrollmentStatus) (*Enrollment, error) {
 	const q = `
 		UPDATE catechism_enrollments SET status = $2, updated_at = now()
-		WHERE id = $1
+		WHERE id = $1 AND status = $3
 		RETURNING ` + enrollmentColumns
-	e, err := scanEnrollment(r.pool.QueryRow(ctx, q, id, status))
+	e, err := scanEnrollment(r.pool.QueryRow(ctx, q, id, status, expected))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, ErrEnrollmentChanged
 	}
 	if err != nil {
 		return nil, fmt.Errorf("update enrollment status: %w", err)

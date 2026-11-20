@@ -9,7 +9,7 @@ formation classes), cemetery services, and per-user certificate storage.
 
 | Concern     | Choice                        |
 |-------------|-------------------------------|
-| Language    | Go 1.24                       |
+| Language    | Go 1.25 minimum, Go 1.27.4 in Docker |
 | Router      | chi/v5                        |
 | Database    | PostgreSQL (pgx/v5 pool)      |
 | Auth        | JWT (golang-jwt/v5) + bcrypt  |
@@ -39,7 +39,7 @@ believers_palace/
 │   ├── certificate/        # per-user PDF certificate storage
 │   ├── marketplace/        # community ads + shop catalog
 │   └── server/             # router + middleware wiring
-├── migrations/             # SQL migrations (0001..0026)
+├── migrations/             # SQL migrations (0001..0027)
 ├── .env.example
 ├── Makefile
 └── go.mod
@@ -278,8 +278,8 @@ and device ownership before sending. Push alerts contain a generic preview.
 
 - Set a connection budget before scaling replicas. Each API process uses
   up to `DB_MAX_CONNS` pooled connections plus one chat listener. Set
-  `TRUST_PROXY_HEADERS=true` only behind a proxy that strips client-supplied
-  forwarding headers and prevents direct access to the API. Configure any
+  `TRUST_PROXY_HEADERS=true` only behind a proxy that overwrites `X-Real-IP`
+  with the client address and prevents direct access to the API. Configure any
   shared rate limits at that proxy. The built-in limits are per replica.
 - The optional `TestDistributedChat` integration test uses disposable
   PostgreSQL, two listeners and a simulated push provider. Set
@@ -291,8 +291,26 @@ and device ownership before sending. Push alerts contain a generic preview.
   representative dataset and traffic mix. Run these through the production-like
   proxy and test an API restart, database listener interruption, and FCM throttling.
 
-The code review found additional scale limits outside chat. The Communities
-discovery endpoint still returns the full catalog. Several public list queries,
+The app uses cursor pagination for the All and Joined community lists. API
+clients can pass `limit`, `joined`, and the returned `nextCursor` as `cursor`.
+The original request without pagination parameters remains available to older
+clients.
+
+The server caps concurrent HTTP requests and live connections separately using
+`HTTP_MAX_IN_FLIGHT` and `CHAT_MAX_CONNECTIONS`. Excess requests return 503 with
+`Retry-After: 1`. Tune both limits against the database and proxy capacities.
+
+The optional `TestMixedAPILoad` test exercises the authenticated HTTP router on a
+migrated disposable database with a 10,000-community catalog. Set
+`API_LOAD_DATABASE_URL` and optionally `API_LOAD_CONCURRENCY` and
+`API_LOAD_REQUESTS`, then run
+`go test -v ./internal/server -run TestMixedAPILoad -count=1`.
+One isolated Docker run completed 60,000 authenticated requests with
+64 concurrent workers and a 10-connection database pool. It observed zero
+failures, 1,274 requests/s, 92 ms p95, and 123 ms p99. This workload uses a
+local database and disables per-IP throttling.
+
+Several public list queries,
 including churches, events, and marketplace listings, use offset pagination and
 substring search. Use staging query plans on representative data to prioritize
 cursor pagination and search indexes. Media and certificate storage are

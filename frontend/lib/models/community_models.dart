@@ -1,3 +1,5 @@
+typedef CommunityPage = ({List<Community> items, String? nextCursor});
+
 class Community {
   final String id;
   final String creatorId;

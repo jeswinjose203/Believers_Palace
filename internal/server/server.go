@@ -40,7 +40,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Hand
 
 	r.Use(middleware.RequestID)
 	if cfg.TrustProxyHeaders {
-		r.Use(middleware.RealIP)
+		r.Use(trustedProxyIP)
 	}
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
@@ -60,10 +60,11 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Hand
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Debug-User-Id", "X-Debug-Role", "X-Debug-Church-Id"},
-		ExposedHeaders:   []string{"Link"},
+		ExposedHeaders:   []string{"Link", "Retry-After"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
+	r.Use(limitInFlight(cfg.HTTPMaxInFlight, "/api/chat/live"))
 	if cfg.RateLimit.Enabled {
 		// General per-IP limit across all endpoints.
 		r.Use(httprate.LimitByIP(cfg.RateLimit.General, time.Minute))
@@ -192,7 +193,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Hand
 
 	// API routes (spec base path is /api).
 	r.Route("/api", func(api chi.Router) {
-		api.Get("/chat/live", liveChat.ServeHTTP)
+		api.With(limitInFlight(cfg.ChatMaxConnections, "")).Get("/chat/live", liveChat.ServeHTTP)
 		// Public authentication routes, with a stricter per-IP rate limit to
 		// resist brute-force login and email-bomb abuse of password reset and
 		// verification resend.
@@ -264,14 +265,14 @@ type eventChurchResolver struct {
 }
 
 func (a eventChurchResolver) LookupEvent(ctx context.Context, eventID string) (chat.EventInfo, bool, error) {
-	ev, err := a.repo.GetByID(ctx, eventID)
+	churchID, registrationRequired, err := a.repo.ChatAccessInfo(ctx, eventID)
 	if errors.Is(err, event.ErrNotFound) {
 		return chat.EventInfo{}, false, nil
 	}
 	if err != nil {
 		return chat.EventInfo{}, false, err
 	}
-	return chat.EventInfo{ChurchID: ev.ChurchID, RegistrationRequired: ev.RegistrationRequired}, true, nil
+	return chat.EventInfo{ChurchID: churchID, RegistrationRequired: registrationRequired}, true, nil
 }
 
 // userDisplayResolver adapts the user repository to the chat package's
@@ -281,12 +282,12 @@ type userDisplayResolver struct {
 }
 
 func (a userDisplayResolver) DisplayOf(ctx context.Context, userID string) (string, *string, bool, error) {
-	u, err := a.repo.GetByID(ctx, userID)
+	name, profilePic, err := a.repo.DisplayByID(ctx, userID)
 	if errors.Is(err, user.ErrNotFound) {
 		return "", nil, false, nil
 	}
 	if err != nil {
 		return "", nil, false, err
 	}
-	return u.Name, u.ProfilePic, true, nil
+	return name, profilePic, true, nil
 }

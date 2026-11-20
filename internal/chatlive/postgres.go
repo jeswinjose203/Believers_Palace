@@ -52,7 +52,11 @@ func (p Postgres) listen(ctx context.Context, config *pgx.ConnConfig, hub *Hub) 
 	if err != nil {
 		return err
 	}
-	defer conn.Close(context.Background())
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = conn.Close(closeCtx)
+	}()
 	if _, err := conn.Exec(ctx, "LISTEN chat_changes"); err != nil {
 		return err
 	}

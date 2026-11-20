@@ -123,21 +123,6 @@ func (s *Service) Delete(ctx context.Context, id auth.Identity, eventID string) 
 // Register registers the calling user (or a named attendee) for an event.
 // Enforces capacity when set.
 func (s *Service) Register(ctx context.Context, id auth.Identity, eventID string, in RegistrationRequest) (*Registration, error) {
-	ev, err := s.repo.GetByID(ctx, eventID)
-	if err != nil {
-		return nil, err
-	}
-
-	if ev.Capacity != nil {
-		count, err := s.repo.CountRegistrations(ctx, eventID)
-		if err != nil {
-			return nil, err
-		}
-		if count >= *ev.Capacity {
-			return nil, ErrRegistrationUnavailable
-		}
-	}
-
 	var userID *string
 	if id.UserID != "" {
 		userID = &id.UserID

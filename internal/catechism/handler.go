@@ -249,7 +249,7 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 		httpx.ErrorCode(w, http.StatusBadRequest, ve.Message, "bad_request")
 	case errors.Is(err, ErrForbidden):
 		httpx.ErrorCode(w, http.StatusForbidden, "insufficient permissions", "forbidden")
-	case errors.Is(err, ErrClassFull), errors.Is(err, ErrDuplicateEnrollment):
+	case errors.Is(err, ErrClassFull), errors.Is(err, ErrDuplicateEnrollment), errors.Is(err, ErrEnrollmentChanged):
 		httpx.ErrorCode(w, http.StatusConflict, err.Error(), "conflict")
 	case errors.Is(err, ErrClassNotOpen):
 		httpx.ErrorCode(w, http.StatusBadRequest, err.Error(), "bad_request")

@@ -373,11 +373,22 @@ class ApiService {
       _client.delete('/events/$eventId/messages/$messageId');
 
   // Communities
-  Future<List<Community>> listCommunities() async {
-    final json = await _client.getRaw('/communities');
-    return (json['data'] as List)
-        .map((item) => Community.fromJson(item as Map<String, dynamic>))
-        .toList();
+  Future<CommunityPage> listCommunityPage({
+    required bool joined,
+    String? cursor,
+  }) async {
+    final json = await _client.getRaw('/communities', query: {
+      'limit': 30,
+      'joined': joined,
+      if (cursor != null) 'cursor': cursor,
+    });
+    return (
+      items: (json['data'] as List)
+          .map((item) => Community.fromJson(item as Map<String, dynamic>))
+          .where((item) => !joined || item.status == 'active' || item.isAdmin)
+          .toList(),
+      nextCursor: json['nextCursor'] as String?,
+    );
   }
 
   Future<Community> createCommunity(

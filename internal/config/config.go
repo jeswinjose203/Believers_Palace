@@ -12,8 +12,10 @@ import (
 
 // Config holds all application configuration loaded from the environment.
 type Config struct {
-	AppEnv   string
-	HTTPPort string
+	AppEnv             string
+	HTTPPort           string
+	HTTPMaxInFlight    int
+	ChatMaxConnections int
 	// PublicBaseURL is the externally reachable base URL of the API, used to
 	// build links in emails (e.g. https://api.example.com). No trailing slash.
 	PublicBaseURL string
@@ -111,10 +113,12 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		AppEnv:        getEnv("APP_ENV", "development"),
-		HTTPPort:      getEnv("HTTP_PORT", "8080"),
-		PushProjectID: getEnv("FCM_PROJECT_ID", ""),
-		PublicBaseURL: strings.TrimRight(getEnv("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
+		AppEnv:             getEnv("APP_ENV", "development"),
+		HTTPPort:           getEnv("HTTP_PORT", "8080"),
+		HTTPMaxInFlight:    int(getEnvInt64("HTTP_MAX_IN_FLIGHT", 128)),
+		ChatMaxConnections: int(getEnvInt64("CHAT_MAX_CONNECTIONS", 4096)),
+		PushProjectID:      getEnv("FCM_PROJECT_ID", ""),
+		PublicBaseURL:      strings.TrimRight(getEnv("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5432"),
@@ -158,6 +162,9 @@ func Load() (*Config, error) {
 
 	if cfg.DB.MaxConns < 1 || cfg.DB.MinConns < 0 || cfg.DB.MinConns > cfg.DB.MaxConns {
 		return nil, fmt.Errorf("DB_MAX_CONNS must be positive and DB_MIN_CONNS must be between zero and DB_MAX_CONNS")
+	}
+	if cfg.HTTPMaxInFlight < 1 || cfg.ChatMaxConnections < 1 {
+		return nil, fmt.Errorf("HTTP_MAX_IN_FLIGHT and CHAT_MAX_CONNECTIONS must be positive")
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

@@ -38,12 +38,26 @@ func (h *Handler) Routes(requireVerifiedEmail func(http.Handler) http.Handler) c
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	items, err := h.svc.List(r.Context(), auth.MustFromContext(r.Context()))
+	options, err := parseListOptions(r)
 	if err != nil {
 		h.writeError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{"data": items})
+	if len(options) != 0 {
+		options[0].Limit++
+	}
+	items, err := h.svc.List(r.Context(), auth.MustFromContext(r.Context()), options...)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	result := map[string]any{"data": items}
+	if len(options) != 0 && len(items) == options[0].Limit {
+		items = items[:len(items)-1]
+		result["data"] = items
+		result["nextCursor"] = communityCursor(items[len(items)-1])
+	}
+	httpx.JSON(w, http.StatusOK, result)
 }
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var in CreateRequest

@@ -38,7 +38,14 @@ class _CommunityApiService extends ApiService {
   bool _initialLatestRequested = false;
 
   @override
-  Future<List<Community>> listCommunities() async => communities;
+  Future<CommunityPage> listCommunityPage(
+          {required bool joined, String? cursor}) async =>
+      (
+        items: joined
+            ? communities.where((c) => c.status == 'active').toList()
+            : communities,
+        nextCursor: null,
+      );
 
   @override
   Future<Community> createCommunity(
