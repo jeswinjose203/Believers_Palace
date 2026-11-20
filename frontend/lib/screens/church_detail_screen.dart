@@ -12,6 +12,7 @@ import 'church_bookings_screen.dart';
 import 'churches_screen.dart';
 import 'event_chat_screen.dart';
 import 'event_registrations_screen.dart';
+import '../features/catechism/screens/catechism_list_screen.dart';
 import 'hall_detail_screen.dart';
 import 'marketplace_screen.dart';
 
@@ -22,6 +23,8 @@ const _kTintBorder = Color(0xFFE4D3E6);
 
 /// Church detail with role-aware management.
 ///
+/// Layout: image gallery, name, pill tabs (About, Announcements, Halls, Events,
+/// Catechism, Bookings) and the tab content.
 /// Layout: image gallery, name, pill tabs (About,
 /// Announcements, Halls, Events, Bookings, Marketplace) and the tab content.
 ///
@@ -65,6 +68,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 6, vsync: this);
     _tabController =
         TabController(length: _PillTabsDelegate._tabs.length, vsync: this);
     _loadChurch();
@@ -261,6 +265,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
               onError: _showError,
               onSuccess: _showSuccess,
             ),
+            CatechismListScreen(churchId: widget.church.id),
             _BookingsTab(
               key: ValueKey(_bookingsVersion),
               churchId: widget.church.id,
@@ -1707,6 +1712,7 @@ class _PillTabsDelegate extends SliverPersistentHeaderDelegate {
     (Icons.campaign_outlined, 'Announcements'),
     (Icons.meeting_room_outlined, 'Halls'),
     (Icons.event_outlined, 'Events'),
+    (Icons.school_outlined, 'Catechism'),
     (Icons.event_seat_outlined, 'Bookings'),
     (Icons.storefront_outlined, 'Marketplace'),
   ];
