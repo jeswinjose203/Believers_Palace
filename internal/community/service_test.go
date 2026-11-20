@@ -13,13 +13,14 @@ type memoryStore struct {
 	members     map[string]map[string]*Membership
 	messages    map[string]*Message
 	requestSeq  int
+	lastCursor  CursorQuery
 }
 
 func newMemoryStore() *memoryStore {
 	return &memoryStore{communities: map[string]*Community{}, members: map[string]map[string]*Membership{}, messages: map[string]*Message{}}
 }
-func (s *memoryStore) Create(_ context.Context, user, name, description string) (*Community, error) {
-	c := &Community{ID: "c1", CreatorID: user, Name: name, Description: description}
+func (s *memoryStore) Create(_ context.Context, user, name, description string, image *string) (*Community, error) {
+	c := &Community{ID: "c1", CreatorID: user, Name: name, Description: description, Image: image}
 	s.communities[c.ID] = c
 	s.members[c.ID] = map[string]*Membership{}
 	s.members[c.ID][user] = &Membership{ID: "creator", CommunityID: c.ID, UserID: user, Status: "active", IsAdmin: true}
@@ -101,7 +102,8 @@ func (s *memoryStore) CreateMessage(_ context.Context, cid, uid, name string, pi
 	s.messages[m.ID] = m
 	return m, nil
 }
-func (s *memoryStore) ListMessages(context.Context, string, CursorQuery) ([]Message, bool, error) {
+func (s *memoryStore) ListMessages(_ context.Context, _ string, q CursorQuery) ([]Message, bool, error) {
+	s.lastCursor = q
 	return []Message{}, false, nil
 }
 func (s *memoryStore) DeleteMessage(_ context.Context, cid, id string) error {
@@ -160,6 +162,24 @@ func TestCreatorAdminAndMembershipApproval(t *testing.T) {
 	}
 }
 
+func TestCreatePreservesOptionalCommunityImage(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryStore()
+	svc := NewService(store, testUsers{})
+	image := " https://example.test/community.jpg "
+
+	community, err := svc.Create(ctx, auth.Identity{UserID: "owner"}, CreateRequest{
+		Name:  "Choir",
+		Image: &image,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if community.Image == nil || *community.Image != "https://example.test/community.jpg" {
+		t.Fatalf("community image = %v, want trimmed image URL", community.Image)
+	}
+}
+
 func TestCommunityMessageRequiresActiveMembershipAndAdminModeration(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryStore()
@@ -169,6 +189,7 @@ func TestCommunityMessageRequiresActiveMembershipAndAdminModeration(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err = svc.Post(ctx, auth.Identity{UserID: "member"}, c.ID, MessageRequest{Content: "x"}); !errors.Is(err, ErrNotMember) {
 		t.Fatalf("pending post err=%v", err)
 	}
@@ -195,5 +216,22 @@ func TestCommunityMessageRequiresActiveMembershipAndAdminModeration(t *testing.T
 	}
 	if err = svc.DeleteMessage(ctx, auth.Identity{UserID: "admin"}, c.ID, msg.ID); err != nil {
 		t.Fatalf("admin moderation: %v", err)
+	}
+}
+
+func TestListMessagesPreservesExplicitZeroCursor(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryStore()
+	svc := NewService(store, testUsers{})
+	c, err := svc.Create(ctx, auth.Identity{UserID: "admin"}, CreateRequest{Name: "Group"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.ListMessages(ctx, auth.Identity{UserID: "admin"}, c.ID, CursorQuery{AfterSet: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !store.lastCursor.AfterSet || store.lastCursor.After != 0 {
+		t.Fatalf("cursor = %+v, want explicit after=0", store.lastCursor)
 	}
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/auth_provider.dart';
+import 'providers/calendar_provider.dart';
 import 'services/calendar_notification_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_screen.dart';
@@ -27,9 +28,23 @@ class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
     });
   }
  
+  void _onAuthSessionChange(AuthState? prev, AuthState next) {
+    final prevUserId = prev?.user?.id;
+    final nextUserId = next.user?.id;
+    if (prevUserId != nextUserId) {
+      ref.read(calendarProvider.notifier).reset();
+      if (nextUserId == null) {
+        CalendarNotificationService.instance.clearForLogout();
+      }
+    } else if (prev?.user?.churchId != next.user?.churchId) {
+      ref.read(calendarProvider.notifier).refreshSchedule();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    ref.listen<AuthState>(authProvider, _onAuthSessionChange);
 
     return MaterialApp(
       title: 'Believers Palace',

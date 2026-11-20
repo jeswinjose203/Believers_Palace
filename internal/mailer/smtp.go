@@ -45,13 +45,10 @@ func (m *SMTPMailer) SendPasswordReset(_ context.Context, email, resetToken stri
 }
 
 // SendEmailVerification sends an email verification email.
-func (m *SMTPMailer) SendEmailVerification(_ context.Context, email, verifyToken string) error {
-	link := emailVerificationLink(m.cfg.BaseURL, verifyToken)
-	body := "Welcome to Believers Palace!\r\n\r\n" +
-		"Please verify your email address by opening this link:\r\n\r\n" +
-		link + "\r\n\r\n" +
-		"Or use this token directly: " + verifyToken + "\r\n\r\n" +
-		"If you did not create an account, you can ignore this email."
+func (m *SMTPMailer) SendEmailVerification(_ context.Context, email, code string) error {
+	body := "Your Believers Palace verification code is " + code + ".\r\n\r\n" +
+		"Enter this code in the app within 10 minutes to verify your email.\r\n\r\n" +
+		"If you did not request this code, you can ignore this email."
 	return m.send(email, "Believers Palace - Verify Your Email", body)
 }
 

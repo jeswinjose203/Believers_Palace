@@ -87,8 +87,13 @@ func (h *Handler) patchPreferences(w http.ResponseWriter, r *http.Request) {
  
 func (h *Handler) listEvents(w http.ResponseWriter, r *http.Request) {
     id := auth.MustFromContext(r.Context())
+    q, err := ParseEventListQuery(r)
+    if err != nil {
+        httpx.ErrorCode(w, http.StatusBadRequest, err.Error(), "bad_request")
+        return
+    }
     pp := httpx.ParsePageParams(r)
-    items, total, err := h.svc.ListEvents(r.Context(), id, r.URL.Query().Get("search"), r.URL.Query().Get("category"), pp.Limit, pp.Offset)
+    items, total, err := h.svc.ListEvents(r.Context(), id, q, pp.Limit, pp.Offset)
     if err != nil {
         h.writeError(w, err)
         return
@@ -197,7 +202,7 @@ func (h *Handler) deleteTask(w http.ResponseWriter, r *http.Request) {
  
 func (h *Handler) schedule(w http.ResponseWriter, r *http.Request) {
     id := auth.MustFromContext(r.Context())
-    from, to, err := parseRange(r)
+    from, to, err := h.svc.ParseScheduleRange(r)
     if err != nil {
         httpx.ErrorCode(w, http.StatusBadRequest, err.Error(), "bad_request")
         return
@@ -223,9 +228,14 @@ func (h *Handler) listGoals(w http.ResponseWriter, r *http.Request) {
  
 func (h *Handler) createGoal(w http.ResponseWriter, r *http.Request) {
     id := auth.MustFromContext(r.Context())
-    var in GoalRequest
-    if err := httpx.DecodeJSON(r, &in); err != nil {
+    var raw flexibleGoalRequest
+    if err := httpx.DecodeJSON(r, &raw); err != nil {
         httpx.ErrorCode(w, http.StatusBadRequest, "invalid JSON body", "bad_request")
+        return
+    }
+    in, err := raw.toGoalRequest()
+    if err != nil {
+        httpx.ErrorCode(w, http.StatusBadRequest, err.Error(), "bad_request")
         return
     }
     g, err := h.svc.CreateGoal(r.Context(), id, in)
@@ -238,9 +248,14 @@ func (h *Handler) createGoal(w http.ResponseWriter, r *http.Request) {
  
 func (h *Handler) updateGoal(w http.ResponseWriter, r *http.Request) {
     id := auth.MustFromContext(r.Context())
-    var in GoalRequest
-    if err := httpx.DecodeJSON(r, &in); err != nil {
+    var raw flexibleGoalRequest
+    if err := httpx.DecodeJSON(r, &raw); err != nil {
         httpx.ErrorCode(w, http.StatusBadRequest, "invalid JSON body", "bad_request")
+        return
+    }
+    in, err := raw.toGoalRequest()
+    if err != nil {
+        httpx.ErrorCode(w, http.StatusBadRequest, err.Error(), "bad_request")
         return
     }
     g, err := h.svc.UpdateGoal(r.Context(), id, chi.URLParam(r, "goalId"), in)
@@ -326,22 +341,6 @@ func (h *Handler) holidays(w http.ResponseWriter, r *http.Request) {
     httpx.JSON(w, http.StatusOK, map[string]any{"data": items})
 }
  
-func parseRange(r *http.Request) (time.Time, time.Time, error) {
-    fromS := r.URL.Query().Get("from")
-    toS := r.URL.Query().Get("to")
-    if fromS == "" || toS == "" {
-        return time.Time{}, time.Time{}, errors.New("from and to are required (RFC3339)")
-    }
-    from, err := time.Parse(time.RFC3339, fromS)
-    if err != nil {
-        return time.Time{}, time.Time{}, errors.New("invalid from")
-    }
-    to, err := time.Parse(time.RFC3339, toS)
-    if err != nil {
-        return time.Time{}, time.Time{}, errors.New("invalid to")
-    }
-    return from, to, nil
-}
  
 func (h *Handler) writeError(w http.ResponseWriter, err error) {
     var ve *ValidationError

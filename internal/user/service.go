@@ -2,9 +2,12 @@ package user
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
+	"fmt"
 	"log"
 	"log/slog"
+	"math/big"
 	"net/mail"
 	"strings"
 	"time"
@@ -32,7 +35,6 @@ type Service struct {
 	mailer     mailer.Mailer
 	refreshTTL time.Duration
 	resetTTL   time.Duration
-	verifyTTL  time.Duration
 	logTokens  bool
 }
 
@@ -48,7 +50,6 @@ func NewService(repo *Repository, tokens *auth.TokenManager, m mailer.Mailer, re
 		mailer:     m,
 		refreshTTL: refreshTTL,
 		resetTTL:   resetTTL,
-		verifyTTL:  24 * time.Hour,
 	}
 }
 
@@ -77,7 +78,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*AuthResponse
 		return nil, err
 	}
 
-	// Send an email verification token (soft verification: the account is
+	// Send an email verification code (soft verification: the account is
 	// usable immediately, emailVerified becomes true once verified). A failure
 	// to send must not fail registration.
 	if err := s.issueEmailVerification(ctx, u); err != nil {
@@ -87,27 +88,41 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*AuthResponse
 	return s.authResponse(ctx, u)
 }
 
-// issueEmailVerification creates a verification token and sends it.
+// issueEmailVerification creates a six-digit code and sends it.
 func (s *Service) issueEmailVerification(ctx context.Context, u *User) error {
-	raw, hash, err := auth.GenerateOpaqueToken()
+	number, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
 	if err != nil {
 		return err
 	}
-	if err := s.repo.StoreEmailVerificationToken(ctx, u.ID, hash, time.Now().Add(s.verifyTTL)); err != nil {
+	code := fmt.Sprintf("%06d", number.Int64())
+	hash := s.tokens.HashEmailVerificationCode(u.Email, code)
+	issued, err := s.repo.StoreEmailVerificationCode(ctx, u.ID, hash)
+	if err != nil || !issued {
 		return err
 	}
 	if s.logTokens {
-		slog.Info("email verification token issued",
+		slog.Info("email verification code issued",
 			slog.String("email", u.Email),
-			slog.String("token", raw),
+			slog.String("code", code),
 		)
 	}
-	return s.mailer.SendEmailVerification(ctx, u.Email, raw)
+	if err := s.mailer.SendEmailVerification(ctx, u.Email, code); err != nil {
+		return errors.Join(err, s.repo.DeleteEmailVerificationCode(ctx, u.ID, hash))
+	}
+	return nil
 }
 
-// VerifyEmail consumes a verification token and marks the user's email verified.
+// VerifyEmail marks the user's email verified using a code or a legacy token.
 func (s *Service) VerifyEmail(ctx context.Context, in VerifyEmailInput) error {
-	if strings.TrimSpace(in.Token) == "" {
+	in.Token = strings.TrimSpace(in.Token)
+	if in.Email != "" || len(in.Token) == 6 {
+		email := strings.ToLower(strings.TrimSpace(in.Email))
+		if !validEmail(email) || len(in.Token) != 6 || strings.Trim(in.Token, "0123456789") != "" {
+			return invalid("email and a six-digit verification code are required")
+		}
+		return s.repo.VerifyEmailCode(ctx, email, s.tokens.HashEmailVerificationCode(email, in.Token))
+	}
+	if in.Token == "" {
 		return invalid("token is required")
 	}
 	userID, err := s.repo.ConsumeEmailVerificationToken(ctx, auth.HashToken(in.Token))
@@ -117,7 +132,7 @@ func (s *Service) VerifyEmail(ctx context.Context, in VerifyEmailInput) error {
 	return s.repo.MarkEmailVerified(ctx, userID)
 }
 
-// ResendVerification re-issues a verification token. To avoid account
+// ResendVerification re-issues a verification code. To avoid account
 // enumeration it always succeeds regardless of whether the email exists or is
 // already verified.
 func (s *Service) ResendVerification(ctx context.Context, in ResendVerificationInput) error {

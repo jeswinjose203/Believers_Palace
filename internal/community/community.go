@@ -7,6 +7,7 @@ type Community struct {
 	CreatorID   string    `json:"creatorId"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
+	Image       *string   `json:"image,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
 	Status      string    `json:"status,omitempty"`
 	IsAdmin     bool      `json:"isAdmin,omitempty"`
@@ -34,8 +35,9 @@ type Message struct {
 }
 
 type CreateRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Image       *string `json:"image"`
 }
 
 type MessageRequest struct {
@@ -43,9 +45,10 @@ type MessageRequest struct {
 }
 
 type CursorQuery struct {
-	Before int64
-	After  int64
-	Limit  int
+	Before   int64
+	After    int64
+	AfterSet bool
+	Limit    int
 }
 
 type CursorPage struct {

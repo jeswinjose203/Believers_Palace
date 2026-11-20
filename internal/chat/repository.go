@@ -126,9 +126,10 @@ func (r *Repository) ListByEvent(ctx context.Context, eventID string, limit, off
 
 // ListCursor returns a window of messages ordered oldest-first plus whether
 // more messages exist beyond the window:
-//   - After > 0:  messages newer than After (oldest first); hasMore = more newer.
+//   - AfterSet:   messages newer than After (oldest first); hasMore = more newer.
 //   - Before > 0: the newest messages older than Before; hasMore = more older.
-//   - neither:    the latest messages; hasMore = more older.
+//   - neither:    the latest messages; hasMore = more older. AfterSet supports
+//     an explicit zero cursor for polling an empty conversation.
 func (r *Repository) ListCursor(ctx context.Context, eventID string, q CursorQuery) ([]Message, bool, error) {
 	var (
 		query      string
@@ -136,7 +137,7 @@ func (r *Repository) ListCursor(ctx context.Context, eventID string, q CursorQue
 		descending bool
 	)
 	switch {
-	case q.After > 0:
+	case q.AfterSet || q.After > 0:
 		query = `SELECT ` + columns + ` FROM event_messages
 			WHERE event_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3`
 		args = []any{eventID, q.After, q.Limit + 1}

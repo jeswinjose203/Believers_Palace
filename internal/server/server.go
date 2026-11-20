@@ -27,6 +27,7 @@ import (
 	"believers_palace/internal/hall"
 	"believers_palace/internal/httpx"
 	"believers_palace/internal/mailer"
+	"believers_palace/internal/marketplace"
 	"believers_palace/internal/media"
 	"believers_palace/internal/personalcalendar"
 	"believers_palace/internal/user"
@@ -121,6 +122,10 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	communitySvc := community.NewService(communityRepo, userDisplayResolver{userRepo})
 	communityHandler := community.NewHandler(communitySvc)
 
+	marketplaceRepo := marketplace.NewRepository(pool)
+	marketplaceSvc := marketplace.NewService(marketplaceRepo, userDisplayResolver{userRepo})
+	marketplaceHandler := marketplace.NewHandler(marketplaceSvc)
+
 	cemeteryRepo := cemetery.NewRepository(pool)
 	cemeterySvc := cemetery.NewService(cemeteryRepo, churchRepo)
 	cemeteryHandler := cemetery.NewHandler(cemeterySvc)
@@ -141,7 +146,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	mediaHandler := media.NewHandler(mediaSvc)
  
     personalCalRepo := personalcalendar.NewRepository(pool)
-    personalCalSvc := personalcalendar.NewService(personalCalRepo, bookingRepo, eventRepo)
+    personalCalSvc := personalcalendar.NewService(personalCalRepo, bookingRepo, eventRepo, userRepo)
     personalCalHandler := personalcalendar.NewHandler(personalCalSvc)
  
 	// Health check.
@@ -199,6 +204,9 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 			protected.Mount("/catechism-enrollments", catechismHandler.EnrollmentRoutes())
 			protected.Mount("/catechism-sessions", catechismHandler.SessionRoutes())
 			protected.Mount("/communities", communityHandler.Routes())
+			protected.Mount("/events", eventHandler.RoutesWith(chatHandler.EventRoutes(userRepo.RequireVerifiedEmail)))
+			protected.Mount("/communities", communityHandler.Routes(userRepo.RequireVerifiedEmail))
+			protected.Mount("/marketplace", marketplaceHandler.Routes())
 			protected.Mount("/cemetery-service-requests", cemeteryHandler.RequestRoutes())
 			protected.Mount("/cemetery-plots", cemeteryHandler.PlotRoutes())
 			protected.Mount("/certificates", certificateHandler.Routes())

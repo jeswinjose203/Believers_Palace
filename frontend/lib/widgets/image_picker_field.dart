@@ -12,12 +12,14 @@ class ImagePickerField extends ConsumerStatefulWidget {
   final String label;
   final String? initialUrl;
   final ValueChanged<String?> onChanged;
+  final ValueChanged<bool>? onUploadingChanged;
 
   const ImagePickerField({
     super.key,
     required this.label,
     this.initialUrl,
     required this.onChanged,
+    this.onUploadingChanged,
   });
 
   @override
@@ -70,6 +72,7 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
     }
 
     setState(() => _uploading = true);
+    widget.onUploadingChanged?.call(true);
     try {
       final url = await ref
           .read(apiServiceProvider)
@@ -79,6 +82,7 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
         _url = url;
         _uploading = false;
       });
+      widget.onUploadingChanged?.call(false);
       widget.onChanged(url);
     } catch (e) {
       if (!mounted) return;
@@ -86,6 +90,7 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
         _uploading = false;
         _error = e.toString();
       });
+      widget.onUploadingChanged?.call(false);
     }
   }
 

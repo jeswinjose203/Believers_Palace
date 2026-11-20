@@ -37,8 +37,10 @@ believers_palace/
 │   ├── personalcalendar/   # per-user calendar, tasks, goals, schedule
 │   ├── cemetery/           # cemetery plots + service requests
 │   ├── certificate/        # per-user PDF certificate storage
+│   ├── marketplace/        # community ads + shop catalog
 │   └── server/             # router + middleware wiring
 ├── migrations/             # SQL migrations (0001..0018)
+├── migrations/             # SQL migrations (0001..0021)
 ├── .env.example
 ├── Makefile
 └── go.mod
@@ -181,10 +183,11 @@ implementation (`MAIL_PROVIDER=log`) logs the reset/verification token to the
 server log; set `MAIL_PROVIDER=smtp` with the `SMTP_*`/`MAIL_FROM` vars to send
 real email (e.g. via Gmail).
 
-New users receive an email verification token on registration. Verification is
-"soft": accounts are usable immediately and `emailVerified` becomes true once
-the user calls `/auth/verify-email` with their token (`/auth/resend-verification`
-re-issues one).
+New users receive a six-digit email verification code on registration. In Profile,
+tap the email address to request or enter a code. The verified icon appears after
+confirmation. Codes expire after 10 minutes or five failed attempts, and a new
+code can be issued once per minute. The app passes the email and code (as
+`token`) to `/auth/verify-email`.
 
 ### Users
 | Method | Path                   | Access                         |
@@ -229,10 +232,13 @@ super_admin.
 
 **Event chat:** every event has a chat (`GET /events/{eventId}/messages`,
 paginated, oldest-first; `POST /events/{eventId}/messages` with `{content}`).
+Reading, posting, and deleting messages in event and community chats requires
+a verified email. The API returns `403 email_verification_required` for
+unverified accounts.
 If the event has `registrationRequired: true`, only users who registered
 (`POST /events/{eventId}/register`) and church staff of the owning church (plus
 super_admin) may read and post; anyone else gets `403` with code
-`not_registered`. If `registrationRequired` is false, any authenticated user may
+`not_registered`. If `registrationRequired` is false, any verified user may
 chat and registration is not offered in the app. Admins can see the attendee
 list and count via `GET /events/{eventId}/registrations` (`pagination.total`).
 Users can cancel their own registration with `DELETE /events/{eventId}/register`
@@ -343,6 +349,26 @@ header) so they load directly in `<img>`/`NetworkImage`. The returned URL is
 built from `PUBLIC_BASE_URL`, so set that to your externally reachable base URL
 in production.
 
+### Marketplace (migration 0021)
+
+Authenticated **Marketplace** for member-to-member sales and a separate **shop**
+catalog. Community listings require admin approval before they appear in browse;
+users manage their own ads. Admins manage categories (per `community` / `shop`
+scope), moderate ads, and CRUD shop products.
+
+| Method | Path | Access |
+|--------|------|--------|
+| GET | `/marketplace/categories?scope=community\|shop` | any authenticated |
+| POST/PUT/DELETE | `/marketplace/categories[...]` | church_admin / super_admin |
+| GET | `/marketplace/community-ads` | browse approved (+ sold) |
+| GET/POST | `/marketplace/community-ads/mine`, `POST /marketplace/community-ads` | owner flows |
+| GET | `/marketplace/community-ads/admin` | admin moderation queue |
+| POST | `/marketplace/community-ads/{id}/approve\|reject\|sold` | admin or owner (sold) |
+| GET | `/marketplace/shop/products` | active shop catalog |
+| POST/PUT/DELETE | `/marketplace/shop/products[...]` | church_admin / super_admin |
+
+See [interfaces.md](interfaces.md) for query parameters and payloads.
+
 ### Example
 
 ```bash
@@ -360,19 +386,25 @@ curl -X POST "http://localhost:8080/api/users/$USER_ID/certificates" \
   -F 'certificateNumber=BAP-001' \
   -F 'fullName=Jane Doe'
 ```
-## Personal calendar (migration 0017)
+## Personal calendar (migrations 0017, 0020)
  
-Authenticated users have a private calendar at `/api/users/me/calendar/*`:
+Authenticated users have a **per-user** private calendar at `/api/users/me/calendar/*`. Events, tasks, goals, check-ins, achievements, and preferences are stored with `user_id` and are never shared between accounts. The aggregated **schedule** also includes defaults only: public holidays (country from the user's preferences) and church platform events for the church selected on the user's profile (`users.church_id`, not the JWT claim). After logout or switching accounts, the Flutter app clears in-memory calendar state and local reminders.
  
-- Personal events (categories, colors, recurrence, local reminder metadata)
-- Tasks with due dates
-- Goals with daily check-ins and achievements
-- `GET /users/me/calendar/schedule` aggregates personal items, the user’s hall bookings, all church events for their selected church, public holidays (default India via Nager.Date), and goal check-in markers
+Endpoints:
+ 
+- Personal events (categories, colors, recurrence, local reminder metadata; edit/delete in app)
+- `GET /users/me/calendar/events` — optional query: `search`, `category`, `fromDate`/`toDate` (`YYYY-MM-DD`), `upcomingDays`, `order` (`asc`|`desc`)
+- Tasks with due **date and time** (`due_date` is `TIMESTAMPTZ`, default timezone `Asia/Kolkata`)
+- Goals with daily check-ins and achievements (check in for the **selected calendar day**, not only “today”)
+- `GET /users/me/calendar/schedule` — prefer query `fromDate` / `toDate` (`YYYY-MM-DD`, inclusive, user timezone) plus aggregated bookings, church events, holidays, and goal check-in markers
+ 
+Apply migration **0020** (`calendar_tasks.due_date` → timestamptz, `user_calendar_preferences.timezone`).
  
 The Flutter app adds **Calendar** and **Catechism** bottom-nav tabs (catechism
 when a church is selected). Local reminders use `flutter_local_notifications`
 (Android: `POST_NOTIFICATIONS` and exact-alarm permissions in `AndroidManifest.xml`).
 Run `flutter pub get` in `frontend/` after pulling.
+The Flutter app adds a **Calendar** bottom-nav tab with **Events** sub-tab: collapsible upcoming (7 days) personal events, full dated event list with edit/delete, and a simplified main calendar month view (selected day only). Local reminders use `flutter_local_notifications` with timezone `Asia/Kolkata`, event lead times from `reminderMinutes`, and task due-time alerts (Android: `POST_NOTIFICATIONS` and `SCHEDULE_EXACT_ALARM` in `AndroidManifest.xml`). Run `flutter pub get` in `frontend/` after pulling.
 
 ## Testing
 

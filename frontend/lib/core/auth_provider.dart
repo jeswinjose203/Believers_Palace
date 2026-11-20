@@ -123,7 +123,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = AuthState(user: user, isLoading: false);
   }
 
-  /// Requests a new email verification link for the current user's address.
+  /// Requests an email verification code for the current user's address.
   Future<void> resendVerification() async {
     final email = state.user?.email;
     if (email == null) return;

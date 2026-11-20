@@ -84,6 +84,7 @@ type ResetPasswordInput struct {
 
 // VerifyEmailInput is the payload for verifying an email address.
 type VerifyEmailInput struct {
+	Email string `json:"email"`
 	Token string `json:"token"`
 }
 

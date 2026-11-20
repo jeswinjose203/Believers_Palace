@@ -3,13 +3,15 @@ class CalendarPreferences {
   final String dateFormat;
   final String weekStartsOn;
   final String holidayCountry;
+  final String timezone;
   final Map<String, String> categoryColors;
- 
+
   CalendarPreferences({
     required this.theme,
     required this.dateFormat,
     required this.weekStartsOn,
     required this.holidayCountry,
+    required this.timezone,
     required this.categoryColors,
   });
  
@@ -19,6 +21,7 @@ class CalendarPreferences {
         dateFormat: json['dateFormat'] as String? ?? 'dmy',
         weekStartsOn: json['weekStartsOn'] as String? ?? 'monday',
         holidayCountry: json['holidayCountry'] as String? ?? 'IN',
+        timezone: json['timezone'] as String? ?? 'Asia/Kolkata',
         categoryColors: Map<String, String>.from(
           (json['categoryColors'] as Map<String, dynamic>? ?? {}),
         ),
@@ -184,8 +187,8 @@ class ScheduleItem {
   final bool? completed;
   final String? status;
   final String? goalId;
-  final bool? checkedInToday;
- 
+  final bool? checkedInOnDay;
+
   ScheduleItem({
     required this.kind,
     this.id,
@@ -199,7 +202,7 @@ class ScheduleItem {
     this.completed,
     this.status,
     this.goalId,
-    this.checkedInToday,
+    this.checkedInOnDay,
   });
  
   factory ScheduleItem.fromJson(Map<String, dynamic> json) => ScheduleItem(
@@ -227,7 +230,7 @@ class ScheduleItem {
         completed: json['completed'] as bool?,
         status: json['status'] as String?,
         goalId: json['goalId'] as String?,
-        checkedInToday: json['checkedInToday'] as bool?,
+        checkedInOnDay: json['checkedInOnDay'] as bool? ?? json['checkedInToday'] as bool?,
       );
 }
  

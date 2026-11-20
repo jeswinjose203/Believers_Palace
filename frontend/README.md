@@ -43,6 +43,13 @@ A Flutter mobile/web frontend for the Believers Palace church management API.
 - My bookings list and cancel
 - My certificates list, download, and PDF upload
 - Profile view and edit, plus "log out everywhere"
+- Incoming message alerts for joined communities and event chats opened on this
+  device while the app is running in the foreground. The bell in each chat
+  saves that chat's mute setting for the signed-in account on the device.
+- **Joined** tab in Communities lists memberships and groups you administer.
+- **Marketplace** tab inside each church: community listings (search, categories, post/edit/delete,
+  mark sold, contact seller) and official **shop** catalog; admins moderate
+  pending ads and manage categories + shop products
 
 ## Authentication
 

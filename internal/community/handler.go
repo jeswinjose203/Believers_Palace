@@ -15,7 +15,7 @@ type Handler struct{ svc *Service }
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
-func (h *Handler) Routes() chi.Router {
+func (h *Handler) Routes(requireVerifiedEmail func(http.Handler) http.Handler) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.list)
 	r.Post("/", h.create)
@@ -26,9 +26,12 @@ func (h *Handler) Routes() chi.Router {
 	r.Get("/{communityId}/members", h.members)
 	r.Delete("/{communityId}/members/{userId}", h.remove)
 	r.Delete("/{communityId}/leave", h.leave)
-	r.Get("/{communityId}/messages", h.listMessages)
-	r.Post("/{communityId}/messages", h.postMessage)
-	r.Delete("/{communityId}/messages/{messageId}", h.deleteMessage)
+	r.Group(func(r chi.Router) {
+		r.Use(requireVerifiedEmail)
+		r.Get("/{communityId}/messages", h.listMessages)
+		r.Post("/{communityId}/messages", h.postMessage)
+		r.Delete("/{communityId}/messages/{messageId}", h.deleteMessage)
+	})
 	return r
 }
 
@@ -103,22 +106,26 @@ func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
-func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
+func parseCursorQuery(r *http.Request) (CursorQuery, error) {
 	v := r.URL.Query()
 	q := CursorQuery{Limit: defaultCursorLimit}
-	parse := func(key string) (int64, error) {
+	parse := func(key string, allowZero bool) (int64, error) {
 		if !v.Has(key) {
 			return 0, nil
 		}
 		n, e := strconv.ParseInt(v.Get(key), 10, 64)
-		if e != nil || n < 1 {
+		if e != nil || n < 0 || (!allowZero && n == 0) {
+			if allowZero {
+				return 0, &ValidationError{key + " must be a non-negative integer"}
+			}
 			return 0, &ValidationError{key + " must be a positive integer"}
 		}
 		return n, nil
 	}
 	var err error
-	if q.Before, err = parse("before"); err == nil {
-		q.After, err = parse("after")
+	if q.Before, err = parse("before", false); err == nil {
+		q.AfterSet = v.Has("after")
+		q.After, err = parse("after", true)
 	}
 	if err == nil && v.Has("limit") {
 		q.Limit, err = strconv.Atoi(v.Get("limit"))
@@ -126,6 +133,14 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 			err = &ValidationError{"limit must be a positive integer"}
 		}
 	}
+	if err != nil {
+		return q, err
+	}
+	return q, nil
+}
+
+func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
+	q, err := parseCursorQuery(r)
 	if err != nil {
 		h.writeError(w, err)
 		return

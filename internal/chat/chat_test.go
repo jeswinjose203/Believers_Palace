@@ -240,6 +240,16 @@ func TestListCursor(t *testing.T) {
 			t.Errorf("err = %v, want ErrEventNotFound", err)
 		}
 	})
+	t.Run("explicit zero after cursor is preserved", func(t *testing.T) {
+		store := newFakeStore()
+		svc := NewService(store, events, fakeUsers{}, regs)
+		if _, err := svc.ListCursor(context.Background(), member, "e1", CursorQuery{AfterSet: true}); err != nil {
+			t.Fatal(err)
+		}
+		if !store.lastCursor.AfterSet || store.lastCursor.After != 0 {
+			t.Fatalf("cursor = %+v, want explicit after=0", store.lastCursor)
+		}
+	})
 	t.Run("limit defaults and clamps", func(t *testing.T) {
 		store := newFakeStore()
 		svc := NewService(store, events, fakeUsers{}, regs)
@@ -266,15 +276,18 @@ func TestParseCursorQuery(t *testing.T) {
 		wantErr    bool
 		before     int64
 		after      int64
+		afterSet   bool
 		limit      int
 	}{
-		{"/?page=1&limit=100", false, false, 0, 0, 0},
-		{"/?latest=1", true, false, 0, 0, DefaultCursorLimit},
-		{"/?after=12&limit=20", true, false, 0, 12, 20},
-		{"/?before=40", true, false, 40, 0, DefaultCursorLimit},
-		{"/?after=abc", true, true, 0, 0, 0},
-		{"/?before=0", true, true, 0, 0, 0},
-		{"/?latest=1&limit=-3", true, true, 0, 0, 0},
+		{"/?page=1&limit=100", false, false, 0, 0, false, 0},
+		{"/?latest=1", true, false, 0, 0, false, DefaultCursorLimit},
+		{"/?after=12&limit=20", true, false, 0, 12, true, 20},
+		{"/?after=0", true, false, 0, 0, true, DefaultCursorLimit},
+		{"/?before=40", true, false, 40, 0, false, DefaultCursorLimit},
+		{"/?after=-1", true, true, 0, 0, true, 0},
+		{"/?after=abc", true, true, 0, 0, true, 0},
+		{"/?before=0", true, true, 0, 0, false, 0},
+		{"/?latest=1&limit=-3", true, true, 0, 0, false, 0},
 	}
 	for _, c := range cases {
 		q, isCursor, err := parseCursorQuery(httptest.NewRequest("GET", c.url, nil))
@@ -286,7 +299,7 @@ func TestParseCursorQuery(t *testing.T) {
 			t.Errorf("%s: err = %v, wantErr %v", c.url, err, c.wantErr)
 			continue
 		}
-		if err == nil && isCursor && (q.Before != c.before || q.After != c.after || q.Limit != c.limit) {
+		if err == nil && isCursor && (q.Before != c.before || q.After != c.after || q.AfterSet != c.afterSet || q.Limit != c.limit) {
 			t.Errorf("%s: got %+v", c.url, q)
 		}
 	}

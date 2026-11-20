@@ -1,31 +1,96 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
- 
+
 import '../core/auth_provider.dart';
-import '../widgets/verify_email_banner.dart';
+import '../services/calendar_reminder_sync.dart';
+import '../services/chat_notification_service.dart';
 import 'admin_users_screen.dart';
-import 'certificates_screen.dart';
-import 'calendar_screen.dart';
 import 'communities_screen.dart';
 import 'home_screen.dart';
-import 'my_bookings_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
 import '../features/catechism/screens/catechism_list_screen.dart';
 import '../features/catechism/screens/my_enrollments_screen.dart';
  
+
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
- 
+
   @override
   ConsumerState<MainScreen> createState() => _MainScreenState();
 }
- 
-class _MainScreenState extends ConsumerState<MainScreen> {
+
+class _MainScreenState extends ConsumerState<MainScreen>
+    with WidgetsBindingObserver {
   int _index = 0;
- 
+  Timer? _chatTimer;
+  late final _chatNotifications = ref.read(chatNotificationServiceProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncReminders());
+    _startChatNotifications();
+  }
+
+  @override
+  void dispose() {
+    _stopChatNotifications();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _syncReminders();
+      _startChatNotifications();
+    } else {
+      _stopChatNotifications();
+    }
+  }
+
+  void _startChatNotifications() {
+    _chatTimer?.cancel();
+    _chatTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      final user = ref.read(authProvider).user;
+      if (user == null || !user.emailVerified) return;
+      _chatNotifications.poll(user.id, (title, body) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('$title\n$body',
+                  maxLines: 3, overflow: TextOverflow.ellipsis)),
+        );
+      });
+    });
+  }
+
+  void _stopChatNotifications() {
+    _chatTimer?.cancel();
+    _chatNotifications.pause();
+  }
+
+  Future<void> _syncReminders() async {
+    if (!ref.read(authProvider).isAuthenticated) return;
+    final result = await syncCalendarReminders(ref);
+    if (!mounted) return;
+    showCalendarReminderPermissionHint(context, result);
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen(
+      authProvider
+          .select((state) => (state.user?.id, state.user?.emailVerified)),
+      (_, next) {
+        _chatNotifications.pause();
+        ScaffoldMessenger.of(context).clearSnackBars();
+      },
+    );
     final user = ref.watch(authProvider).user;
     final isSuperAdmin = user?.role == 'super_admin';
     // Only regular members get the church-aware home page; super admins and
@@ -34,7 +99,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     final churchId = user?.churchId;
     final hasChurch = churchId != null && churchId.isNotEmpty;
  
+
     final pages = <Widget>[
+      if (useHome) const HomeScreen(),
       // Everyone lands on the shared "Find your church" search page. Admins and
       // super admins get church management actions (Add/Edit/Delete) inline on
       // that same screen; regular members get the heart ("set my church").
@@ -52,7 +119,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       if (isSuperAdmin) const AdminUsersScreen(),
       const ProfileScreen(),
     ];
- 
+
     final items = <BottomNavigationBarItem>[
       const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
       const BottomNavigationBarItem(
@@ -65,30 +132,23 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       ),
       if (useHome)
         const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-      if (!isSuperAdmin)
-        const BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today), label: 'My Bookings'),
+      const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
       const BottomNavigationBarItem(
-          icon: Icon(Icons.school), label: 'Certificates'),
+          icon: Icon(Icons.groups), label: 'Communities'),
       if (isSuperAdmin)
         const BottomNavigationBarItem(
             icon: Icon(Icons.admin_panel_settings), label: 'Users'),
       const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
     ];
- 
+
     // Guard against an out-of-range index if the tab set changes (e.g. role
     // changes while the screen is mounted).
     final safeIndex = _index.clamp(0, pages.length - 1);
- 
+
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: Column(
-          children: [
-            const VerifyEmailBanner(),
-            Expanded(child: pages[safeIndex]),
-          ],
-        ),
+        child: pages[safeIndex],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: safeIndex,
@@ -99,4 +159,3 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     );
   }
 }
- 

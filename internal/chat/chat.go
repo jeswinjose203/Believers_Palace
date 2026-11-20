@@ -32,10 +32,12 @@ type CursorPage struct {
 	HasMore bool      `json:"hasMore"`
 }
 
-// CursorQuery selects a window of messages. With neither Before nor After set,
-// the latest messages are returned. Before and After are mutually exclusive.
+// CursorQuery selects a window of messages. With neither Before nor AfterSet,
+// the latest messages are returned. AfterSet allows an explicit zero cursor,
+// which is needed to read the first messages in an empty conversation.
 type CursorQuery struct {
-	Before int64
-	After  int64
-	Limit  int
+	Before   int64
+	After    int64
+	AfterSet bool
+	Limit    int
 }

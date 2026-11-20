@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
- 
+import '../core/calendar_time.dart';
 import '../models/calendar_models.dart';
 import '../services/api_service.dart';
  
@@ -18,7 +17,7 @@ class _TodayScheduleCardState extends ConsumerState<TodayScheduleCard> {
   Future<List<ScheduleItem>> _load() {
     final now = DateTime.now();
     final start = DateTime(now.year, now.month, now.day);
-    final end = start.add(const Duration(days: 2));
+    final end = start.add(const Duration(days: 1));
     return ref.read(apiServiceProvider).getCalendarSchedule(start, end);
   }
  
@@ -29,7 +28,7 @@ class _TodayScheduleCardState extends ConsumerState<TodayScheduleCard> {
   }
  
   Future<void> _checkIn(String goalId) async {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final today = CalendarTime.localDateToYmd(DateTime.now());
     await ref.read(apiServiceProvider).checkInGoal(goalId, today);
     setState(() => _future = _load());
   }
@@ -42,14 +41,13 @@ class _TodayScheduleCardState extends ConsumerState<TodayScheduleCard> {
         if (!snapshot.hasData) return const SizedBox.shrink();
         final today = DateTime.now();
         bool isToday(ScheduleItem i) {
-          DateTime? d = i.startAt ?? i.dueDate ?? i.date;
-          if (d == null) return false;
-          return d.year == today.year && d.month == today.month && d.day == today.day;
+          final d = i.startAt ?? i.dueDate ?? i.date;
+          return CalendarTime.onCalendarDay(d, today);
         }
  
         final items = snapshot.data!.where(isToday).take(6).toList();
         final goalsDue = snapshot.data!
-            .where((i) => i.kind == 'goal_checkin_due' && isToday(i) && i.checkedInToday != true)
+            .where((i) => i.kind == 'goal_checkin_due' && isToday(i) && i.checkedInOnDay != true)
             .toList();
  
         if (items.isEmpty && goalsDue.isEmpty) return const SizedBox.shrink();

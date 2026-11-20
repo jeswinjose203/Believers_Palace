@@ -1,11 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../core/auth_provider.dart';
 import '../models/community_models.dart';
 import '../services/api_service.dart';
+import '../services/chat_notification_service.dart';
+import '../widgets/chat_email_verification.dart';
+import '../widgets/chat_notification_button.dart';
+import '../widgets/group_chat_bubble.dart';
+import '../widgets/image_picker_field.dart';
 
 class CommunitiesScreen extends ConsumerStatefulWidget {
   const CommunitiesScreen({super.key});
@@ -44,15 +51,17 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
   }
 
   Future<void> _create() async {
-    final values = await showDialog<List<String>>(
+    final values = await showDialog<_CreateCommunityValues>(
       context: context,
       builder: (_) => const _CreateCommunityDialog(),
     );
-    if (values == null || values.first.isEmpty) return;
+    if (values == null || values.name.isEmpty) return;
     try {
-      final community = await ref
-          .read(apiServiceProvider)
-          .createCommunity(values[0], values[1]);
+      final community = await ref.read(apiServiceProvider).createCommunity(
+            values.name,
+            values.description,
+            image: values.image,
+          );
       if (!mounted) return;
       await Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => CommunityDetailScreen(community: community),
@@ -64,10 +73,10 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
   }
 
   Future<void> _open(Community community) async {
-    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+    await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => CommunityDetailScreen(community: community),
     ));
-    if (changed == true) _load();
+    if (mounted) _load();
   }
 
   void _showError(Object error) => ScaffoldMessenger.of(context)
@@ -76,55 +85,78 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Communities')),
-      floatingActionButton: user == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _create,
-              icon: const Icon(Icons.add),
-              label: const Text('Create'),
+    final joined = _communities
+        .where((community) => community.isAdmin || community.status == 'active')
+        .toList();
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Communities'),
+          bottom: const TabBar(
+            tabs: [Tab(text: 'All'), Tab(text: 'Joined')],
+          ),
+        ),
+        floatingActionButton: user == null
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: _create,
+                icon: const Icon(Icons.add),
+                label: const Text('Create'),
+              ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(child: Text('Could not load communities: $_error'))
+                : TabBarView(
+                    children: [
+                      _communityList(_communities, joinedOnly: false),
+                      _communityList(joined, joinedOnly: true),
+                    ],
+                  ),
+      ),
+    );
+  }
+
+  Widget _communityList(List<Community> items, {required bool joinedOnly}) {
+    final emptyText = joinedOnly
+        ? 'You haven’t joined any communities yet.'
+        : 'No communities yet.';
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: items.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                const SizedBox(height: 180),
+                Center(child: Text(emptyText)),
+              ],
+            )
+          : ListView.builder(
+              key: PageStorageKey(joinedOnly),
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final community = items[index];
+                final label = community.isAdmin
+                    ? 'Admin'
+                    : community.status == 'active'
+                        ? 'Member'
+                        : community.status == 'pending'
+                            ? 'Request pending'
+                            : 'Open';
+                return ListTile(
+                  leading: _CommunityAvatar(community: community),
+                  title: Text(community.name),
+                  subtitle: Text(community.description.isEmpty
+                      ? label
+                      : '${community.description}\n$label'),
+                  isThreeLine: community.description.isNotEmpty,
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _open(community),
+                );
+              },
             ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Text('Could not load communities: $_error'))
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: _communities.isEmpty
-                      ? ListView(
-                          children: const [
-                            SizedBox(height: 180),
-                            Center(child: Text('No communities yet.')),
-                          ],
-                        )
-                      : ListView.builder(
-                          itemCount: _communities.length,
-                          itemBuilder: (context, index) {
-                            final community = _communities[index];
-                            final label = community.isAdmin
-                                ? 'Admin'
-                                : community.status == 'active'
-                                    ? 'Member'
-                                    : community.status == 'pending'
-                                        ? 'Request pending'
-                                        : 'Open';
-                            return ListTile(
-                              leading: CircleAvatar(
-                                  child: Text(community.name.isEmpty
-                                      ? '?'
-                                      : community.name[0].toUpperCase())),
-                              title: Text(community.name),
-                              subtitle: Text(community.description.isEmpty
-                                  ? label
-                                  : '${community.description}\n$label'),
-                              isThreeLine: community.description.isNotEmpty,
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () => _open(community),
-                            );
-                          },
-                        ),
-                ),
     );
   }
 }
@@ -139,6 +171,8 @@ class _CreateCommunityDialog extends StatefulWidget {
 class _CreateCommunityDialogState extends State<_CreateCommunityDialog> {
   final _name = TextEditingController();
   final _description = TextEditingController();
+  String? _image;
+  bool _imageUploading = false;
 
   @override
   void dispose() {
@@ -150,32 +184,85 @@ class _CreateCommunityDialogState extends State<_CreateCommunityDialog> {
   @override
   Widget build(BuildContext context) => AlertDialog(
         title: const Text('Create community'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _name,
-              maxLength: 100,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            TextField(
-              controller: _description,
-              maxLength: 2000,
-              maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Description'),
-            ),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _name,
+                maxLength: 100,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              TextField(
+                controller: _description,
+                maxLength: 2000,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: 'Description'),
+              ),
+              ImagePickerField(
+                label: 'Community picture (optional)',
+                onChanged: (value) => setState(() => _image = value),
+                onUploadingChanged: (value) =>
+                    setState(() => _imageUploading = value),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel')),
           FilledButton(
-              onPressed: () => Navigator.pop(
-                  context, [_name.text.trim(), _description.text]),
+              onPressed: _imageUploading
+                  ? null
+                  : () => Navigator.pop(
+                        context,
+                        _CreateCommunityValues(
+                          name: _name.text.trim(),
+                          description: _description.text,
+                          image: _image,
+                        ),
+                      ),
               child: const Text('Create')),
         ],
       );
+}
+
+class _CreateCommunityValues {
+  final String name;
+  final String description;
+  final String? image;
+
+  const _CreateCommunityValues({
+    required this.name,
+    required this.description,
+    this.image,
+  });
+}
+
+class _CommunityAvatar extends StatelessWidget {
+  final Community community;
+
+  const _CommunityAvatar({required this.community});
+
+  @override
+  Widget build(BuildContext context) {
+    final image = community.image;
+    final initial = community.name.isEmpty ? '?' : community.name[0];
+    return CircleAvatar(
+      child: image == null || image.isEmpty
+          ? Text(initial.toUpperCase())
+          : ClipOval(
+              child: Image.network(
+                image,
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Text(initial.toUpperCase()),
+              ),
+            ),
+    );
+  }
 }
 
 class CommunityDetailScreen extends ConsumerStatefulWidget {
@@ -188,16 +275,28 @@ class CommunityDetailScreen extends ConsumerStatefulWidget {
       _CommunityDetailScreenState();
 }
 
-class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
+class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
+    with WidgetsBindingObserver {
+  static const _pageSize = 50;
+  static const _pollInterval = Duration(seconds: 3);
+  static const _maxBackoff = Duration(seconds: 30);
+
   final _input = TextEditingController();
   final _scroll = ScrollController();
   List<CommunityMessage> _messages = [];
   List<CommunityMembership> _requests = [];
   List<CommunityMembership> _members = [];
+  final List<_PendingCommunityMessage> _pending = [];
+  final Set<String> _fresh = {};
   bool _loading = true;
   bool _working = false;
   bool _hasMore = false;
   bool _polling = false;
+  bool _appResumed = true;
+  bool _offline = false;
+  int _failures = 0;
+  int _unseen = 0;
+  int _nextLocalId = 0;
   String? _error;
   late final bool _active =
       widget.community.status == 'active' || widget.community.isAdmin;
@@ -206,13 +305,28 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _scroll.addListener(_onScroll);
     _load();
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _poll());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _appResumed = true;
+      _poll();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _appResumed = false;
+      _timer?.cancel();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _scroll.removeListener(_onScroll);
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -220,34 +334,37 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
 
   ApiService get _api => ref.read(apiServiceProvider);
 
+  bool get _emailVerified => ref.read(authProvider).user?.emailVerified == true;
+
   Future<void> _load() async {
     try {
-      if (_active) {
+      if (_active && _emailVerified) {
         final page = await _api.listCommunityMessages(widget.community.id);
         if (!mounted) return;
         setState(() {
           _messages = page.data;
           _hasMore = page.hasMore;
         });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scroll.hasClients) {
-            _scroll.jumpTo(_scroll.position.maxScrollExtent);
-          }
-        });
-        if (widget.community.isAdmin) await _loadAdminLists();
       }
+      if (widget.community.isAdmin) await _loadAdminLists();
       if (mounted) {
         setState(() {
           _loading = false;
           _error = null;
+          _offline = false;
+          _failures = 0;
         });
+        if (_active) _scrollToBottom(animate: false);
+        _scheduleNext();
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = e.toString();
+        _failures++;
       });
+      _scheduleNext();
     }
   }
 
@@ -263,50 +380,118 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
     });
   }
 
+  void _scheduleNext() {
+    _timer?.cancel();
+    if (!mounted || !_active || !_appResumed || !_emailVerified) return;
+    var delay = _pollInterval;
+    if (_failures > 0) {
+      final seconds = _pollInterval.inSeconds * (1 << _failures.clamp(0, 5));
+      delay = Duration(seconds: seconds);
+      if (delay > _maxBackoff) delay = _maxBackoff;
+    }
+    _timer = Timer(delay, _poll);
+  }
+
+  bool get _atBottom =>
+      !_scroll.hasClients ||
+      _scroll.position.maxScrollExtent - _scroll.position.pixels < 60;
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    if (_scroll.position.pixels <= 120 && _hasMore) _loadOlder();
+    if (_unseen > 0 && _atBottom) setState(() => _unseen = 0);
+  }
+
+  void _scrollToBottom({bool animate = true}) {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!_scroll.hasClients) return;
+      final target = _scroll.position.maxScrollExtent;
+      if (animate) {
+        _scroll.animateTo(target,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic);
+      } else {
+        _scroll.jumpTo(target);
+      }
+    });
+  }
+
   Future<void> _poll() async {
-    if (!_active || _polling || _loading || !mounted) return;
+    if (!_active || _polling || _loading || !mounted || !_emailVerified) return;
     _polling = true;
     try {
-      var after = _messages.isEmpty ? null : _messages.last.seq;
-      final page =
-          await _api.listCommunityMessages(widget.community.id, after: after);
+      var cursor = _messages.isEmpty ? 0 : _messages.last.seq;
+      var hasMore = true;
+      final incoming = <CommunityMessage>[];
+      for (var pageIndex = 0; pageIndex < 5 && hasMore; pageIndex++) {
+        final page = await _api.listCommunityMessages(
+          widget.community.id,
+          after: cursor,
+          limit: _pageSize,
+        );
+        if (!mounted) return;
+        if (page.data.isEmpty) break;
+        incoming.addAll(page.data);
+        cursor = page.data.last.seq;
+        hasMore = page.hasMore;
+      }
       if (!mounted) return;
-      final known = _messages.map((m) => m.id).toSet();
-      final fresh = page.data.where((m) => !known.contains(m.id)).toList();
-      if (fresh.isNotEmpty) {
-        final atBottom = !_scroll.hasClients ||
-            _scroll.position.maxScrollExtent - _scroll.position.pixels < 60;
-        setState(() {
+      final known = _messages.map((message) => message.id).toSet();
+      final fresh = incoming.where((message) => known.add(message.id)).toList();
+      final wasAtBottom = _atBottom;
+      setState(() {
+        _offline = false;
+        _failures = 0;
+        _error = null;
+        if (fresh.isNotEmpty) {
+          _fresh.addAll(fresh.map((message) => message.id));
           _messages = [..._messages, ...fresh]
             ..sort((a, b) => a.seq.compareTo(b.seq));
-        });
-        if (atBottom) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_scroll.hasClients) {
-              _scroll.animateTo(_scroll.position.maxScrollExtent,
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOut);
-            }
-          });
+          if (!wasAtBottom) {
+            _unseen += fresh
+                .where((message) =>
+                    message.userId != ref.read(authProvider).user?.id)
+                .length;
+          }
         }
+      });
+      if (fresh.isNotEmpty && wasAtBottom) _scrollToBottom();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _failures++;
+          _offline = _failures >= 2;
+          if (_messages.isEmpty) _error = e.toString();
+        });
       }
-    } catch (_) {
-      // Keep the last messages visible; the next poll will retry.
     } finally {
       _polling = false;
+      _scheduleNext();
     }
   }
 
   Future<void> _loadOlder() async {
     if (!_active || !_hasMore || _messages.isEmpty || _working) return;
+    final oldMaxExtent =
+        _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0;
+    final oldOffset = _scroll.hasClients ? _scroll.offset : 0.0;
     setState(() => _working = true);
     try {
       final page = await _api.listCommunityMessages(widget.community.id,
           before: _messages.first.seq);
       if (!mounted) return;
       setState(() {
-        _messages = [...page.data, ..._messages];
+        final existing = _messages.map((message) => message.id).toSet();
+        final older =
+            page.data.where((message) => existing.add(message.id)).toList();
+        _messages = [...older, ..._messages];
         _hasMore = page.hasMore;
+      });
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (_scroll.hasClients) {
+          final addedExtent = _scroll.position.maxScrollExtent - oldMaxExtent;
+          _scroll.jumpTo(oldOffset + addedExtent);
+        }
       });
     } catch (e) {
       if (mounted) _showError(e);
@@ -331,24 +516,33 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
     }
   }
 
-  Future<void> _send() async {
-    final content = _input.text.trim();
+  Future<void> _send({_PendingCommunityMessage? retry}) async {
+    final content = retry?.content ?? _input.text.trim();
     if (content.isEmpty) return;
-    _input.clear();
+    final pending = retry ?? _PendingCommunityMessage(_nextLocalId++, content);
+    setState(() {
+      pending.failed = false;
+      if (retry == null) {
+        _pending.add(pending);
+        _input.clear();
+      }
+    });
+    _scrollToBottom();
     try {
       final message =
-          await _api.postCommunityMessage(widget.community.id, content);
+          await _api.postCommunityMessage(widget.community.id, pending.content);
       if (!mounted) return;
       setState(() {
-        if (!_messages.any((m) => m.id == message.id)) {
+        _pending.remove(pending);
+        if (_messages.every((item) => item.id != message.id)) {
+          _fresh.add(message.id);
           _messages = [..._messages, message];
+          _messages.sort((a, b) => a.seq.compareTo(b.seq));
         }
       });
-    } catch (e) {
-      if (mounted) {
-        _input.text = content;
-        _showError(e);
-      }
+      _scrollToBottom();
+    } catch (_) {
+      if (mounted) setState(() => pending.failed = true);
     }
   }
 
@@ -402,11 +596,47 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final verified = ref.watch(
+      authProvider.select((state) => state.user?.emailVerified == true),
+    );
+    ref.listen(
+      authProvider.select((state) => state.user?.emailVerified == true),
+      (_, verified) {
+        if (verified && _active) _load();
+      },
+    );
     final status = widget.community.status;
+    final subtitle = _active
+        ? widget.community.isAdmin
+            ? '${_members.length} member${_members.length == 1 ? '' : 's'}'
+            : 'Group chat'
+        : status == 'pending'
+            ? 'Membership request pending'
+            : 'Request to join';
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.community.name),
+        title: Row(
+          children: [
+            _CommunityAvatar(community: widget.community),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.community.name,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(subtitle, style: Theme.of(context).textTheme.labelSmall),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
+          if (_active && verified)
+            ChatNotificationButton(
+              kind: ChatKind.community,
+              id: widget.community.id,
+            ),
           if (_active)
             IconButton(
                 tooltip: 'Leave community',
@@ -414,24 +644,64 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
                 icon: const Icon(Icons.exit_to_app)),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Text('Could not load community: $_error'))
-              : !_active
-                  ? _joinState(status)
-                  : Column(
-                      children: [
-                        if (widget.community.description.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Text(widget.community.description),
-                          ),
-                        if (widget.community.isAdmin) _adminPanel(),
-                        Expanded(child: _chat()),
-                        _composer(),
-                      ],
-                    ),
+      body: _body(status, verified),
+    );
+  }
+
+  Widget _body(String status, bool verified) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null && _messages.isEmpty && _active) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Could not load messages: $_error'),
+            const SizedBox(height: 8),
+            FilledButton(onPressed: _load, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+    if (_error != null && !_active) {
+      return Center(child: Text('Could not load community: $_error'));
+    }
+    if (!_active) return _joinState(status);
+
+    return Column(
+      children: [
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          child: _offline
+              ? Container(
+                  width: double.infinity,
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.cloud_off, size: 16),
+                      SizedBox(width: 8),
+                      Text('Reconnecting…'),
+                    ],
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+        if (widget.community.description.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(widget.community.description,
+                  style: Theme.of(context).textTheme.bodySmall),
+            ),
+          ),
+        if (widget.community.isAdmin) _adminPanel(),
+        Expanded(
+          child: verified ? _chat() : const ChatEmailVerification(),
+        ),
+        if (verified) _composer(),
+      ],
     );
   }
 
@@ -491,67 +761,144 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen> {
         ],
       );
 
-  Widget _chat() => ListView.builder(
-        controller: _scroll,
-        padding: const EdgeInsets.all(12),
-        itemCount: _messages.length + (_hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (_hasMore && index == 0) {
-            return TextButton(
-                onPressed: _loadOlder,
-                child: const Text('Load older messages'));
-          }
-          final offset = _hasMore ? index - 1 : index;
-          final message = _messages[offset];
-          final mine = message.userId == ref.read(authProvider).user?.id;
-          return Align(
-            alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-            child: Card(
-              color: mine
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (!mine)
-                      Text(message.authorName,
-                          style: Theme.of(context).textTheme.labelSmall),
-                    Text(message.content),
-                    if (_canDelete(message))
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: InkWell(
-                          onTap: () => _delete(message),
-                          child: const Icon(Icons.delete_outline, size: 16),
-                        ),
-                      ),
-                  ],
+  Widget _chat() => Stack(
+        children: [
+          if (_messages.isEmpty && _pending.isEmpty)
+            ListView(
+              controller: _scroll,
+              children: const [
+                SizedBox(
+                  height: 240,
+                  child: Center(child: Text('No messages yet. Say hello!')),
+                ),
+              ],
+            )
+          else
+            ListView.builder(
+              controller: _scroll,
+              padding: const EdgeInsets.all(12),
+              itemCount:
+                  _messages.length + _pending.length + (_hasMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (_hasMore && index == 0) {
+                  return Center(
+                    child: TextButton(
+                      onPressed: _loadOlder,
+                      child: _working
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Load older messages'),
+                    ),
+                  );
+                }
+                final messageIndex = index - (_hasMore ? 1 : 0);
+                if (messageIndex >= _messages.length) {
+                  final pending = _pending[messageIndex - _messages.length];
+                  return GroupChatBubble(
+                    key: ValueKey('pending-${pending.localId}'),
+                    content: pending.content,
+                    authorName: '',
+                    mine: true,
+                    timeLabel: '',
+                    status: pending.failed
+                        ? ChatSendStatus.failed
+                        : ChatSendStatus.sending,
+                    onRetry:
+                        pending.failed ? () => _send(retry: pending) : null,
+                    onLongPress: pending.failed
+                        ? () => setState(() => _pending.remove(pending))
+                        : null,
+                    animate: true,
+                  );
+                }
+                final message = _messages[messageIndex];
+                final previous =
+                    messageIndex > 0 ? _messages[messageIndex - 1] : null;
+                final sentAt = message.createdAt.toLocal();
+                final previousSentAt = previous?.createdAt.toLocal();
+                final dateDivider = previousSentAt == null ||
+                        sentAt.year != previousSentAt.year ||
+                        sentAt.month != previousSentAt.month ||
+                        sentAt.day != previousSentAt.day
+                    ? DateFormat.yMMMd().format(sentAt)
+                    : null;
+                final mine = message.userId == ref.read(authProvider).user?.id;
+                final canDelete = _canDelete(message);
+                return GroupChatBubble(
+                  key: ValueKey(message.id),
+                  content: message.content,
+                  authorName: message.authorName,
+                  mine: mine,
+                  timeLabel: DateFormat.jm().format(sentAt),
+                  dateDivider: dateDivider,
+                  animate: _fresh.contains(message.id),
+                  onDelete: canDelete ? () => _delete(message) : null,
+                  onLongPress: canDelete ? () => _delete(message) : null,
+                );
+              },
+            ),
+          if (_unseen > 0)
+            Positioned(
+              bottom: 8,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: ActionChip(
+                  avatar: const Icon(Icons.arrow_downward, size: 16),
+                  label: Text('$_unseen new message${_unseen == 1 ? '' : 's'}'),
+                  onPressed: () {
+                    setState(() => _unseen = 0);
+                    _scrollToBottom();
+                  },
                 ),
               ),
             ),
-          );
-        },
+        ],
       );
 
   Widget _composer() => SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-          child: Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _input,
-                maxLines: 4,
-                minLines: 1,
-                decoration: const InputDecoration(
-                    hintText: 'Message', border: OutlineInputBorder()),
-                onSubmitted: (_) => _send(),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _input,
+                  maxLines: 4,
+                  minLines: 1,
+                  textInputAction: TextInputAction.send,
+                  decoration: InputDecoration(
+                    hintText: 'Message',
+                    filled: true,
+                    fillColor:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(26),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  onSubmitted: (_) => _send(),
+                ),
               ),
-            ),
-            IconButton.filled(onPressed: _send, icon: const Icon(Icons.send)),
-          ]),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                  onPressed: _send, icon: const Icon(Icons.send_rounded)),
+            ],
+          ),
         ),
       );
+}
+
+class _PendingCommunityMessage {
+  final int localId;
+  final String content;
+  bool failed = false;
+
+  _PendingCommunityMessage(this.localId, this.content);
 }

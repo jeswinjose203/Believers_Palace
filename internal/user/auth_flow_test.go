@@ -54,6 +54,19 @@ func TestVerifyEmailRequiresToken(t *testing.T) {
 	}
 }
 
+func TestVerifyEmailRejectsInvalidCodeInput(t *testing.T) {
+	s := newValidationOnlyService()
+	for _, in := range []VerifyEmailInput{
+		{Token: "012345"},
+		{Email: "jane@example.com", Token: "12345"},
+		{Email: "jane@example.com", Token: "01234a"},
+	} {
+		if err := s.VerifyEmail(context.Background(), in); err == nil {
+			t.Errorf("VerifyEmail(%+v) should fail validation", in)
+		}
+	}
+}
+
 func TestResendVerificationInvalidEmailIsNoOp(t *testing.T) {
 	s := newValidationOnlyService()
 	// Invalid email must return nil without touching the repo (no enumeration).

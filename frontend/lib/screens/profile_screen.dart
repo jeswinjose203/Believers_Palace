@@ -5,9 +5,12 @@ import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/image_picker_field.dart';
+import 'calendar_screen.dart';
+import 'certificates_screen.dart';
 import 'churches_screen.dart';
 import 'my_bookings_screen.dart';
 import 'settings_screen.dart';
+import 'verify_email_screen.dart';
 
 const kProfilePurple = Color(0xFF5B2A91);
 const kProfilePurpleLight = Color(0xFF7B3FB5);
@@ -109,6 +112,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 icon: Icons.mail_outline,
                 label: 'Email',
                 value: user.email,
+                trailing: user.emailVerified
+                    ? const Padding(
+                        padding: EdgeInsets.only(left: 8),
+                        child: Tooltip(
+                          message: 'Email verified',
+                          child: Icon(Icons.verified, color: Colors.green),
+                        ),
+                      )
+                    : null,
+                onTap: user.emailVerified
+                    ? null
+                    : () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const VerifyEmailScreen(),
+                          ),
+                        ),
               ),
               _InfoRow(
                 icon: Icons.phone_outlined,
@@ -138,16 +157,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   MaterialPageRoute(builder: (_) => const SettingsScreen()),
                 ),
               ),
+              _MenuRow(
+                icon: Icons.calendar_month,
+                title: 'Calendar',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CalendarScreen()),
+                ),
+              ),
               if (!isSuperAdmin)
                 _MenuRow(
                   icon: Icons.bookmark_border,
-                  title: 'My Activities',
-                  subtitle: 'Hall bookings',
+                  title: 'My Bookings',
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const MyBookingsScreen()),
+                    MaterialPageRoute(builder: (_) => const MyBookingsScreen()),
                   ),
                 ),
+              _MenuRow(
+                icon: Icons.school,
+                title: 'Certificates',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CertificatesScreen()),
+                ),
+              ),
               _MenuRow(
                 icon: Icons.favorite_border,
                 title: 'My Family',
@@ -412,12 +443,14 @@ class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
   final VoidCallback? onTap;
+  final Widget? trailing;
 
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
     this.onTap,
+    this.trailing,
   });
 
   @override
@@ -445,6 +478,7 @@ class _InfoRow extends StatelessWidget {
             ),
             if (onTap != null)
               const Icon(Icons.chevron_right, color: Colors.black54),
+            if (trailing != null) trailing!,
           ],
         ),
       ),
@@ -455,7 +489,6 @@ class _InfoRow extends StatelessWidget {
 class _MenuRow extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String? subtitle;
   final VoidCallback onTap;
   final Color? color;
   final bool showChevron;
@@ -464,7 +497,6 @@ class _MenuRow extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
-    this.subtitle,
     this.color,
     this.showChevron = true,
   });
@@ -491,10 +523,6 @@ class _MenuRow extends StatelessWidget {
                       color: color,
                     ),
                   ),
-                  if (subtitle != null)
-                    Text(subtitle!,
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.black54)),
                 ],
               ),
             ),
