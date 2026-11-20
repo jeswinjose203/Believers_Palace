@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../core/auth_provider.dart';
 import '../models/community_models.dart';
 import '../services/api_service.dart';
+import '../widgets/chat_email_verification.dart';
 import '../widgets/group_chat_bubble.dart';
 import '../widgets/image_picker_field.dart';
 
@@ -305,17 +306,19 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
 
   ApiService get _api => ref.read(apiServiceProvider);
 
+  bool get _emailVerified => ref.read(authProvider).user?.emailVerified == true;
+
   Future<void> _load() async {
     try {
-      if (_active) {
+      if (_active && _emailVerified) {
         final page = await _api.listCommunityMessages(widget.community.id);
         if (!mounted) return;
         setState(() {
           _messages = page.data;
           _hasMore = page.hasMore;
         });
-        if (widget.community.isAdmin) await _loadAdminLists();
       }
+      if (widget.community.isAdmin) await _loadAdminLists();
       if (mounted) {
         setState(() {
           _loading = false;
@@ -351,7 +354,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
 
   void _scheduleNext() {
     _timer?.cancel();
-    if (!mounted || !_active || !_appResumed) return;
+    if (!mounted || !_active || !_appResumed || !_emailVerified) return;
     var delay = _pollInterval;
     if (_failures > 0) {
       final seconds = _pollInterval.inSeconds * (1 << _failures.clamp(0, 5));
@@ -386,7 +389,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
   }
 
   Future<void> _poll() async {
-    if (!_active || _polling || _loading || !mounted) return;
+    if (!_active || _polling || _loading || !mounted || !_emailVerified) return;
     _polling = true;
     try {
       var cursor = _messages.isEmpty ? 0 : _messages.last.seq;
@@ -565,6 +568,15 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    final verified = ref.watch(
+      authProvider.select((state) => state.user?.emailVerified == true),
+    );
+    ref.listen(
+      authProvider.select((state) => state.user?.emailVerified == true),
+      (_, verified) {
+        if (verified && _active) _load();
+      },
+    );
     final status = widget.community.status;
     final subtitle = _active
         ? widget.community.isAdmin
@@ -599,11 +611,11 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                 icon: const Icon(Icons.exit_to_app)),
         ],
       ),
-      body: _body(status),
+      body: _body(status, verified),
     );
   }
 
-  Widget _body(String status) {
+  Widget _body(String status, bool verified) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null && _messages.isEmpty && _active) {
       return Center(
@@ -652,8 +664,10 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
             ),
           ),
         if (widget.community.isAdmin) _adminPanel(),
-        Expanded(child: _chat()),
-        _composer(),
+        Expanded(
+          child: verified ? _chat() : const ChatEmailVerification(),
+        ),
+        if (verified) _composer(),
       ],
     );
   }

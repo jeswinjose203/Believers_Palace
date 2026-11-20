@@ -9,10 +9,11 @@ import '../core/api_client.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../widgets/chat_email_verification.dart';
 import '../widgets/group_chat_bubble.dart';
 
-/// Per-event chat. If the event requires registration, only registered users
-/// (and church staff) can read and post; otherwise any signed-in user can.
+/// Per-event chat requires a verified email. Registration rules also apply
+/// when the event requires registration.
 /// A message can be deleted by its author or by a church admin / super admin.
 ///
 /// Loading uses a cursor (`seq`) instead of fixed pages:
@@ -71,7 +72,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _scroll.addListener(_onScroll);
-    _loadLatest();
+    if (_emailVerified) _loadLatest();
   }
 
   @override
@@ -98,6 +99,8 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
   // ---- loading -----------------------------------------------------------
 
   ApiService get _api => ref.read(apiServiceProvider);
+
+  bool get _emailVerified => ref.read(authProvider).user?.emailVerified == true;
 
   bool get _atBottom => !_scroll.hasClients || _scroll.position.pixels <= 40;
 
@@ -141,7 +144,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
 
   void _scheduleNext() {
     _timer?.cancel();
-    if (!mounted || _notRegistered || !_appResumed) return;
+    if (!mounted || _notRegistered || !_appResumed || !_emailVerified) return;
     var delay = _pollInterval;
     if (_failures > 0) {
       final secs = _pollInterval.inSeconds * (1 << _failures.clamp(0, 5));
@@ -154,7 +157,9 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
   /// Fetches messages newer than the newest one we have. Guarded so slow
   /// requests never overlap.
   Future<void> _pollNow() async {
-    if (_polling || !mounted || _notRegistered || _loading) return;
+    if (_polling || !mounted || _notRegistered || _loading || !_emailVerified) {
+      return;
+    }
     _polling = true;
     try {
       var added = <ChatMessage>[];
@@ -320,6 +325,18 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(authProvider).user;
+    ref.listen(
+      authProvider.select((state) => state.user?.emailVerified == true),
+      (_, verified) {
+        if (verified) _loadLatest();
+      },
+    );
+    if (me?.emailVerified != true) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.event.title)),
+        body: const ChatEmailVerification(),
+      );
+    }
     final timeFmt = DateFormat.MMMd().add_jm();
 
     return Scaffold(

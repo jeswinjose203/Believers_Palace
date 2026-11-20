@@ -174,7 +174,9 @@ paths:
     post:
       tags: [Authentication]
       summary: Verify an email address
-      description: Consumes a single-use verification token and marks the email verified.
+      description: >
+        Verifies an email using a single-use six-digit code. Pass the email
+        address with the code. Previously issued opaque tokens are also accepted.
       security: []
       requestBody:
         required: true
@@ -195,10 +197,10 @@ paths:
   /auth/resend-verification:
     post:
       tags: [Authentication]
-      summary: Resend an email verification token
+      summary: Request an email verification code
       description: >
-        Always returns 200 to avoid account enumeration. If the email is
-        registered and not yet verified, a new verification token is sent.
+        If the email is registered and unverified, a code is sent subject to
+        a one-minute resend cooldown. Accepted requests return the same response.
       security: []
       requestBody:
         required: true
@@ -1473,9 +1475,13 @@ components:
       type: object
       required: [token]
       properties:
+        email:
+          type: string
+          format: email
+          description: Required with a six-digit code.
         token:
           type: string
-          description: Single-use email verification token
+          description: Six-digit verification code or a previously issued opaque token.
 
     ResendVerificationRequest:
       type: object

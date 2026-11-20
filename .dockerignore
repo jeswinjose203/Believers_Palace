@@ -10,6 +10,9 @@ bin/
 *.exe
 *.out
 
+# The API image uses only the Go backend.
+frontend/
+
 # Docs / IDE
 README.md
 .idea/

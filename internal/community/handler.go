@@ -15,7 +15,7 @@ type Handler struct{ svc *Service }
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
-func (h *Handler) Routes() chi.Router {
+func (h *Handler) Routes(requireVerifiedEmail func(http.Handler) http.Handler) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.list)
 	r.Post("/", h.create)
@@ -26,9 +26,12 @@ func (h *Handler) Routes() chi.Router {
 	r.Get("/{communityId}/members", h.members)
 	r.Delete("/{communityId}/members/{userId}", h.remove)
 	r.Delete("/{communityId}/leave", h.leave)
-	r.Get("/{communityId}/messages", h.listMessages)
-	r.Post("/{communityId}/messages", h.postMessage)
-	r.Delete("/{communityId}/messages/{messageId}", h.deleteMessage)
+	r.Group(func(r chi.Router) {
+		r.Use(requireVerifiedEmail)
+		r.Get("/{communityId}/messages", h.listMessages)
+		r.Post("/{communityId}/messages", h.postMessage)
+		r.Delete("/{communityId}/messages/{messageId}", h.deleteMessage)
+	})
 	return r
 }
 

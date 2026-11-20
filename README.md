@@ -179,10 +179,11 @@ implementation (`MAIL_PROVIDER=log`) logs the reset/verification token to the
 server log; set `MAIL_PROVIDER=smtp` with the `SMTP_*`/`MAIL_FROM` vars to send
 real email (e.g. via Gmail).
 
-New users receive an email verification token on registration. Verification is
-"soft": accounts are usable immediately and `emailVerified` becomes true once
-the user calls `/auth/verify-email` with their token (`/auth/resend-verification`
-re-issues one).
+New users receive a six-digit email verification code on registration. In Profile,
+tap the email address to request or enter a code. The verified icon appears after
+confirmation. Codes expire after 10 minutes or five failed attempts, and a new
+code can be issued once per minute. The app passes the email and code (as
+`token`) to `/auth/verify-email`.
 
 ### Users
 | Method | Path                   | Access                         |
@@ -227,10 +228,13 @@ super_admin.
 
 **Event chat:** every event has a chat (`GET /events/{eventId}/messages`,
 paginated, oldest-first; `POST /events/{eventId}/messages` with `{content}`).
+Reading, posting, and deleting messages in event and community chats requires
+a verified email. The API returns `403 email_verification_required` for
+unverified accounts.
 If the event has `registrationRequired: true`, only users who registered
 (`POST /events/{eventId}/register`) and church staff of the owning church (plus
 super_admin) may read and post; anyone else gets `403` with code
-`not_registered`. If `registrationRequired` is false, any authenticated user may
+`not_registered`. If `registrationRequired` is false, any verified user may
 chat and registration is not offered in the app. Admins can see the attendee
 list and count via `GET /events/{eventId}/registrations` (`pagination.total`).
 Users can cancel their own registration with `DELETE /events/{eventId}/register`

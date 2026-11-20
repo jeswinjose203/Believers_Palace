@@ -10,6 +10,7 @@ import 'certificates_screen.dart';
 import 'churches_screen.dart';
 import 'my_bookings_screen.dart';
 import 'settings_screen.dart';
+import 'verify_email_screen.dart';
 
 const kProfilePurple = Color(0xFF5B2A91);
 const kProfilePurpleLight = Color(0xFF7B3FB5);
@@ -111,6 +112,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 icon: Icons.mail_outline,
                 label: 'Email',
                 value: user.email,
+                trailing: user.emailVerified
+                    ? const Padding(
+                        padding: EdgeInsets.only(left: 8),
+                        child: Tooltip(
+                          message: 'Email verified',
+                          child: Icon(Icons.verified, color: Colors.green),
+                        ),
+                      )
+                    : null,
+                onTap: user.emailVerified
+                    ? null
+                    : () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const VerifyEmailScreen(),
+                          ),
+                        ),
               ),
               _InfoRow(
                 icon: Icons.phone_outlined,
@@ -426,12 +443,14 @@ class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
   final VoidCallback? onTap;
+  final Widget? trailing;
 
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
     this.onTap,
+    this.trailing,
   });
 
   @override
@@ -459,6 +478,7 @@ class _InfoRow extends StatelessWidget {
             ),
             if (onTap != null)
               const Icon(Icons.chevron_right, color: Colors.black54),
+            if (trailing != null) trailing!,
           ],
         ),
       ),

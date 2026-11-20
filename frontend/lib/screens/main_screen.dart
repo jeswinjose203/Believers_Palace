@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth_provider.dart';
 import '../services/calendar_reminder_sync.dart';
-import '../widgets/verify_email_banner.dart';
 import 'admin_users_screen.dart';
 import 'communities_screen.dart';
 import 'marketplace_screen.dart';
@@ -89,12 +88,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: Column(
-          children: [
-            const VerifyEmailBanner(),
-            Expanded(child: pages[safeIndex]),
-          ],
-        ),
+        child: pages[safeIndex],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: safeIndex,

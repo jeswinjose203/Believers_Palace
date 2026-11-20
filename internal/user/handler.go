@@ -168,7 +168,7 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 	err := h.svc.VerifyEmail(r.Context(), in)
 	if errors.Is(err, ErrTokenInvalid) {
-		httpx.ErrorCode(w, http.StatusBadRequest, "invalid or expired verification token", "bad_request")
+		httpx.ErrorCode(w, http.StatusBadRequest, "invalid or expired verification code", "bad_request")
 		return
 	}
 	if err != nil {
@@ -178,7 +178,7 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "email verified"})
 }
 
-// verifyEmailPage handles the GET link embedded in verification emails and
+// verifyEmailPage handles the GET link embedded in older verification emails and
 // returns a minimal HTML confirmation page (so it works from any email client).
 func (h *Handler) verifyEmailPage(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
@@ -218,7 +218,7 @@ func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]string{
-		"message": "if the email is registered and unverified, a verification link has been sent",
+		"message": "check your inbox for a recent verification code",
 	})
 }
 

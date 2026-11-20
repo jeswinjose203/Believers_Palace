@@ -84,12 +84,13 @@ class _CommunityApiService extends ApiService {
 }
 
 class _TestAuthNotifier extends AuthNotifier {
-  _TestAuthNotifier(super._api) {
+  _TestAuthNotifier(super._api, {bool emailVerified = true}) {
     state = AuthState(
       user: User(
         id: 'owner-1',
         name: 'Owner',
         email: 'owner@example.test',
+        emailVerified: emailVerified,
         role: 'user',
         createdAt: DateTime.utc(2026),
       ),
@@ -129,12 +130,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('new admin community detail loads without child assertion',
+  testWidgets('unverified community admins see a verification prompt',
       (tester) async {
+    final api = _CommunityApiService();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          apiServiceProvider.overrideWithValue(_CommunityApiService()),
+          apiServiceProvider.overrideWithValue(api),
+          authProvider.overrideWith(
+            (ref) => _TestAuthNotifier(api, emailVerified: false),
+          ),
         ],
         child: MaterialApp(
           home: CommunityDetailScreen(
@@ -154,6 +159,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Test community'), findsOneWidget);
+    expect(find.text('Verify your email to access chat.'), findsOneWidget);
+    expect(api._initialLatestRequested, isFalse);
     expect(tester.takeException(), isNull);
   });
 
@@ -177,6 +184,7 @@ void main() {
       ProviderScope(
         overrides: [
           apiServiceProvider.overrideWithValue(api),
+          authProvider.overrideWith((ref) => _TestAuthNotifier(api)),
         ],
         child: MaterialApp(
           home: CommunityDetailScreen(
