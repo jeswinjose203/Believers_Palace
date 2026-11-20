@@ -13,6 +13,7 @@ import 'churches_screen.dart';
 import 'event_chat_screen.dart';
 import 'event_registrations_screen.dart';
 import 'hall_detail_screen.dart';
+import 'marketplace_screen.dart';
 
 const _kPurple = Color(0xFF702078);
 const _kPurpleDark = Color(0xFF55204F);
@@ -22,7 +23,7 @@ const _kTintBorder = Color(0xFFE4D3E6);
 /// Church detail with role-aware management.
 ///
 /// Layout: image gallery, name, pill tabs (About,
-/// Announcements, Halls, Events, Bookings) and the tab content.
+/// Announcements, Halls, Events, Bookings, Marketplace) and the tab content.
 ///
 /// - super_admin / church_admin (own church): full control of halls, bookings,
 ///   and booking status.
@@ -64,7 +65,8 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController =
+        TabController(length: _PillTabsDelegate._tabs.length, vsync: this);
     _loadChurch();
   }
 
@@ -266,6 +268,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
               onError: _showError,
               onSuccess: _showSuccess,
             ),
+            const MarketplaceScreen(),
           ],
         ),
       ),
@@ -1705,6 +1708,7 @@ class _PillTabsDelegate extends SliverPersistentHeaderDelegate {
     (Icons.meeting_room_outlined, 'Halls'),
     (Icons.event_outlined, 'Events'),
     (Icons.event_seat_outlined, 'Bookings'),
+    (Icons.storefront_outlined, 'Marketplace'),
   ];
 
   @override

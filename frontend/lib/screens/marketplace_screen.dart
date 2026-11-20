@@ -39,50 +39,54 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Marketplace'),
-        backgroundColor: _kPurple,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            tooltip: 'My listings',
-            icon: const Icon(Icons.inventory_2_outlined),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MyCommunityAdsScreen()),
-              );
-            },
-          ),
-          if (_isAdmin)
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TabBar(
+                controller: _tabs,
+                labelColor: _kPurple,
+                indicatorColor: _kPurple,
+                tabs: const [
+                  Tab(text: 'Community'),
+                  Tab(text: 'Shop'),
+                ],
+              ),
+            ),
             IconButton(
-              tooltip: 'Manage marketplace',
-              icon: const Icon(Icons.admin_panel_settings_outlined),
+              tooltip: 'My listings',
+              icon: const Icon(Icons.inventory_2_outlined),
               onPressed: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const MarketplaceAdminScreen()),
+                  MaterialPageRoute(
+                      builder: (_) => const MyCommunityAdsScreen()),
                 );
               },
             ),
-        ],
-        bottom: TabBar(
-          controller: _tabs,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(text: 'Community'),
-            Tab(text: 'Shop'),
+            if (_isAdmin)
+              IconButton(
+                tooltip: 'Manage marketplace',
+                icon: const Icon(Icons.admin_panel_settings_outlined),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const MarketplaceAdminScreen()),
+                  );
+                },
+              ),
           ],
         ),
-      ),
-      body: TabBarView(
-        controller: _tabs,
-        children: const [
-          CommunityAdsBrowseScreen(),
-          ShopProductsBrowseScreen(),
-        ],
-      ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabs,
+            children: const [
+              CommunityAdsBrowseScreen(),
+              ShopProductsBrowseScreen(),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

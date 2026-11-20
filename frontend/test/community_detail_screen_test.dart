@@ -10,14 +10,16 @@ import 'package:believers_palace/screens/communities_screen.dart';
 import 'package:believers_palace/services/api_service.dart';
 
 class _CommunityApiService extends ApiService {
-  _CommunityApiService({this.incomingMessages = const []}) : super(ApiClient());
+  _CommunityApiService({this.incomingMessages = const [], this.communities = const []})
+      : super(ApiClient());
 
   final List<CommunityMessage> incomingMessages;
+  final List<Community> communities;
   final List<int?> afterCursors = [];
   bool _initialLatestRequested = false;
 
   @override
-  Future<List<Community>> listCommunities() async => [];
+  Future<List<Community>> listCommunities() async => communities;
 
   @override
   Future<Community> createCommunity(
@@ -100,6 +102,46 @@ class _TestAuthNotifier extends AuthNotifier {
 }
 
 void main() {
+  testWidgets('Joined shows active memberships and administered communities',
+      (tester) async {
+    final api = _CommunityApiService(communities: [
+      for (final (name, status, admin) in [
+        ('Member group', 'active', false),
+        ('Admin group', 'active', true),
+        ('Pending group', 'pending', false),
+        ('Open group', '', false),
+      ])
+        Community(
+          id: name,
+          creatorId: 'owner-1',
+          name: name,
+          description: '',
+          createdAt: DateTime.utc(2026),
+          status: status,
+          isAdmin: admin,
+        ),
+    ]);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          apiServiceProvider.overrideWithValue(api),
+          authProvider.overrideWith((ref) => _TestAuthNotifier(api)),
+        ],
+        child: const MaterialApp(home: CommunitiesScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Pending group'), findsOneWidget);
+    expect(find.text('Open group'), findsOneWidget);
+
+    await tester.tap(find.text('Joined'));
+    await tester.pumpAndSettle();
+    expect(find.text('Member group'), findsOneWidget);
+    expect(find.text('Admin group'), findsOneWidget);
+    expect(find.text('Pending group'), findsNothing);
+    expect(find.text('Open group'), findsNothing);
+  });
+
   testWidgets('creating a community opens its admin detail screen',
       (tester) async {
     final api = _CommunityApiService();

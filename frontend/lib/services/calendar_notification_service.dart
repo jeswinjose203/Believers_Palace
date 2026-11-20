@@ -28,6 +28,7 @@ class CalendarNotificationService {
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _ready = false;
   static const _taskIdBase = 100000;
+  int _chatId = 1000000000;
 
   tz.Location get _ist => tz.getLocation('Asia/Kolkata');
 
@@ -63,7 +64,9 @@ class CalendarNotificationService {
   }) async {
     if (!_ready) await init();
     final perms = await ensurePermissions();
-    await _plugin.cancelAll();
+    for (final reminder in await _plugin.pendingNotificationRequests()) {
+      await _plugin.cancel(reminder.id);
+    }
     var scheduled = 0;
     scheduled += await _scheduleEvents(events, exactAlarms: perms.exactAlarms);
     scheduled += await _scheduleTasks(tasks, exactAlarms: perms.exactAlarms);
@@ -82,6 +85,28 @@ class CalendarNotificationService {
   Future<void> clearForLogout() async {
     if (!_ready) return;
     await _plugin.cancelAll();
+  }
+
+  Future<bool> showChatMessage(String title, String body) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
+    if (!_ready) await init();
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (await android?.areNotificationsEnabled() != true) return false;
+    await _plugin.show(
+      _chatId++,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'chat_messages',
+          'Chat messages',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+    );
+    return true;
   }
 
   tz.TZDateTime _eventStartIst(PersonalCalendarEvent e) {

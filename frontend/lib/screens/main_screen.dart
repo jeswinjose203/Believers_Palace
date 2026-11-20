@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth_provider.dart';
 import '../services/calendar_reminder_sync.dart';
+import '../services/chat_notification_service.dart';
 import 'admin_users_screen.dart';
 import 'communities_screen.dart';
-import 'marketplace_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
@@ -17,18 +19,23 @@ class MainScreen extends ConsumerStatefulWidget {
   ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObserver {
+class _MainScreenState extends ConsumerState<MainScreen>
+    with WidgetsBindingObserver {
   int _index = 0;
+  Timer? _chatTimer;
+  late final _chatNotifications = ref.read(chatNotificationServiceProvider);
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncReminders());
+    _startChatNotifications();
   }
 
   @override
   void dispose() {
+    _stopChatNotifications();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -37,7 +44,31 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _syncReminders();
+      _startChatNotifications();
+    } else {
+      _stopChatNotifications();
     }
+  }
+
+  void _startChatNotifications() {
+    _chatTimer?.cancel();
+    _chatTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      final user = ref.read(authProvider).user;
+      if (user == null || !user.emailVerified) return;
+      _chatNotifications.poll(user.id, (title, body) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('$title\n$body',
+                  maxLines: 3, overflow: TextOverflow.ellipsis)),
+        );
+      });
+    });
+  }
+
+  void _stopChatNotifications() {
+    _chatTimer?.cancel();
+    _chatNotifications.pause();
   }
 
   Future<void> _syncReminders() async {
@@ -49,6 +80,14 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(
+      authProvider
+          .select((state) => (state.user?.id, state.user?.emailVerified)),
+      (_, next) {
+        _chatNotifications.pause();
+        ScaffoldMessenger.of(context).clearSnackBars();
+      },
+    );
     final user = ref.watch(authProvider).user;
     final isSuperAdmin = user?.role == 'super_admin';
     // Only regular members get the church-aware home page; super admins and
@@ -62,7 +101,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
       // that same screen; regular members get the heart ("set my church").
       const SearchScreen(),
       const CommunitiesScreen(),
-      const MarketplaceScreen(),
       if (isSuperAdmin) const AdminUsersScreen(),
       const ProfileScreen(),
     ];
@@ -73,8 +111,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with WidgetsBindingObse
       const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
       const BottomNavigationBarItem(
           icon: Icon(Icons.groups), label: 'Communities'),
-      const BottomNavigationBarItem(
-          icon: Icon(Icons.storefront), label: 'Marketplace'),
       if (isSuperAdmin)
         const BottomNavigationBarItem(
             icon: Icon(Icons.admin_panel_settings), label: 'Users'),

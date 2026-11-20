@@ -8,7 +8,9 @@ import 'package:intl/intl.dart';
 import '../core/auth_provider.dart';
 import '../models/community_models.dart';
 import '../services/api_service.dart';
+import '../services/chat_notification_service.dart';
 import '../widgets/chat_email_verification.dart';
+import '../widgets/chat_notification_button.dart';
 import '../widgets/group_chat_bubble.dart';
 import '../widgets/image_picker_field.dart';
 
@@ -71,10 +73,10 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
   }
 
   Future<void> _open(Community community) async {
-    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+    await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => CommunityDetailScreen(community: community),
     ));
-    if (changed == true) _load();
+    if (mounted) _load();
   }
 
   void _showError(Object error) => ScaffoldMessenger.of(context)
@@ -83,52 +85,78 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Communities')),
-      floatingActionButton: user == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _create,
-              icon: const Icon(Icons.add),
-              label: const Text('Create'),
+    final joined = _communities
+        .where((community) => community.isAdmin || community.status == 'active')
+        .toList();
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Communities'),
+          bottom: const TabBar(
+            tabs: [Tab(text: 'All'), Tab(text: 'Joined')],
+          ),
+        ),
+        floatingActionButton: user == null
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: _create,
+                icon: const Icon(Icons.add),
+                label: const Text('Create'),
+              ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(child: Text('Could not load communities: $_error'))
+                : TabBarView(
+                    children: [
+                      _communityList(_communities, joinedOnly: false),
+                      _communityList(joined, joinedOnly: true),
+                    ],
+                  ),
+      ),
+    );
+  }
+
+  Widget _communityList(List<Community> items, {required bool joinedOnly}) {
+    final emptyText = joinedOnly
+        ? 'You haven’t joined any communities yet.'
+        : 'No communities yet.';
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: items.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                const SizedBox(height: 180),
+                Center(child: Text(emptyText)),
+              ],
+            )
+          : ListView.builder(
+              key: PageStorageKey(joinedOnly),
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final community = items[index];
+                final label = community.isAdmin
+                    ? 'Admin'
+                    : community.status == 'active'
+                        ? 'Member'
+                        : community.status == 'pending'
+                            ? 'Request pending'
+                            : 'Open';
+                return ListTile(
+                  leading: _CommunityAvatar(community: community),
+                  title: Text(community.name),
+                  subtitle: Text(community.description.isEmpty
+                      ? label
+                      : '${community.description}\n$label'),
+                  isThreeLine: community.description.isNotEmpty,
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _open(community),
+                );
+              },
             ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Text('Could not load communities: $_error'))
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: _communities.isEmpty
-                      ? ListView(
-                          children: const [
-                            SizedBox(height: 180),
-                            Center(child: Text('No communities yet.')),
-                          ],
-                        )
-                      : ListView.builder(
-                          itemCount: _communities.length,
-                          itemBuilder: (context, index) {
-                            final community = _communities[index];
-                            final label = community.isAdmin
-                                ? 'Admin'
-                                : community.status == 'active'
-                                    ? 'Member'
-                                    : community.status == 'pending'
-                                        ? 'Request pending'
-                                        : 'Open';
-                            return ListTile(
-                              leading: _CommunityAvatar(community: community),
-                              title: Text(community.name),
-                              subtitle: Text(community.description.isEmpty
-                                  ? label
-                                  : '${community.description}\n$label'),
-                              isThreeLine: community.description.isNotEmpty,
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () => _open(community),
-                            );
-                          },
-                        ),
-                ),
     );
   }
 }
@@ -604,6 +632,11 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
           ],
         ),
         actions: [
+          if (_active && verified)
+            ChatNotificationButton(
+              kind: ChatKind.community,
+              id: widget.community.id,
+            ),
           if (_active)
             IconButton(
                 tooltip: 'Leave community',

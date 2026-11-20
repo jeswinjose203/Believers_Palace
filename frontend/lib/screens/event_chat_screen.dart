@@ -9,7 +9,9 @@ import '../core/api_client.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/chat_notification_service.dart';
 import '../widgets/chat_email_verification.dart';
+import '../widgets/chat_notification_button.dart';
 import '../widgets/group_chat_bubble.dart';
 
 /// Per-event chat requires a verified email. Registration rules also apply
@@ -105,6 +107,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
   bool get _atBottom => !_scroll.hasClients || _scroll.position.pixels <= 40;
 
   Future<void> _loadLatest() async {
+    final user = ref.read(authProvider).user;
     try {
       final page =
           await _api.listEventMessagesCursor(widget.event.id, limit: _pageSize);
@@ -118,6 +121,18 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
         _failures = 0;
       });
       _scheduleNext();
+      if (user != null && ref.read(authProvider).user?.id == user.id) {
+        try {
+          await ref.read(chatNotificationServiceProvider).followEvent(
+            user.id,
+            widget.event.id,
+            widget.event.title,
+            page.data.lastOrNull?.seq ?? 0,
+          );
+        } catch (error) {
+          debugPrint('Could not follow event chat notifications: $error');
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       if (_handleNotRegistered(e)) return;
@@ -340,7 +355,13 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
     final timeFmt = DateFormat.MMMd().add_jm();
 
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.event.title} · Chat')),
+      appBar: AppBar(
+        title: Text('${widget.event.title} · Chat'),
+        actions: [
+          if (!_loading && !_notRegistered && _error == null)
+            ChatNotificationButton(kind: ChatKind.event, id: widget.event.id),
+        ],
+      ),
       body: Column(
         children: [
           AnimatedSize(
