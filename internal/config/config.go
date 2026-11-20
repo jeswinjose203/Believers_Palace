@@ -21,11 +21,13 @@ type Config struct {
 	JWT           JWTConfig
 	Storage       StorageConfig
 	Mail          MailConfig
+	PushProjectID string
 
 	// SkipJWTValidation, when true, disables JWT authentication and injects a
 	// synthetic identity. Intended ONLY for local API testing (e.g. Postman).
 	// It is refused in production.
 	SkipJWTValidation bool
+	TrustProxyHeaders bool
 
 	// CORSAllowedOrigins is the list of origins permitted by CORS. In
 	// development it defaults to ["*"]; in production it must be set explicitly.
@@ -66,6 +68,8 @@ type DBConfig struct {
 	Password string
 	Name     string
 	SSLMode  string
+	MinConns int32
+	MaxConns int32
 }
 
 // JWTConfig holds JWT signing settings.
@@ -109,6 +113,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		AppEnv:        getEnv("APP_ENV", "development"),
 		HTTPPort:      getEnv("HTTP_PORT", "8080"),
+		PushProjectID: getEnv("FCM_PROJECT_ID", ""),
 		PublicBaseURL: strings.TrimRight(getEnv("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -117,6 +122,8 @@ func Load() (*Config, error) {
 			Password: getEnv("DB_PASSWORD", "postgres"),
 			Name:     getEnv("DB_NAME", "believers_palace"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+			MinConns: int32(getEnvInt64("DB_MIN_CONNS", 2)),
+			MaxConns: int32(getEnvInt64("DB_MAX_CONNS", 10)),
 		},
 		JWT: JWTConfig{
 			Secret:     getEnv("JWT_SECRET", ""),
@@ -140,6 +147,7 @@ func Load() (*Config, error) {
 			From:     getEnv("MAIL_FROM", ""),
 		},
 		SkipJWTValidation:  getEnvBool("SKIP_JWT_VALIDATION", false),
+		TrustProxyHeaders:  getEnvBool("TRUST_PROXY_HEADERS", false),
 		CORSAllowedOrigins: getEnvList("CORS_ALLOWED_ORIGINS", nil),
 		RateLimit: RateLimitConfig{
 			Enabled: getEnvBool("RATE_LIMIT_ENABLED", true),
@@ -148,6 +156,9 @@ func Load() (*Config, error) {
 		},
 	}
 
+	if cfg.DB.MaxConns < 1 || cfg.DB.MinConns < 0 || cfg.DB.MinConns > cfg.DB.MaxConns {
+		return nil, fmt.Errorf("DB_MAX_CONNS must be positive and DB_MIN_CONNS must be between zero and DB_MAX_CONNS")
+	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}

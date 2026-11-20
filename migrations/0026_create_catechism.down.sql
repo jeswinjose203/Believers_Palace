@@ -1,4 +1,4 @@
--- 0018_create_catechism.down.sql
+-- 0026_create_catechism.down.sql
 
 DROP TABLE IF EXISTS catechism_sessions;
 DROP TABLE IF EXISTS catechism_enrollments;

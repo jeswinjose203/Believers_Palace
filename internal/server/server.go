@@ -20,6 +20,7 @@ import (
 	"believers_palace/internal/cemetery"
 	"believers_palace/internal/certificate"
 	"believers_palace/internal/chat"
+	"believers_palace/internal/chatlive"
 	"believers_palace/internal/church"
 	"believers_palace/internal/community"
 	"believers_palace/internal/config"
@@ -34,14 +35,26 @@ import (
 )
 
 // New builds the application HTTP handler with all routes and middleware.
-func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
+func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	if cfg.TrustProxyHeaders {
+		r.Use(middleware.RealIP)
+	}
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(30 * time.Second))
+	timeout := middleware.Timeout(30 * time.Second)
+	r.Use(func(next http.Handler) http.Handler {
+		bounded := timeout(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.URL.Path == "/api/chat/live" {
+				next.ServeHTTP(w, req)
+				return
+			}
+			bounded.ServeHTTP(w, req)
+		})
+	})
 	r.Use(securityHeaders)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
@@ -121,6 +134,25 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	communityRepo := community.NewRepository(pool)
 	communitySvc := community.NewService(communityRepo, userDisplayResolver{userRepo})
 	communityHandler := community.NewHandler(communitySvc)
+	chatTransport := chatlive.Postgres{Pool: pool}
+	var pushWorker *chatlive.PushWorker
+	if cfg.PushProjectID != "" {
+		var err error
+		pushWorker, err = chatlive.NewPushWorker(ctx, chatTransport, cfg.PushProjectID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	liveChat := chatlive.New(chatTransport, func(ctx context.Context, id auth.Identity, room chatlive.Room) bool {
+		switch room.Kind {
+		case "event":
+			return chatSvc.CanReadChat(ctx, id, room.ID)
+		case "community":
+			return communitySvc.CanReadChat(ctx, id, room.ID)
+		default:
+			return false
+		}
+	})
 
 	marketplaceRepo := marketplace.NewRepository(pool)
 	marketplaceSvc := marketplace.NewService(marketplaceRepo, userDisplayResolver{userRepo})
@@ -144,11 +176,11 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	}
 	mediaSvc := media.NewService(mediaStorage, cfg.PublicBaseURL, cfg.Storage.MaxImageBytes)
 	mediaHandler := media.NewHandler(mediaSvc)
- 
-    personalCalRepo := personalcalendar.NewRepository(pool)
-    personalCalSvc := personalcalendar.NewService(personalCalRepo, bookingRepo, eventRepo, userRepo)
-    personalCalHandler := personalcalendar.NewHandler(personalCalSvc)
- 
+
+	personalCalRepo := personalcalendar.NewRepository(pool)
+	personalCalSvc := personalcalendar.NewService(personalCalRepo, bookingRepo, eventRepo, userRepo)
+	personalCalHandler := personalcalendar.NewHandler(personalCalSvc)
+
 	// Health check.
 	r.Get("/health", func(w http.ResponseWriter, req *http.Request) {
 		if err := pool.Ping(req.Context()); err != nil {
@@ -160,6 +192,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 
 	// API routes (spec base path is /api).
 	r.Route("/api", func(api chi.Router) {
+		api.Get("/chat/live", liveChat.ServeHTTP)
 		// Public authentication routes, with a stricter per-IP rate limit to
 		// resist brute-force login and email-bomb abuse of password reset and
 		// verification resend.
@@ -180,9 +213,15 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 		// Authenticated routes.
 		api.Group(func(protected chi.Router) {
 			protected.Use(authMiddleware)
+			protected.With(userRepo.RequireVerifiedEmail).Post("/chat/live-ticket", liveChat.Ticket)
+			protected.With(userRepo.RequireVerifiedEmail).Get("/chat/preferences", chatTransport.ListPreferences)
+			protected.With(userRepo.RequireVerifiedEmail).Get("/chat/joined-communities", chatTransport.ListJoinedCommunities)
+			protected.With(userRepo.RequireVerifiedEmail).Put("/chat/preferences/{kind}/{roomId}", chatTransport.SetPreference(liveChat))
+			protected.With(userRepo.RequireVerifiedEmail).Post("/chat/push-devices", chatTransport.PushDevice(pushWorker != nil, false))
+			protected.Post("/chat/push-devices/remove", chatTransport.PushDevice(false, true))
 			protected.Mount("/users", userHandler.UserRoutes())
-            protected.Mount("/users/me/calendar", personalCalHandler.Routes())
-            protected.Mount("/calendar", personalCalHandler.HolidayRoutes())
+			protected.Mount("/users/me/calendar", personalCalHandler.Routes())
+			protected.Mount("/calendar", personalCalHandler.HolidayRoutes())
 			protected.Mount("/users/{userId}/certificates", certificateHandler.UserRoutes())
 			protected.Mount("/churches", churchHandler.Routes())
 
@@ -199,11 +238,9 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 			protected.Mount("/announcements", announcementHandler.Routes())
 			protected.Mount("/halls", hallHandler.Routes())
 			protected.Mount("/bookings", bookingHandler.Routes())
-			protected.Mount("/events", eventHandler.RoutesWith(chatHandler.EventRoutes()))
 			protected.Mount("/catechism-classes", catechismHandler.ClassRoutes())
 			protected.Mount("/catechism-enrollments", catechismHandler.EnrollmentRoutes())
 			protected.Mount("/catechism-sessions", catechismHandler.SessionRoutes())
-			protected.Mount("/communities", communityHandler.Routes())
 			protected.Mount("/events", eventHandler.RoutesWith(chatHandler.EventRoutes(userRepo.RequireVerifiedEmail)))
 			protected.Mount("/communities", communityHandler.Routes(userRepo.RequireVerifiedEmail))
 			protected.Mount("/marketplace", marketplaceHandler.Routes())
@@ -213,6 +250,10 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 		})
 	})
 
+	go chatTransport.Run(ctx, liveChat)
+	if pushWorker != nil {
+		go pushWorker.Run(ctx)
+	}
 	return r, nil
 }
 

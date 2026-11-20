@@ -64,7 +64,7 @@ type registrationChecker interface {
 // messageStore is the subset of the repository the service relies on. It keeps
 // the authorization logic testable without a live database.
 type messageStore interface {
-	Create(ctx context.Context, eventID string, userID *string, authorName string, authorPic *string, content string) (*Message, error)
+	Create(ctx context.Context, eventID string, userID *string, authorName string, authorPic *string, content string, clientID ...string) (*Message, error)
 	GetByID(ctx context.Context, id string) (*Message, error)
 	ListByEvent(ctx context.Context, eventID string, limit, offset int) ([]Message, int, error)
 	ListCursor(ctx context.Context, eventID string, q CursorQuery) ([]Message, bool, error)
@@ -113,6 +113,10 @@ func (s *Service) authorizeAccess(ctx context.Context, id auth.Identity, eventID
 		return ErrNotRegistered
 	}
 	return nil
+}
+
+func (s *Service) CanReadChat(ctx context.Context, id auth.Identity, eventID string) bool {
+	return s.authorizeAccess(ctx, id, eventID) == nil
 }
 
 // List returns a page of messages for an event. Only registered attendees and
@@ -164,6 +168,9 @@ func (s *Service) Post(ctx context.Context, id auth.Identity, eventID string, in
 	if len(content) > maxContentLen {
 		return nil, invalid("message is too long")
 	}
+	if len(in.ClientID) > 64 {
+		return nil, invalid("client message ID is too long")
+	}
 
 	name, pic, ok, err := s.users.DisplayOf(ctx, id.UserID)
 	if err != nil {
@@ -179,7 +186,7 @@ func (s *Service) Post(ctx context.Context, id auth.Identity, eventID string, in
 	if id.UserID == "" {
 		userID = nil
 	}
-	return s.repo.Create(ctx, eventID, userID, name, pic, content)
+	return s.repo.Create(ctx, eventID, userID, name, pic, content, in.ClientID)
 }
 
 // Delete removes a message. Permitted for the message author or an

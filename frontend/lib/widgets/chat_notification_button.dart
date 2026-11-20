@@ -20,20 +20,29 @@ class _ChatNotificationButtonState
     extends ConsumerState<ChatNotificationButton> {
   bool? _muted;
   bool _saving = false;
+  late final _notifications = ref.read(chatNotificationServiceProvider);
 
   @override
   void initState() {
     super.initState();
+    _notifications.preferenceChanges.addListener(_preferenceChanged);
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _notifications.preferenceChanges.removeListener(_preferenceChanged);
+    super.dispose();
+  }
+
+  void _preferenceChanged() => _load(refresh: false);
+
+  Future<void> _load({bool refresh = true}) async {
     final user = ref.read(authProvider).user;
     if (user == null) return;
     try {
-      final muted = await ref
-          .read(chatNotificationServiceProvider)
-          .muted(user.id, widget.kind, widget.id);
+      final muted = await _notifications.muted(user.id, widget.kind, widget.id,
+          refresh: refresh);
       if (mounted) setState(() => _muted = muted);
     } catch (error) {
       debugPrint('Could not load notification setting: $error');

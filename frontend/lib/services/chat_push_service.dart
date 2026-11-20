@@ -1,0 +1,137 @@
+import 'dart:async';
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'api_service.dart';
+
+final chatPushProvider = Provider<ChatPushService>((ref) {
+  final push = ChatPushService(ref.watch(apiServiceProvider));
+  ref.onDispose(push.dispose);
+  return push;
+});
+
+class ChatPushService {
+  ChatPushService(this._api);
+
+  final ApiService _api;
+  static const _tokenKey = 'chat_push.device_token';
+  StreamSubscription<String>? _refresh;
+  String? _userId;
+  bool _starting = false;
+  bool _registered = false;
+
+  bool get registered => _registered;
+
+  FirebaseOptions? get _options {
+    if (kIsWeb) return null;
+    final appId = switch (defaultTargetPlatform) {
+      TargetPlatform.android =>
+        const String.fromEnvironment('FCM_ANDROID_APP_ID'),
+      TargetPlatform.iOS => const String.fromEnvironment('FCM_IOS_APP_ID'),
+      _ => '',
+    };
+    const apiKey = String.fromEnvironment('FCM_API_KEY');
+    const project = String.fromEnvironment('FCM_PROJECT_ID');
+    const sender = String.fromEnvironment('FCM_SENDER_ID');
+    if ([appId, apiKey, project, sender].any((value) => value.isEmpty)) {
+      return null;
+    }
+    return FirebaseOptions(
+        apiKey: apiKey,
+        appId: appId,
+        messagingSenderId: sender,
+        projectId: project);
+  }
+
+  Future<void> start(String userId) async {
+    final options = _options;
+    if (options == null || _starting || (_registered && _userId == userId)) {
+      return;
+    }
+    _starting = true;
+    _userId = userId;
+    try {
+      if (Firebase.apps.isEmpty) await Firebase.initializeApp(options: options);
+      if (_userId != userId) return;
+      final messaging = FirebaseMessaging.instance;
+      final permission = await messaging.requestPermission();
+      if (_userId != userId ||
+          permission.authorizationStatus == AuthorizationStatus.denied) {
+        return;
+      }
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        var token = await messaging.getAPNSToken();
+        for (var attempt = 0; token == null && attempt < 5; attempt++) {
+          await Future<void>.delayed(const Duration(seconds: 1));
+          if (_userId != userId) return;
+          token = await messaging.getAPNSToken();
+        }
+        if (token == null) return;
+      }
+      final android = FlutterLocalNotificationsPlugin()
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      await android?.createNotificationChannel(const AndroidNotificationChannel(
+        'chat_messages',
+        'Chat messages',
+        importance: Importance.high,
+      ));
+      await _refresh?.cancel();
+      _refresh = messaging.onRegistered.listen((token) {
+        unawaited(_register(userId, token));
+      });
+      await messaging.register();
+    } catch (error) {
+      debugPrint('Chat push registration is unavailable: ${error.runtimeType}');
+    } finally {
+      _starting = false;
+    }
+  }
+
+  Future<void> _register(String userId, String token) async {
+    if (_userId != userId) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final oldToken = prefs.getString(_tokenKey);
+      if (_userId != userId) return;
+      await _api.registerChatPushDevice(token);
+      if (_userId != userId) return;
+      await prefs.setString(_tokenKey, token);
+      _registered = true;
+      if (oldToken != null && oldToken != token) {
+        await _api.removeChatPushDevice(oldToken);
+      }
+    } catch (error) {
+      debugPrint('Could not register chat push device: ${error.runtimeType}');
+    }
+  }
+
+  Future<void> signOut() async {
+    dispose();
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(_tokenKey);
+    try {
+      if (token != null) await _api.removeChatPushDevice(token);
+    } catch (_) {
+      // Invalidating the Firebase token also stops alerts if the API is offline.
+    }
+    try {
+      if (_options != null && Firebase.apps.isNotEmpty) {
+        await FirebaseMessaging.instance.unregister();
+      }
+    } catch (_) {}
+    await prefs.remove(_tokenKey);
+  }
+
+  void dispose() {
+    _userId = null;
+    _registered = false;
+    unawaited(_refresh?.cancel());
+    _refresh = null;
+  }
+}

@@ -68,7 +68,7 @@ class _ManageEnrollmentsScreenState extends ConsumerState<ManageEnrollmentsScree
             }
             final items = snap.data ?? [];
             if (items.isEmpty) {
-              return const ListView(children: [
+              return ListView(children: const [
                 SizedBox(height: 48),
                 Center(child: Text('No enrollments yet.')),
               ]);

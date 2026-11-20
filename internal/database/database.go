@@ -9,15 +9,16 @@ import (
 )
 
 // New creates a pgx connection pool and verifies connectivity with a ping.
-func New(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+func New(ctx context.Context, dsn string, minConns, maxConns int32) (*pgxpool.Pool, error) {
 	poolCfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse db config: %w", err)
 	}
 
-	poolCfg.MaxConns = 10
-	poolCfg.MinConns = 2
+	poolCfg.MaxConns = maxConns
+	poolCfg.MinConns = minConns
 	poolCfg.MaxConnLifetime = time.Hour
+	poolCfg.MaxConnLifetimeJitter = 10 * time.Minute
 	poolCfg.MaxConnIdleTime = 30 * time.Minute
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)

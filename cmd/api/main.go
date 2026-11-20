@@ -34,23 +34,24 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := database.New(ctx, cfg.DB.DSN())
+	pool, err := database.New(ctx, cfg.DB.DSN(), cfg.DB.MinConns, cfg.DB.MaxConns)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
-	handler, err := server.New(cfg, pool)
+	handler, err := server.New(ctx, cfg, pool)
 	if err != nil {
 		return err
 	}
 
 	srv := &http.Server{
-		Addr:         ":" + cfg.HTTPPort,
-		Handler:      handler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              ":" + cfg.HTTPPort,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	// Start server in a goroutine.

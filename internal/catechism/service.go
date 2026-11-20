@@ -52,23 +52,22 @@ func (s *Service) ensureChurch(ctx context.Context, churchID string) error {
 }
 
 func (s *Service) attachClassStats(ctx context.Context, id auth.Identity, items []Class) error {
+	if len(items) == 0 {
+		return nil
+	}
+	ids := make([]string, len(items))
 	for i := range items {
-		count, err := s.repo.CountApprovedEnrollments(ctx, items[i].ID)
-		if err != nil {
-			return err
-		}
-		items[i].EnrolledCount = count
-		items[i].AvailableSeats = items[i].Capacity - count
-		if items[i].AvailableSeats < 0 {
-			items[i].AvailableSeats = 0
-		}
-		if id.UserID != "" {
-			enrolled, err := s.repo.GuardianEnrolledInClass(ctx, items[i].ID, id.UserID)
-			if err != nil {
-				return err
-			}
-			items[i].Enrolled = enrolled
-		}
+		ids[i] = items[i].ID
+	}
+	stats, err := s.repo.classEnrollmentStats(ctx, ids, id.UserID)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		item := stats[items[i].ID]
+		items[i].EnrolledCount = item.count
+		items[i].AvailableSeats = max(0, items[i].Capacity-item.count)
+		items[i].Enrolled = item.enrolled
 	}
 	return nil
 }

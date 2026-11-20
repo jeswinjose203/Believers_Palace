@@ -11,7 +11,9 @@ import (
 	"believers_palace/internal/httpx"
 )
 
-type Handler struct{ svc *Service }
+type Handler struct {
+	svc *Service
+}
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 

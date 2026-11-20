@@ -19,7 +19,48 @@ class ApiService {
  
   ApiService(this._client);
  
-  void setToken(String? token) => _client.setToken(token);
+  void setToken(String? token, {bool rotated = false}) =>
+      _client.setToken(token, rotated: rotated);
+  String? get accessToken => _client.accessToken;
+  set refreshSession(Future<bool> Function(String)? callback) =>
+      _client.refreshSession = callback;
+
+  Future<String> createChatLiveTicket() => _client.post(
+        '/chat/live-ticket',
+        (json) => json['ticket'] as String,
+        body: const <String, dynamic>{},
+      );
+
+  Future<Map<String, bool>> listChatPreferences() => _client.get(
+        '/chat/preferences',
+        (json) => {
+          for (final row in json['data'] as List)
+            '${row['kind']}.${row['id']}': row['muted'] as bool,
+        },
+      );
+
+  Future<Map<String, String>> listJoinedCommunityChats() => _client.get(
+        '/chat/joined-communities',
+        (json) => Map<String, String>.from(json['data'] as Map),
+      );
+
+  Future<void> setChatPreference(String kind, String id,
+      {bool? muted, bool onlyIfMissing = false}) async {
+    await _client.put(
+      '/chat/preferences/$kind/$id',
+      (_) => true,
+      body: {
+        if (muted != null) 'muted': muted,
+        if (muted == null || onlyIfMissing) 'followOnly': true,
+      },
+    );
+  }
+
+  Future<void> registerChatPushDevice(String token) =>
+      _client.postVoid('/chat/push-devices', body: {'token': token});
+
+  Future<void> removeChatPushDevice(String token) =>
+      _client.postVoid('/chat/push-devices/remove', body: {'token': token});
  
   // Auth
   Future<AuthResponse> login(String email, String password) => _client.post(
@@ -321,11 +362,11 @@ class ApiService {
         },
       );
  
-  Future<ChatMessage> postEventMessage(String eventId, String content) =>
+  Future<ChatMessage> postEventMessage(String eventId, String content, {String? clientId}) =>
       _client.post(
         '/events/$eventId/messages',
         ChatMessage.fromJson,
-        body: {'content': content},
+        body: {'content': content, if (clientId != null) 'clientId': clientId},
       );
  
   Future<void> deleteEventMessage(String eventId, String messageId) =>
@@ -397,9 +438,9 @@ class ApiService {
         },
       );
 
-  Future<CommunityMessage> postCommunityMessage(String id, String content) =>
+  Future<CommunityMessage> postCommunityMessage(String id, String content, {String? clientId}) =>
       _client.post('/communities/$id/messages', CommunityMessage.fromJson,
-          body: {'content': content});
+          body: {'content': content, if (clientId != null) 'clientId': clientId});
 
   Future<void> deleteCommunityMessage(String id, String messageId) =>
       _client.delete('/communities/$id/messages/$messageId');

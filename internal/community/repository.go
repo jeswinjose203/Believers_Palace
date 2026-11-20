@@ -198,7 +198,11 @@ func (r *Repository) Leave(ctx context.Context, communityID, userID string) erro
 	return tx.Commit(ctx)
 }
 
-func (r *Repository) CreateMessage(ctx context.Context, communityID, userID, name string, pic *string, content string) (*Message, error) {
+func (r *Repository) CreateMessage(ctx context.Context, communityID, userID, name string, pic *string, content string, clientID ...string) (*Message, error) {
+	var key string
+	if len(clientID) > 0 {
+		key = clientID[0]
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -213,14 +217,15 @@ func (r *Repository) CreateMessage(ctx context.Context, communityID, userID, nam
 	if err != nil {
 		return nil, fmt.Errorf("verify community membership: %w", err)
 	}
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, communityID); err != nil {
-		return nil, err
-	}
 	var m Message
-	err = tx.QueryRow(ctx, `INSERT INTO community_messages (community_id,seq,user_id,author_name,author_pic,content)
-		VALUES ($1,COALESCE((SELECT max(seq) FROM community_messages WHERE community_id=$1),0)+1,$2,$3,$4,$5)
-		RETURNING id,community_id,seq,user_id,author_name,author_pic,content,created_at`, communityID, userID, name, pic, content).
-		Scan(&m.ID, &m.CommunityID, &m.Seq, &m.UserID, &m.AuthorName, &m.AuthorPic, &m.Content, &m.CreatedAt)
+	err = tx.QueryRow(ctx, `WITH next AS (
+			UPDATE communities SET chat_seq=chat_seq+1 WHERE id=$1 RETURNING chat_seq
+		)
+		INSERT INTO community_messages (community_id,seq,user_id,author_name,author_pic,content,client_id)
+		SELECT $1,chat_seq,$2,$3,$4,$5,NULLIF($6,'') FROM next
+		ON CONFLICT (community_id,user_id,client_id) DO UPDATE SET client_id=EXCLUDED.client_id
+		RETURNING `+messageColumns, communityID, userID, name, pic, content, key).
+		Scan(&m.ID, &m.CommunityID, &m.Seq, &m.UserID, &m.AuthorName, &m.AuthorPic, &m.Content, &m.CreatedAt, &m.ClientID)
 	if err != nil {
 		return nil, fmt.Errorf("create community message: %w", err)
 	}
@@ -230,11 +235,11 @@ func (r *Repository) CreateMessage(ctx context.Context, communityID, userID, nam
 	return &m, nil
 }
 
-const messageColumns = `id,community_id,seq,user_id,author_name,author_pic,content,created_at`
+const messageColumns = `id,community_id,seq,user_id,author_name,author_pic,content,created_at,client_id`
 
 func scanMessage(row pgx.Row) (*Message, error) {
 	var m Message
-	err := row.Scan(&m.ID, &m.CommunityID, &m.Seq, &m.UserID, &m.AuthorName, &m.AuthorPic, &m.Content, &m.CreatedAt)
+	err := row.Scan(&m.ID, &m.CommunityID, &m.Seq, &m.UserID, &m.AuthorName, &m.AuthorPic, &m.Content, &m.CreatedAt, &m.ClientID)
 	return &m, err
 }
 func (r *Repository) ListMessages(ctx context.Context, cid string, q CursorQuery) ([]Message, bool, error) {

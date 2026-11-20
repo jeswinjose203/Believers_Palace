@@ -39,8 +39,7 @@ believers_palace/
 │   ├── certificate/        # per-user PDF certificate storage
 │   ├── marketplace/        # community ads + shop catalog
 │   └── server/             # router + middleware wiring
-├── migrations/             # SQL migrations (0001..0018)
-├── migrations/             # SQL migrations (0001..0021)
+├── migrations/             # SQL migrations (0001..0026)
 ├── .env.example
 ├── Makefile
 └── go.mod
@@ -247,7 +246,57 @@ caller.
 A message may be deleted by its author, or by the owning church_admin /
 super_admin (`DELETE /events/{eventId}/messages/{messageId}`). The author's name and photo
 are snapshotted when the message is posted. The Flutter client refreshes the
-chat by polling.
+chat through one WebSocket per foreground session. The client requests a
+single-use ticket at `POST /api/chat/live-ticket` and uses it to connect to
+`/api/chat/live`. Room subscriptions follow the chat access rules. Live
+signals trigger cursor-based reads to catch up, and HTTP polling remains a
+fallback when the socket is unavailable. Migration `0023` adds persistent
+message cursors and optional `clientId` keys for safe send retries.
+
+Migrations `0024` and `0025` add shared one-time tickets, account-level mute
+preferences, and the push delivery queue. Each API replica uses a dedicated
+PostgreSQL `LISTEN` connection for committed chat changes. If that connection
+fails, the affected replica closes its sockets so clients reconnect and
+catch up from PostgreSQL. Route both chat endpoints through a proxy that
+supports WebSocket upgrades. Use a direct or session-mode PostgreSQL
+connection for `LISTEN`, since transaction-mode pooling discards session
+state. Apply migrations before starting the new API replicas.
+
+### Background chat notifications
+
+Set `FCM_PROJECT_ID` on the API and provide Firebase Application Default
+Credentials with permission to send messages for that project. In Docker,
+mount a read-only credential file through a deployment override and set
+`GOOGLE_APPLICATION_CREDENTIALS` to its container path, or use workload
+identity. Keep credential files outside the repository and build context.
+Register the Android and iOS apps with the same Firebase project. Follow the
+frontend README for build settings and Apple push setup. The server queues
+one delivery per eligible device and checks current membership, mute settings
+and device ownership before sending. Push alerts contain a generic preview.
+
+### Capacity and rollout
+
+- Set a connection budget before scaling replicas. Each API process uses
+  up to `DB_MAX_CONNS` pooled connections plus one chat listener. Set
+  `TRUST_PROXY_HEADERS=true` only behind a proxy that strips client-supplied
+  forwarding headers and prevents direct access to the API. Configure any
+  shared rate limits at that proxy. The built-in limits are per replica.
+- The optional `TestDistributedChat` integration test uses disposable
+  PostgreSQL, two listeners and a simulated push provider. Set
+  `CHAT_TEST_DATABASE_URL` and optionally `CHAT_TEST_CONNECTIONS`, then run
+  `go test -v ./internal/chatlive -run TestDistributedChat -count=1`.
+  It checks cross-replica ticket use, fan-out latency, and mute enforcement.
+- Before production rollout, measure message send latency, socket fan-out,
+  reconnection storms, database pool waits, and push queue age with a
+  representative dataset and traffic mix. Run these through the production-like
+  proxy and test an API restart, database listener interruption, and FCM throttling.
+
+The code review found additional scale limits outside chat. The Communities
+discovery endpoint still returns the full catalog. Several public list queries,
+including churches, events, and marketplace listings, use offset pagination and
+substring search. Use staging query plans on representative data to prioritize
+cursor pagination and search indexes. Media and certificate storage are
+filesystem-backed. Deploy shared storage before spreading uploads across hosts.
 
 ### Bookings
 | Method | Path                               | Access                         |
@@ -400,11 +449,9 @@ Endpoints:
  
 Apply migration **0020** (`calendar_tasks.due_date` → timestamptz, `user_calendar_preferences.timezone`).
  
-The Flutter app adds **Calendar** and **Catechism** bottom-nav tabs (catechism
-when a church is selected). Local reminders use `flutter_local_notifications`
-(Android: `POST_NOTIFICATIONS` and exact-alarm permissions in `AndroidManifest.xml`).
-Run `flutter pub get` in `frontend/` after pulling.
-The Flutter app adds a **Calendar** bottom-nav tab with **Events** sub-tab: collapsible upcoming (7 days) personal events, full dated event list with edit/delete, and a simplified main calendar month view (selected day only). Local reminders use `flutter_local_notifications` with timezone `Asia/Kolkata`, event lead times from `reminderMinutes`, and task due-time alerts (Android: `POST_NOTIFICATIONS` and `SCHEDULE_EXACT_ALARM` in `AndroidManifest.xml`). Run `flutter pub get` in `frontend/` after pulling.
+Open **Calendar** from Profile. Local reminders use `flutter_local_notifications`
+with event lead times and task due-time alerts. Run `flutter pub get` in
+`frontend/` after pulling.
 
 ## Testing
 

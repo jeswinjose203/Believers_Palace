@@ -4,7 +4,10 @@ package httpx
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 )
@@ -109,6 +112,7 @@ func ParsePageParams(r *http.Request) PageParams {
 	if limit > maxLimit {
 		limit = maxLimit
 	}
+	page = min(page, math.MaxInt/limit)
 
 	return PageParams{
 		Page:   page,
@@ -119,7 +123,18 @@ func ParsePageParams(r *http.Request) PageParams {
 
 // DecodeJSON decodes the request body into dst, rejecting unknown fields.
 func DecodeJSON(r *http.Request, dst any) error {
-	dec := json.NewDecoder(r.Body)
+	const maxJSONBody = 1 << 20
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxJSONBody))
 	dec.DisallowUnknownFields()
-	return dec.Decode(dst)
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errors.New("expected a single JSON value")
+		}
+		return err
+	}
+	return nil
 }

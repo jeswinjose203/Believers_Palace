@@ -27,7 +27,7 @@ type store interface {
 	ReviewRequest(context.Context, string, string, bool) error
 	RemoveMember(context.Context, string, string) error
 	Leave(context.Context, string, string) error
-	CreateMessage(context.Context, string, string, string, *string, string) (*Message, error)
+	CreateMessage(context.Context, string, string, string, *string, string, ...string) (*Message, error)
 	ListMessages(context.Context, string, CursorQuery) ([]Message, bool, error)
 	DeleteMessage(context.Context, string, string) error
 	GetMessage(context.Context, string, string) (*Message, error)
@@ -169,6 +169,11 @@ func (s *Service) Leave(ctx context.Context, id auth.Identity, cid string) error
 	}
 	return s.repo.Leave(ctx, cid, id.UserID)
 }
+func (s *Service) CanReadChat(ctx context.Context, id auth.Identity, cid string) bool {
+	_, err := s.requireMember(ctx, id, cid)
+	return err == nil
+}
+
 func (s *Service) ListMessages(ctx context.Context, id auth.Identity, cid string, q CursorQuery) (*CursorPage, error) {
 	if q.Before > 0 && (q.AfterSet || q.After > 0) {
 		return nil, &ValidationError{"use either before or after, not both"}
@@ -199,6 +204,9 @@ func (s *Service) Post(ctx context.Context, id auth.Identity, cid string, in Mes
 	if len(content) > maxMessageLength {
 		return nil, &ValidationError{"message is too long"}
 	}
+	if len(in.ClientID) > 64 {
+		return nil, &ValidationError{"client message ID is too long"}
+	}
 	name, pic, ok, err := s.users.DisplayOf(ctx, id.UserID)
 	if err != nil {
 		return nil, err
@@ -206,7 +214,7 @@ func (s *Service) Post(ctx context.Context, id auth.Identity, cid string, in Mes
 	if !ok {
 		name = "User"
 	}
-	return s.repo.CreateMessage(ctx, cid, id.UserID, name, pic, content)
+	return s.repo.CreateMessage(ctx, cid, id.UserID, name, pic, content, in.ClientID)
 }
 func (s *Service) DeleteMessage(ctx context.Context, id auth.Identity, cid, messageID string) error {
 	admin, err := s.requireMember(ctx, id, cid)

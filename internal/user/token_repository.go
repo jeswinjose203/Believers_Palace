@@ -68,9 +68,11 @@ func (r *Repository) RevokeRefreshToken(ctx context.Context, tokenHash string) e
 // (log out everywhere).
 func (r *Repository) RevokeAllRefreshTokens(ctx context.Context, userID string) error {
 	const q = `
-		UPDATE refresh_tokens
-		SET revoked_at = now()
-		WHERE user_id = $1 AND revoked_at IS NULL`
+		WITH revoked AS (
+			UPDATE refresh_tokens SET revoked_at = now()
+			WHERE user_id = $1 AND revoked_at IS NULL
+		)
+		DELETE FROM chat_push_devices WHERE user_id = $1`
 	if _, err := r.pool.Exec(ctx, q, userID); err != nil {
 		return fmt.Errorf("revoke all refresh tokens: %w", err)
 	}

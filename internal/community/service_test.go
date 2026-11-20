@@ -97,7 +97,7 @@ func (s *memoryStore) Leave(_ context.Context, cid, uid string) error {
 	delete(s.members[cid], uid)
 	return nil
 }
-func (s *memoryStore) CreateMessage(_ context.Context, cid, uid, name string, pic *string, text string) (*Message, error) {
+func (s *memoryStore) CreateMessage(_ context.Context, cid, uid, name string, pic *string, text string, _ ...string) (*Message, error) {
 	m := &Message{ID: "m1", CommunityID: cid, UserID: &uid, AuthorName: name, Content: text}
 	s.messages[m.ID] = m
 	return m, nil

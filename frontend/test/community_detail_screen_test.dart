@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,9 +10,26 @@ import 'package:believers_palace/models/community_models.dart';
 import 'package:believers_palace/models/models.dart';
 import 'package:believers_palace/screens/communities_screen.dart';
 import 'package:believers_palace/services/api_service.dart';
+import 'package:believers_palace/services/chat_live_service.dart';
+
+class _TestChatLiveService extends ChatLiveService {
+  _TestChatLiveService(super.api);
+
+  final updates = StreamController<ChatChange?>.broadcast();
+
+  @override
+  Stream<ChatChange?> watch(String kind, String id) => updates.stream;
+
+  @override
+  void dispose() {
+    unawaited(updates.close());
+    super.dispose();
+  }
+}
 
 class _CommunityApiService extends ApiService {
-  _CommunityApiService({this.incomingMessages = const [], this.communities = const []})
+  _CommunityApiService(
+      {this.incomingMessages = const [], this.communities = const []})
       : super(ApiClient());
 
   final List<CommunityMessage> incomingMessages;
@@ -206,49 +225,64 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('polling catches up all pages from an empty chat cursor',
-      (tester) async {
-    final messages = List.generate(
-      125,
-      (index) => CommunityMessage(
-        id: 'message-${index + 1}',
-        communityId: 'community-1',
-        seq: index + 1,
-        userId: 'member-1',
-        authorName: 'Member',
-        content: 'Message ${index + 1}',
-        createdAt: DateTime.utc(2026, 1, 1, 12, 0, index),
-      ),
-    );
-    final api = _CommunityApiService(incomingMessages: messages);
+  for (final useLive in [false, true]) {
+    testWidgets(
+        '${useLive ? 'Live delivery' : 'Fallback polling'} catches up all pages',
+        (tester) async {
+      final messages = List.generate(
+        125,
+        (index) => CommunityMessage(
+          id: 'message-${index + 1}',
+          communityId: 'community-1',
+          seq: index + 1,
+          userId: 'member-1',
+          authorName: 'Member',
+          content: 'Message ${index + 1}',
+          createdAt: DateTime.utc(2026, 1, 1, 12, 0, index),
+        ),
+      );
+      final api = _CommunityApiService(incomingMessages: messages);
+      final live = _TestChatLiveService(api);
+      addTearDown(live.dispose);
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          apiServiceProvider.overrideWithValue(api),
-          authProvider.overrideWith((ref) => _TestAuthNotifier(api)),
-        ],
-        child: MaterialApp(
-          home: CommunityDetailScreen(
-            community: Community(
-              id: 'community-1',
-              creatorId: 'owner-1',
-              name: 'Test community',
-              description: '',
-              createdAt: DateTime.utc(2026),
-              status: 'active',
-              isAdmin: false,
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiServiceProvider.overrideWithValue(api),
+            authProvider.overrideWith((ref) => _TestAuthNotifier(api)),
+            chatLiveProvider.overrideWithValue(live),
+          ],
+          child: MaterialApp(
+            home: CommunityDetailScreen(
+              community: Community(
+                id: 'community-1',
+                creatorId: 'owner-1',
+                name: 'Test community',
+                description: '',
+                createdAt: DateTime.utc(2026),
+                status: 'active',
+                isAdmin: false,
+              ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 3));
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
+      if (useLive) {
+        live.updates.add((deleted: null));
+        await tester.pump();
+      } else {
+        await tester.pump(const Duration(seconds: 3));
+      }
+      await tester.pumpAndSettle();
 
-    expect(api.afterCursors, [0, 50, 100]);
-    expect(find.text('Message 125'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      expect(api.afterCursors, [0, 50, 100]);
+      expect(find.text('Message 125'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      if (useLive) {
+        await tester.pump(const Duration(seconds: 4));
+        expect(api.afterCursors, [0, 50, 100]);
+      }
+    });
+  }
 }

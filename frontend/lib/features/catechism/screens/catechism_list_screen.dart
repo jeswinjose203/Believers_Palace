@@ -35,6 +35,7 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
   bool _loading = false;
   bool _hasMore = true;
   String? _error;
+  int _loadVersion = 0;
 
   @override
   void initState() {
@@ -49,14 +50,14 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
   }
 
   Future<void> _load({bool reset = false}) async {
-    if (_loading) return;
-  if (reset) {
-      _page = 1;
-      _hasMore = true;
-      _items.clear();
-    }
-    if (!_hasMore && !reset) return;
+    if (!mounted || (!reset && (_loading || !_hasMore))) return;
+    final version = ++_loadVersion;
     setState(() {
+      if (reset) {
+        _page = 1;
+        _hasMore = true;
+        _items.clear();
+      }
       _loading = true;
       _error = null;
     });
@@ -70,7 +71,7 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
         status: _status,
         level: _level,
       );
-      if (!mounted) return;
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _items.addAll(res.data);
         _hasMore = _page < res.pagination.totalPages;
@@ -78,7 +79,7 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -101,6 +102,7 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text('Catechism'),
         actions: [
           IconButton(
@@ -203,8 +205,8 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
                   : _items.isEmpty && _loading
                       ? const Center(child: CircularProgressIndicator())
                       : _items.isEmpty
-                          ? const ListView(
-                              children: [
+                          ? ListView(
+                              children: const [
                                 SizedBox(height: 48),
                                 Center(child: Text('No classes yet.')),
                               ],

@@ -10,6 +10,7 @@ class GroupChatBubble extends StatelessWidget {
   final String? dateDivider;
   final ChatSendStatus status;
   final bool animate;
+  final bool groupedWithPrevious;
   final VoidCallback? onRetry;
   final VoidCallback? onDelete;
   final VoidCallback? onLongPress;
@@ -23,6 +24,7 @@ class GroupChatBubble extends StatelessWidget {
     this.dateDivider,
     this.status = ChatSendStatus.sent,
     this.animate = false,
+    this.groupedWithPrevious = false,
     this.onRetry,
     this.onDelete,
     this.onLongPress,
@@ -44,13 +46,20 @@ class GroupChatBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!mine) ...[
-            CircleAvatar(
-              radius: 15,
-              backgroundColor: scheme.secondaryContainer,
-              child: Text(
-                authorName.isEmpty ? '?' : authorName[0].toUpperCase(),
-                style: theme.textTheme.labelSmall,
-              ),
+            SizedBox(
+              width: 30,
+              child: groupedWithPrevious
+                  ? null
+                  : CircleAvatar(
+                      radius: 15,
+                      backgroundColor: scheme.secondaryContainer,
+                      child: Text(
+                        authorName.isEmpty
+                            ? '?'
+                            : authorName.characters.first.toUpperCase(),
+                        style: theme.textTheme.labelSmall,
+                      ),
+                    ),
             ),
             const SizedBox(width: 6),
           ],
@@ -59,7 +68,8 @@ class GroupChatBubble extends StatelessWidget {
               onTap: status == ChatSendStatus.failed ? onRetry : null,
               onLongPress: onLongPress,
               child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 4),
+                margin: EdgeInsets.only(
+                    top: groupedWithPrevious ? 1 : 5, bottom: 1),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 constraints: BoxConstraints(
@@ -77,7 +87,7 @@ class GroupChatBubble extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!mine && authorName.isNotEmpty)
+                    if (!mine && !groupedWithPrevious && authorName.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 3),
                         child: Text(
@@ -157,7 +167,7 @@ class GroupChatBubble extends StatelessWidget {
         bubble,
       ],
     );
-    if (!animate) return message;
+    if (!animate || MediaQuery.disableAnimationsOf(context)) return message;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 220),

@@ -687,6 +687,7 @@ class ChatMessage {
   final String authorName;
   final String? authorPic;
   final String content;
+  final String? clientId;
   final DateTime createdAt;
 
   ChatMessage({
@@ -697,6 +698,7 @@ class ChatMessage {
     required this.authorName,
     this.authorPic,
     required this.content,
+    this.clientId,
     required this.createdAt,
   });
 
@@ -708,6 +710,7 @@ class ChatMessage {
         authorName: json['authorName'] as String? ?? 'User',
         authorPic: json['authorPic'] as String?,
         content: json['content'] as String,
+        clientId: json['clientId'] as String?,
         createdAt: DateTime.parse(json['createdAt'] as String),
       );
 }

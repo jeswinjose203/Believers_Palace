@@ -37,11 +37,11 @@ const classColumns = `id, church_id, name, description, level, min_age, max_age,
 
 func scanClass(row pgx.Row) (*Class, error) {
 	var (
-		c                                      Class
-		desc, teacherName, loc, image          *string
-		teacherID                              *string
-		scheduleRaw                            []byte
-		minAge, maxAge                         *int
+		c                             Class
+		desc, teacherName, loc, image *string
+		teacherID                     *string
+		scheduleRaw                   []byte
+		minAge, maxAge                *int
 	)
 	if err := row.Scan(
 		&c.ID, &c.ChurchID, &c.Name, &desc, &c.Level, &minAge, &maxAge,
@@ -149,7 +149,7 @@ func (r *Repository) ListClassesByChurch(
 
 	args = append(args, limit, offset)
 	q := fmt.Sprintf(
-		"SELECT %s FROM catechism_classes %s ORDER BY start_date DESC LIMIT $%d OFFSET $%d",
+		"SELECT %s FROM catechism_classes %s ORDER BY start_date DESC, id DESC LIMIT $%d OFFSET $%d",
 		classColumns, where, len(args)-1, len(args),
 	)
 	rows, err := r.pool.Query(ctx, q, args...)
@@ -213,26 +213,32 @@ func (r *Repository) DeleteClass(ctx context.Context, id string) error {
 	return nil
 }
 
-// CountApprovedEnrollments counts active seat-taking enrollments (pending + approved).
-func (r *Repository) CountApprovedEnrollments(ctx context.Context, classID string) (int, error) {
-	var n int
-	err := r.pool.QueryRow(ctx, `
-		SELECT count(*) FROM catechism_enrollments
-		WHERE class_id = $1 AND status IN ('pending', 'approved')
-	`, classID).Scan(&n)
-	return n, err
+type classEnrollmentStats struct {
+	count    int
+	enrolled bool
 }
 
-// GuardianEnrolledInClass reports whether the guardian has an active enrollment in the class.
-func (r *Repository) GuardianEnrolledInClass(ctx context.Context, classID, guardianID string) (bool, error) {
-	var exists bool
-	err := r.pool.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM catechism_enrollments
-			WHERE class_id = $1 AND guardian_id = $2 AND status IN ('pending', 'approved')
-		)
-	`, classID, guardianID).Scan(&exists)
-	return exists, err
+func (r *Repository) classEnrollmentStats(ctx context.Context, ids []string, guardianID string) (map[string]classEnrollmentStats, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT class_id, count(*), COALESCE(bool_or(guardian_id = NULLIF($2, '')::uuid), false)
+		FROM catechism_enrollments
+		WHERE class_id = ANY($1::uuid[]) AND status IN ('pending', 'approved')
+		GROUP BY class_id
+	`, ids, guardianID)
+	if err != nil {
+		return nil, fmt.Errorf("load class enrollment statistics: %w", err)
+	}
+	defer rows.Close()
+	result := make(map[string]classEnrollmentStats, len(ids))
+	for rows.Next() {
+		var id string
+		var stats classEnrollmentStats
+		if err := rows.Scan(&id, &stats.count, &stats.enrolled); err != nil {
+			return nil, err
+		}
+		result[id] = stats
+	}
+	return result, rows.Err()
 }
 
 const enrollmentColumns = `id, class_id, guardian_id, student_name, date_of_birth, notes, status, created_at, updated_at`

@@ -134,7 +134,7 @@ class _ManageClassFormScreenState extends ConsumerState<ManageClassFormScreen> {
             maxLines: 3,
           ),
           DropdownButtonFormField<String>(
-            value: _level,
+            initialValue: _level,
             decoration: const InputDecoration(labelText: 'Level'),
             items: const [
               DropdownMenuItem(value: 'first_communion', child: Text('First Communion')),
@@ -147,7 +147,7 @@ class _ManageClassFormScreenState extends ConsumerState<ManageClassFormScreen> {
             onChanged: (v) => setState(() => _level = v ?? _level),
           ),
           DropdownButtonFormField<String>(
-            value: _status,
+            initialValue: _status,
             decoration: const InputDecoration(labelText: 'Status'),
             items: const [
               DropdownMenuItem(value: 'draft', child: Text('Draft')),

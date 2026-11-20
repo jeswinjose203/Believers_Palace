@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/chat_push_service.dart';
 
 class AuthState {
   final User? user;
@@ -20,8 +21,51 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final ApiService _api;
+  final ChatPushService? _push;
+  Future<bool>? _refreshing;
+  String? _lastRotatedToken;
+  bool _signingOut = false;
 
-  AuthNotifier(this._api) : super(const AuthState(isLoading: true));
+  AuthNotifier(this._api, {ChatPushService? push})
+      : _push = push,
+        super(const AuthState(isLoading: true)) {
+    _api.refreshSession = _refreshAfterUnauthorized;
+  }
+
+  Future<bool> _refreshAfterUnauthorized(String failedToken) async {
+    if (_api.accessToken != failedToken) {
+      return !_signingOut &&
+          _api.accessToken != null &&
+          failedToken == _lastRotatedToken;
+    }
+    if (_signingOut) return false;
+    if (_refreshing case final pending?) return pending;
+    final pending = _refreshCurrentSession(failedToken);
+    _refreshing = pending;
+    try {
+      return await pending;
+    } finally {
+      _refreshing = null;
+    }
+  }
+
+  Future<bool> _refreshCurrentSession(String failedToken) async {
+    final prefs = await SharedPreferences.getInstance();
+    final refresh = prefs.getString('refreshToken');
+    if (refresh == null) return false;
+    try {
+      final res = await _api.refresh(refresh);
+      if (_signingOut || !mounted || _api.accessToken != failedToken) {
+        return false;
+      }
+      _lastRotatedToken = failedToken;
+      await _save(res.accessToken, res.refreshToken, res.user,
+          refreshing: failedToken);
+      return _api.accessToken == res.accessToken;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -59,6 +103,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> login(String email, String password) async {
     final res = await _api.login(email, password);
+    _lastRotatedToken = null;
     await _save(res.accessToken, res.refreshToken, res.user);
   }
 
@@ -76,6 +121,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    _signingOut = true;
+    await _push?.signOut();
     final prefs = await SharedPreferences.getInstance();
     final refreshToken = prefs.getString('refreshToken');
     // Best-effort server-side revocation; ignore network/validation errors.
@@ -87,7 +134,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await prefs.remove('token');
     await prefs.remove('refreshToken');
     _api.setToken(null);
+    _lastRotatedToken = null;
     state = const AuthState(isLoading: false);
+    _signingOut = false;
   }
 
   /// Revokes every refresh token for the user server-side (all devices), then
@@ -95,20 +144,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// it runs before local tokens are cleared.
   Future<void> logoutEverywhere() async {
     await _api.logoutAll();
+    await _push?.signOut();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
     await prefs.remove('refreshToken');
     _api.setToken(null);
+    _lastRotatedToken = null;
     state = const AuthState(isLoading: false);
   }
 
-  Future<void> _save(String token, String? refreshToken, User user) async {
+  Future<void> _save(String token, String? refreshToken, User user,
+      {String? refreshing}) async {
     final prefs = await SharedPreferences.getInstance();
+    if (refreshing != null && (_signingOut || _api.accessToken != refreshing)) {
+      return;
+    }
     await prefs.setString('token', token);
     if (refreshToken != null && refreshToken.isNotEmpty) {
       await prefs.setString('refreshToken', refreshToken);
     }
-    _api.setToken(token);
+    if (refreshing != null && (_signingOut || _api.accessToken != refreshing)) {
+      return;
+    }
+    _api.setToken(token, rotated: refreshing != null);
     state = AuthState(user: user, isLoading: false);
   }
 
@@ -133,5 +191,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final api = ref.watch(apiServiceProvider);
-  return AuthNotifier(api);
+  return AuthNotifier(api, push: ref.watch(chatPushProvider));
 });

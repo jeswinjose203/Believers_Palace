@@ -4,16 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth_provider.dart';
+import '../features/catechism/screens/catechism_list_screen.dart';
+import '../features/catechism/screens/my_enrollments_screen.dart';
 import '../services/calendar_reminder_sync.dart';
 import '../services/chat_notification_service.dart';
+import '../services/chat_push_service.dart';
 import 'admin_users_screen.dart';
 import 'communities_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
-import '../features/catechism/screens/catechism_list_screen.dart';
-import '../features/catechism/screens/my_enrollments_screen.dart';
- 
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -33,6 +33,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncReminders());
+    _startChatPush();
     _startChatNotifications();
   }
 
@@ -47,6 +48,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _syncReminders();
+      _startChatPush();
       _startChatNotifications();
     } else {
       _stopChatNotifications();
@@ -55,6 +57,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
   void _startChatNotifications() {
     _chatTimer?.cancel();
+    final foregroundStarted = DateTime.now();
     _chatTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       final user = ref.read(authProvider).user;
       if (user == null || !user.emailVerified) return;
@@ -65,8 +68,17 @@ class _MainScreenState extends ConsumerState<MainScreen>
               content: Text('$title\n$body',
                   maxLines: 3, overflow: TextOverflow.ellipsis)),
         );
-      });
+      },
+          notifySince:
+              ref.read(chatPushProvider).registered ? foregroundStarted : null);
     });
+  }
+
+  void _startChatPush() {
+    final user = ref.read(authProvider).user;
+    if (user?.emailVerified == true) {
+      unawaited(ref.read(chatPushProvider).start(user!.id));
+    }
   }
 
   void _stopChatNotifications() {
@@ -88,6 +100,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
           .select((state) => (state.user?.id, state.user?.emailVerified)),
       (_, next) {
         _chatNotifications.pause();
+        _startChatPush();
         ScaffoldMessenger.of(context).clearSnackBars();
       },
     );
@@ -98,63 +111,56 @@ class _MainScreenState extends ConsumerState<MainScreen>
     final useHome = user?.role == 'user';
     final churchId = user?.churchId;
     final hasChurch = churchId != null && churchId.isNotEmpty;
- 
 
-    final pages = <Widget>[
-      if (useHome) const HomeScreen(),
-      // Everyone lands on the shared "Find your church" search page. Admins and
-      // super admins get church management actions (Add/Edit/Delete) inline on
-      // that same screen; regular members get the heart ("set my church").
-      const SearchScreen(),
-      const CommunitiesScreen(),
-      const CalendarScreen(),
-      if (hasChurch)
-        CatechismListScreen(churchId: churchId!)
-      else
-        const MyEnrollmentsScreen(),
-      if (useHome) const HomeScreen(),
-      // Super admins manage bookings per church; they don't make their own.
-      if (!isSuperAdmin) const MyBookingsScreen(),
-      const CertificatesScreen(),
-      if (isSuperAdmin) const AdminUsersScreen(),
-      const ProfileScreen(),
-    ];
-
-    final items = <BottomNavigationBarItem>[
-      const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
-      const BottomNavigationBarItem(
-          icon: Icon(Icons.groups), label: 'Communities'),
-      const BottomNavigationBarItem(
-          icon: Icon(Icons.calendar_month), label: 'Calendar'),
-      BottomNavigationBarItem(
-        icon: const Icon(Icons.menu_book_outlined),
-        label: hasChurch ? 'Catechism' : 'Enrollments',
-      ),
+    final tabs = <(Widget, BottomNavigationBarItem)>[
       if (useHome)
-        const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-      const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
-      const BottomNavigationBarItem(
-          icon: Icon(Icons.groups), label: 'Communities'),
+        const (
+          HomeScreen(),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home')
+        ),
+      const (
+        SearchScreen(),
+        BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search')
+      ),
+      const (
+        CommunitiesScreen(),
+        BottomNavigationBarItem(icon: Icon(Icons.groups), label: 'Communities')
+      ),
+      (
+        hasChurch
+            ? CatechismListScreen(churchId: churchId)
+            : const MyEnrollmentsScreen(),
+        BottomNavigationBarItem(
+          icon: const Icon(Icons.menu_book_outlined),
+          label: hasChurch ? 'Catechism' : 'Enrollments',
+        ),
+      ),
       if (isSuperAdmin)
-        const BottomNavigationBarItem(
-            icon: Icon(Icons.admin_panel_settings), label: 'Users'),
-      const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        const (
+          AdminUsersScreen(),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.admin_panel_settings), label: 'Users')
+        ),
+      const (
+        ProfileScreen(),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile')
+      ),
     ];
 
     // Guard against an out-of-range index if the tab set changes (e.g. role
     // changes while the screen is mounted).
-    final safeIndex = _index.clamp(0, pages.length - 1);
+    final safeIndex = _index.clamp(0, tabs.length - 1);
 
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: pages[safeIndex],
+        child: tabs[safeIndex].$1,
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: safeIndex,
         onTap: (i) => setState(() => _index = i),
         type: BottomNavigationBarType.fixed,
-        items: items,
+        items: [for (final tab in tabs) tab.$2],
       ),
     );
   }

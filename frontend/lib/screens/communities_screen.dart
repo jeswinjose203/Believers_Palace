@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../core/auth_provider.dart';
 import '../models/community_models.dart';
 import '../services/api_service.dart';
+import '../services/chat_live_service.dart';
 import '../services/chat_notification_service.dart';
 import '../widgets/chat_email_verification.dart';
 import '../widgets/chat_notification_button.dart';
@@ -73,10 +74,16 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
   }
 
   Future<void> _open(Community community) async {
+    final user = ref.read(authProvider).user;
+    final notifications = ref.read(chatNotificationServiceProvider);
+    if (user != null) notifications.markCommunityRead(user.id, community.id);
     await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => CommunityDetailScreen(community: community),
     ));
-    if (mounted) _load();
+    if (mounted) {
+      if (user != null) notifications.markCommunityRead(user.id, community.id);
+      _load();
+    }
   }
 
   void _showError(Object error) => ScaffoldMessenger.of(context)
@@ -111,7 +118,12 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
                 : TabBarView(
                     children: [
                       _communityList(_communities, joinedOnly: false),
-                      _communityList(joined, joinedOnly: true),
+                      ValueListenableBuilder(
+                        valueListenable:
+                            ref.read(chatNotificationServiceProvider).previews,
+                        builder: (_, previews, __) =>
+                            _communityList(joined, joinedOnly: true),
+                      ),
                     ],
                   ),
       ),
@@ -138,6 +150,13 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
               itemCount: items.length,
               itemBuilder: (context, index) {
                 final community = items[index];
+                final user = ref.read(authProvider).user;
+                final preview = joinedOnly && user?.emailVerified == true
+                    ? ref
+                        .read(chatNotificationServiceProvider)
+                        .communityPreview(
+                        user?.id, community.id)
+                    : null;
                 final label = community.isAdmin
                     ? 'Admin'
                     : community.status == 'active'
@@ -148,11 +167,37 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
                 return ListTile(
                   leading: _CommunityAvatar(community: community),
                   title: Text(community.name),
-                  subtitle: Text(community.description.isEmpty
-                      ? label
-                      : '${community.description}\n$label'),
-                  isThreeLine: community.description.isNotEmpty,
-                  trailing: const Icon(Icons.chevron_right),
+                  subtitle: preview == null
+                      ? Text(community.description.isEmpty
+                          ? label
+                          : '${community.description}\n$label')
+                      : Text('${preview.author}: ${preview.text}',
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                  isThreeLine:
+                      preview == null && community.description.isNotEmpty,
+                  trailing: preview == null
+                      ? const Icon(Icons.chevron_right)
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(DateUtils.isSameDay(
+                                    preview.time.toLocal(), DateTime.now())
+                                ? DateFormat.jm().format(preview.time.toLocal())
+                                : DateFormat.MMMd()
+                                    .format(preview.time.toLocal())),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (preview.muted)
+                                  const Icon(Icons.notifications_off_outlined,
+                                      size: 14, semanticLabel: 'Muted'),
+                                if (preview.unread > 0)
+                                  Badge(label: Text('${preview.unread}')),
+                              ],
+                            ),
+                          ],
+                        ),
                   onTap: () => _open(community),
                 );
               },
@@ -301,6 +346,10 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
   late final bool _active =
       widget.community.status == 'active' || widget.community.isAdmin;
   Timer? _timer;
+  StreamSubscription<ChatChange?>? _liveSubscription;
+  bool _live = false;
+  bool _catchUp = false;
+  int _syncedSeq = 0;
 
   @override
   void initState() {
@@ -314,11 +363,13 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _appResumed = true;
+      _watchMessages();
       _poll();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _appResumed = false;
       _timer?.cancel();
+      _stopWatchingMessages();
     }
   }
 
@@ -326,6 +377,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _stopWatchingMessages();
     _scroll.removeListener(_onScroll);
     _input.dispose();
     _scroll.dispose();
@@ -336,6 +388,43 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
 
   bool get _emailVerified => ref.read(authProvider).user?.emailVerified == true;
 
+  void _stopWatchingMessages() {
+    unawaited(_liveSubscription?.cancel());
+    _liveSubscription = null;
+    _live = false;
+  }
+
+  void _watchMessages() {
+    if (!_active ||
+        !_emailVerified ||
+        !_appResumed ||
+        _liveSubscription != null) {
+      return;
+    }
+    _liveSubscription = ref
+        .read(chatLiveProvider)
+        .watch('community', widget.community.id)
+        .listen((change) {
+      if (!mounted) return;
+      _live = change != null;
+      if (!_live) {
+        if (_timer?.isActive != true) _scheduleNext();
+        return;
+      }
+      _timer?.cancel();
+      final deleted = change?.deleted;
+      if (deleted != null) {
+        setState(
+            () => _messages.removeWhere((message) => message.id == deleted));
+      }
+      if (_polling || _loading) {
+        _catchUp = true;
+      } else {
+        unawaited(_poll());
+      }
+    });
+  }
+
   Future<void> _load() async {
     try {
       if (_active && _emailVerified) {
@@ -343,6 +432,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
         if (!mounted) return;
         setState(() {
           _messages = page.data;
+          _syncedSeq = page.data.lastOrNull?.seq ?? 0;
           _hasMore = page.hasMore;
         });
       }
@@ -355,6 +445,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
           _failures = 0;
         });
         if (_active) _scrollToBottom(animate: false);
+        _watchMessages();
         _scheduleNext();
       }
     } catch (e) {
@@ -383,6 +474,12 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
   void _scheduleNext() {
     _timer?.cancel();
     if (!mounted || !_active || !_appResumed || !_emailVerified) return;
+    if (_catchUp && _failures == 0) {
+      _catchUp = false;
+      _timer = Timer(Duration.zero, _poll);
+      return;
+    }
+    if (_live && _failures == 0) return;
     var delay = _pollInterval;
     if (_failures > 0) {
       final seconds = _pollInterval.inSeconds * (1 << _failures.clamp(0, 5));
@@ -417,10 +514,17 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
   }
 
   Future<void> _poll() async {
-    if (!_active || _polling || _loading || !mounted || !_emailVerified) return;
+    if (!_active ||
+        _polling ||
+        _loading ||
+        !mounted ||
+        !_appResumed ||
+        !_emailVerified) {
+      return;
+    }
     _polling = true;
     try {
-      var cursor = _messages.isEmpty ? 0 : _messages.last.seq;
+      var cursor = _syncedSeq;
       var hasMore = true;
       final incoming = <CommunityMessage>[];
       for (var pageIndex = 0; pageIndex < 5 && hasMore; pageIndex++) {
@@ -438,8 +542,15 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
       if (!mounted) return;
       final known = _messages.map((message) => message.id).toSet();
       final fresh = incoming.where((message) => known.add(message.id)).toList();
+      final userId = ref.read(authProvider).user?.id;
+      final confirmed = incoming
+          .where((message) => message.userId == userId)
+          .map((message) => message.clientId)
+          .toSet();
       final wasAtBottom = _atBottom;
       setState(() {
+        _syncedSeq = cursor;
+        _pending.removeWhere((message) => confirmed.contains(message.clientId));
         _offline = false;
         _failures = 0;
         _error = null;
@@ -456,6 +567,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
         }
       });
       if (fresh.isNotEmpty && wasAtBottom) _scrollToBottom();
+      if (hasMore && incoming.length >= 5 * _pageSize) _catchUp = true;
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -529,8 +641,9 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
     });
     _scrollToBottom();
     try {
-      final message =
-          await _api.postCommunityMessage(widget.community.id, pending.content);
+      final message = await _api.postCommunityMessage(
+          widget.community.id, pending.content,
+          clientId: pending.clientId);
       if (!mounted) return;
       setState(() {
         _pending.remove(pending);
@@ -602,7 +715,11 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
     ref.listen(
       authProvider.select((state) => state.user?.emailVerified == true),
       (_, verified) {
-        if (verified && _active) _load();
+        if (verified && _active) {
+          _load();
+        } else if (!verified) {
+          _stopWatchingMessages();
+        }
       },
     );
     final status = widget.community.status;
@@ -829,6 +946,10 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                 final canDelete = _canDelete(message);
                 return GroupChatBubble(
                   key: ValueKey(message.id),
+                  groupedWithPrevious: dateDivider == null &&
+                      messageIndex > 0 &&
+                      message.userId != null &&
+                      message.userId == _messages[messageIndex - 1].userId,
                   content: message.content,
                   authorName: message.authorName,
                   mine: mine,
@@ -897,6 +1018,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
 
 class _PendingCommunityMessage {
   final int localId;
+  final String clientId = newChatMessageId();
   final String content;
   bool failed = false;
 

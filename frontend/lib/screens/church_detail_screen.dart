@@ -23,10 +23,8 @@ const _kTintBorder = Color(0xFFE4D3E6);
 
 /// Church detail with role-aware management.
 ///
-/// Layout: image gallery, name, pill tabs (About, Announcements, Halls, Events,
-/// Catechism, Bookings) and the tab content.
-/// Layout: image gallery, name, pill tabs (About,
-/// Announcements, Halls, Events, Bookings, Marketplace) and the tab content.
+/// The church page shows About, Announcements, Halls, Events, Bookings,
+/// Catechism, and Marketplace.
 ///
 /// - super_admin / church_admin (own church): full control of halls, bookings,
 ///   and booking status.
@@ -52,7 +50,6 @@ class ChurchDetailScreen extends ConsumerStatefulWidget {
 
 class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
     with SingleTickerProviderStateMixin {
-  static const int _announcementsTab = 1;
   static const int _bookingsTab = 4;
 
   late final TabController _tabController;
@@ -68,7 +65,6 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
     _tabController =
         TabController(length: _PillTabsDelegate._tabs.length, vsync: this);
     _loadChurch();
@@ -265,7 +261,6 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
               onError: _showError,
               onSuccess: _showSuccess,
             ),
-            CatechismListScreen(churchId: widget.church.id),
             _BookingsTab(
               key: ValueKey(_bookingsVersion),
               churchId: widget.church.id,
@@ -273,6 +268,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
               onError: _showError,
               onSuccess: _showSuccess,
             ),
+            CatechismListScreen(churchId: widget.church.id),
             const MarketplaceScreen(),
           ],
         ),
@@ -438,12 +434,12 @@ class _DateTimeFieldState extends State<_DateTimeField> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
     );
-    if (date == null || !context.mounted) return;
+    if (date == null || !mounted) return;
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(_value),
     );
-    if (time == null) return;
+    if (time == null || !mounted) return;
     setState(() {
       _value = DateTime(date.year, date.month, date.day, time.hour, time.minute);
     });
@@ -1562,7 +1558,7 @@ Future<bool> _showNewBookingDialog(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: hallId,
+                initialValue: hallId,
                 decoration: const InputDecoration(labelText: 'Hall *'),
                 items: halls
                     .map((h) =>
@@ -1712,8 +1708,8 @@ class _PillTabsDelegate extends SliverPersistentHeaderDelegate {
     (Icons.campaign_outlined, 'Announcements'),
     (Icons.meeting_room_outlined, 'Halls'),
     (Icons.event_outlined, 'Events'),
-    (Icons.school_outlined, 'Catechism'),
     (Icons.event_seat_outlined, 'Bookings'),
+    (Icons.school_outlined, 'Catechism'),
     (Icons.storefront_outlined, 'Marketplace'),
   ];
 

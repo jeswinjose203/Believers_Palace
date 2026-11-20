@@ -1,4 +1,4 @@
--- 0018_create_catechism.up.sql
+-- 0026_create_catechism.up.sql
 
 CREATE TABLE IF NOT EXISTS catechism_classes (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS catechism_classes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_catechism_classes_church_id ON catechism_classes (church_id);
+CREATE INDEX IF NOT EXISTS idx_catechism_classes_church_start ON catechism_classes (church_id, start_date DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_catechism_classes_status ON catechism_classes (status);
 CREATE INDEX IF NOT EXISTS idx_catechism_classes_level ON catechism_classes (level);
 
@@ -51,6 +52,8 @@ CREATE TABLE IF NOT EXISTS catechism_enrollments (
 CREATE INDEX IF NOT EXISTS idx_catechism_enrollments_class_id ON catechism_enrollments (class_id);
 CREATE INDEX IF NOT EXISTS idx_catechism_enrollments_guardian_id ON catechism_enrollments (guardian_id);
 CREATE INDEX IF NOT EXISTS idx_catechism_enrollments_status ON catechism_enrollments (status);
+CREATE INDEX IF NOT EXISTS idx_catechism_enrollments_active_class_guardian
+    ON catechism_enrollments (class_id, guardian_id) WHERE status IN ('pending', 'approved');
 
 -- One active enrollment per student identity per class.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_catechism_enrollment_active_student

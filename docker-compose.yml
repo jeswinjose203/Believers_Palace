@@ -52,12 +52,18 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-believers_palace}
       DB_SSLMODE: disable
+      DB_MIN_CONNS: ${DB_MIN_CONNS:-2}
+      DB_MAX_CONNS: ${DB_MAX_CONNS:-10}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+      JWT_SECRET: ${JWT_SECRET:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       STORAGE_DIR: /app/storage
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}
       MEDIA_DIR: /app/storage/media
       MAX_IMAGE_BYTES: ${MAX_IMAGE_BYTES:-5242880}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
       MAIL_PROVIDER: ${MAIL_PROVIDER:-log}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME}

@@ -36,7 +36,14 @@ class CalendarNotificationService {
     if (_ready) return;
     tzdata.initializeTimeZones();
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const settings = InitializationSettings(android: android);
+    const settings = InitializationSettings(
+      android: android,
+      iOS: DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      ),
+    );
     await _plugin.initialize(settings);
     _ready = true;
   }
