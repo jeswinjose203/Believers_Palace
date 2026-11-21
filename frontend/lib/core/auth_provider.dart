@@ -108,12 +108,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> register(String name, String email, String password,
-      {String? phone, String? unit, String? churchId}) async {
+      {required String phone,
+      required String firebaseIdToken,
+      String? unit,
+      String? churchId}) async {
     final res = await _api.register(
       name: name,
       email: email,
       password: password,
       phone: phone,
+      firebaseIdToken: firebaseIdToken,
       unit: unit,
       churchId: churchId,
     );

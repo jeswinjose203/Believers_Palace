@@ -7,18 +7,22 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ErrTokenInvalid is returned when a refresh or reset token is unknown,
 // expired, already used, or revoked.
 var ErrTokenInvalid = errors.New("token is invalid or expired")
 
-// StoreRefreshToken persists the hash of a refresh token for a user.
-func (r *Repository) StoreRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
+type tokenWriter interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}
+
+func storeRefreshToken(ctx context.Context, db tokenWriter, userID, tokenHash string, expiresAt time.Time) error {
 	const q = `
 		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)`
-	if _, err := r.pool.Exec(ctx, q, userID, tokenHash, expiresAt); err != nil {
+	if _, err := db.Exec(ctx, q, userID, tokenHash, expiresAt); err != nil {
 		return fmt.Errorf("store refresh token: %w", err)
 	}
 	return nil

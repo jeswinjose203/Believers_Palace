@@ -18,12 +18,13 @@ type Config struct {
 	ChatMaxConnections int
 	// PublicBaseURL is the externally reachable base URL of the API, used to
 	// build links in emails (e.g. https://api.example.com). No trailing slash.
-	PublicBaseURL string
-	DB            DBConfig
-	JWT           JWTConfig
-	Storage       StorageConfig
-	Mail          MailConfig
-	PushProjectID string
+	PublicBaseURL         string
+	DB                    DBConfig
+	JWT                   JWTConfig
+	Storage               StorageConfig
+	Mail                  MailConfig
+	FirebaseAuthProjectID string
+	PushProjectID         string
 
 	// SkipJWTValidation, when true, disables JWT authentication and injects a
 	// synthetic identity. Intended ONLY for local API testing (e.g. Postman).
@@ -142,6 +143,7 @@ func Load() (*Config, error) {
 			MediaDir:       getEnv("MEDIA_DIR", "./storage/media"),
 			MaxImageBytes:  getEnvInt64("MAX_IMAGE_BYTES", 5*1024*1024), // 5 MiB
 		},
+		FirebaseAuthProjectID: getEnv("FIREBASE_AUTH_PROJECT_ID", ""),
 		Mail: MailConfig{
 			Provider: getEnv("MAIL_PROVIDER", "log"),
 			SMTPHost: getEnv("SMTP_HOST", ""),

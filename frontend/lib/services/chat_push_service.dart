@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/firebase_app_config.dart';
 import 'api_service.dart';
 
 final chatPushProvider = Provider<ChatPushService>((ref) {
@@ -27,36 +28,15 @@ class ChatPushService {
 
   bool get registered => _registered;
 
-  FirebaseOptions? get _options {
-    if (kIsWeb) return null;
-    final appId = switch (defaultTargetPlatform) {
-      TargetPlatform.android =>
-        const String.fromEnvironment('FCM_ANDROID_APP_ID'),
-      TargetPlatform.iOS => const String.fromEnvironment('FCM_IOS_APP_ID'),
-      _ => '',
-    };
-    const apiKey = String.fromEnvironment('FCM_API_KEY');
-    const project = String.fromEnvironment('FCM_PROJECT_ID');
-    const sender = String.fromEnvironment('FCM_SENDER_ID');
-    if ([appId, apiKey, project, sender].any((value) => value.isEmpty)) {
-      return null;
-    }
-    return FirebaseOptions(
-        apiKey: apiKey,
-        appId: appId,
-        messagingSenderId: sender,
-        projectId: project);
-  }
-
   Future<void> start(String userId) async {
-    final options = _options;
+    final options = FirebaseAppConfig.options;
     if (options == null || _starting || (_registered && _userId == userId)) {
       return;
     }
     _starting = true;
     _userId = userId;
     try {
-      if (Firebase.apps.isEmpty) await Firebase.initializeApp(options: options);
+      await FirebaseAppConfig.initialize(options);
       if (_userId != userId) return;
       final messaging = FirebaseMessaging.instance;
       final permission = await messaging.requestPermission();
@@ -121,7 +101,7 @@ class ChatPushService {
       // Invalidating the Firebase token also stops alerts if the API is offline.
     }
     try {
-      if (_options != null && Firebase.apps.isNotEmpty) {
+      if (FirebaseAppConfig.options != null && Firebase.apps.isNotEmpty) {
         await FirebaseMessaging.instance.unregister();
       }
     } catch (_) {}

@@ -63,6 +63,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		h.writeServiceError(w, err)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	httpx.JSON(w, http.StatusCreated, resp)
 }
 
@@ -316,6 +317,12 @@ func (h *Handler) writeServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.As(err, &ve):
 		httpx.ErrorCode(w, http.StatusBadRequest, ve.Message, "bad_request")
+	case errors.Is(err, errSignupProofInvalid):
+		httpx.ErrorCode(w, http.StatusBadRequest, err.Error(), "phone_proof_invalid")
+	case errors.Is(err, errSignupProofUnavailable):
+		httpx.ErrorCode(w, http.StatusServiceUnavailable, err.Error(), "phone_verification_unavailable")
+	case errors.Is(err, ErrPhoneExists):
+		httpx.ErrorCode(w, http.StatusConflict, err.Error(), "phone_already_registered")
 	case errors.Is(err, ErrEmailExists):
 		httpx.ErrorCode(w, http.StatusConflict, "email already registered", "conflict")
 	case errors.Is(err, ErrNotFound):

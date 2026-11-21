@@ -131,7 +131,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               _InfoRow(
                 icon: Icons.phone_outlined,
-                label: 'Mobile',
+                label: (user.phone ?? '').isEmpty
+                    ? 'Mobile'
+                    : user.phoneVerified
+                        ? 'Mobile (verified)'
+                        : 'Mobile (unverified)',
                 value: (user.phone ?? '').isEmpty ? '-' : user.phone!,
               ),
               _InfoRow(
@@ -232,7 +236,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _edit(User user) async {
     final name = TextEditingController(text: user.name);
-    final phone = TextEditingController(text: user.phone ?? '');
     final unit = TextEditingController(text: user.unit ?? '');
     String? profilePic = user.profilePic;
 
@@ -247,10 +250,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               TextField(
                 controller: name,
                 decoration: const InputDecoration(labelText: 'Name'),
-              ),
-              TextField(
-                controller: phone,
-                decoration: const InputDecoration(labelText: 'Phone'),
               ),
               TextField(
                 controller: unit,
@@ -274,7 +273,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               try {
                 await ref.read(authProvider.notifier).updateProfile({
                   'name': name.text,
-                  'phone': phone.text.isEmpty ? null : phone.text,
                   'unit': unit.text.isEmpty ? null : unit.text,
                   'profilePic':
                       (profilePic == null || profilePic!.isEmpty)

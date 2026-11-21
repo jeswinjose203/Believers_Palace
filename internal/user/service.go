@@ -30,12 +30,13 @@ func invalid(msg string) error { return &ValidationError{Message: msg} }
 
 // Service holds user business logic.
 type Service struct {
-	repo       *Repository
-	tokens     *auth.TokenManager
-	mailer     mailer.Mailer
-	refreshTTL time.Duration
-	resetTTL   time.Duration
-	logTokens  bool
+	repo              *Repository
+	tokens            *auth.TokenManager
+	mailer            mailer.Mailer
+	refreshTTL        time.Duration
+	resetTTL          time.Duration
+	logTokens         bool
+	verifySignupPhone func(context.Context, string, string) error
 }
 
 func (s *Service) SetLogTokens(v bool) {
@@ -64,16 +65,28 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*AuthResponse
 	if !validEmail(in.Email) {
 		return nil, invalid("a valid email is required")
 	}
-	if len(in.Password) < 8 {
-		return nil, invalid("password must be at least 8 characters")
+	if len(in.Password) < 8 || len(in.Password) > 72 {
+		return nil, invalid("Password must be between 8 and 72 bytes.")
 	}
-
-	hash, err := auth.HashPassword(in.Password)
+	if in.Phone == nil {
+		return nil, invalid("A mobile number is required.")
+	}
+	phone, err := normalizeSignupPhone(*in.Phone)
 	if err != nil {
 		return nil, err
 	}
+	in.Phone = &phone
+	if in.FirebaseIDToken == "" {
+		return nil, invalid("Mobile verification is required.")
+	}
+	if s.verifySignupPhone == nil {
+		return nil, errSignupProofUnavailable
+	}
+	if err := s.verifySignupPhone(ctx, in.FirebaseIDToken, phone); err != nil {
+		return nil, err
+	}
 
-	u, err := s.repo.Create(ctx, in, hash, auth.RoleUser)
+	response, err := s.completeVerifiedSignup(ctx, in)
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +94,11 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*AuthResponse
 	// Send an email verification code (soft verification: the account is
 	// usable immediately, emailVerified becomes true once verified). A failure
 	// to send must not fail registration.
-	if err := s.issueEmailVerification(ctx, u); err != nil {
-		log.Printf("register: failed to send verification email to %s: %v", u.Email, err)
+	if err := s.issueEmailVerification(ctx, response.User); err != nil {
+		log.Printf("register: failed to send verification email to %s: %v", response.User.Email, err)
 	}
 
-	return s.authResponse(ctx, u)
+	return response, nil
 }
 
 // issueEmailVerification creates a six-digit code and sends it.
@@ -197,6 +210,15 @@ func (s *Service) Stats(ctx context.Context, churchID string) (*Stats, error) {
 func (s *Service) UpdateProfile(ctx context.Context, id string, in ProfileUpdateInput) (*User, error) {
 	if in.Name != nil && strings.TrimSpace(*in.Name) == "" {
 		return nil, invalid("name cannot be empty")
+	}
+	if in.Phone != nil {
+		current, err := s.repo.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if current.Phone == nil || *current.Phone != *in.Phone {
+			return nil, invalid("Mobile number changes require verification.")
+		}
 	}
 	if in.ChurchID != nil {
 		// Staff roles are bound to their church by an admin; letting them
@@ -321,6 +343,10 @@ func (s *Service) ResetPassword(ctx context.Context, in ResetPasswordInput) erro
 }
 
 func (s *Service) authResponse(ctx context.Context, u *User) (*AuthResponse, error) {
+	return s.issueSession(ctx, s.repo.pool, u)
+}
+
+func (s *Service) issueSession(ctx context.Context, db tokenWriter, u *User) (*AuthResponse, error) {
 	churchID := ""
 	if u.ChurchID != nil {
 		churchID = *u.ChurchID
@@ -334,7 +360,7 @@ func (s *Service) authResponse(ctx context.Context, u *User) (*AuthResponse, err
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repo.StoreRefreshToken(ctx, u.ID, refreshHash, time.Now().Add(s.refreshTTL)); err != nil {
+	if err := storeRefreshToken(ctx, db, u.ID, refreshHash, time.Now().Add(s.refreshTTL)); err != nil {
 		return nil, err
 	}
 

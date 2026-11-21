@@ -43,13 +43,13 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-const userColumns = `id, name, email, password_hash, phone, unit, profile_pic, role, church_id, email_verified, created_at`
+const userColumns = `id, name, email, password_hash, phone, unit, profile_pic, role, church_id, email_verified, phone_verified, created_at`
 
 func scanUser(row pgx.Row) (*User, error) {
 	var u User
 	err := row.Scan(
 		&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.Phone, &u.Unit,
-		&u.ProfilePic, &u.Role, &u.ChurchID, &u.EmailVerified, &u.CreatedAt,
+		&u.ProfilePic, &u.Role, &u.ChurchID, &u.EmailVerified, &u.PhoneVerified, &u.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -57,20 +57,22 @@ func scanUser(row pgx.Row) (*User, error) {
 	return &u, nil
 }
 
-// Create inserts a new user with a pre-hashed password.
-func (r *Repository) Create(ctx context.Context, in RegisterInput, passwordHash string, role auth.Role) (*User, error) {
+func (r *Repository) createVerified(ctx context.Context, tx pgx.Tx, in RegisterInput, passwordHash string) (*User, error) {
 	const q = `
-		INSERT INTO users (name, email, password_hash, phone, unit, church_id, role)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO users (name, email, password_hash, phone, unit, church_id, role, phone_verified)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
 		RETURNING ` + userColumns
 
-	row := r.pool.QueryRow(ctx, q,
-		in.Name, strings.ToLower(in.Email), passwordHash, in.Phone, in.Unit, in.ChurchID, role,
+	row := tx.QueryRow(ctx, q,
+		in.Name, strings.ToLower(in.Email), passwordHash, in.Phone, in.Unit, in.ChurchID, auth.RoleUser,
 	)
 	u, err := scanUser(row)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			if pgErr.ConstraintName == "users_verified_phone_unique" {
+				return nil, ErrPhoneExists
+			}
 			return nil, ErrEmailExists
 		}
 		return nil, fmt.Errorf("create user: %w", err)
@@ -225,10 +227,6 @@ func (r *Repository) UpdateProfile(ctx context.Context, id string, in ProfileUpd
 	if in.Name != nil {
 		args = append(args, *in.Name)
 		sets = append(sets, fmt.Sprintf("name = $%d", len(args)))
-	}
-	if in.Phone != nil {
-		args = append(args, in.Phone)
-		sets = append(sets, fmt.Sprintf("phone = $%d", len(args)))
 	}
 	if in.Unit != nil {
 		args = append(args, in.Unit)

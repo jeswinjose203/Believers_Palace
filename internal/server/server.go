@@ -97,6 +97,9 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Hand
 	userRepo := user.NewRepository(pool)
 	userSvc := user.NewService(userRepo, tm, mail, cfg.JWT.RefreshTTL, cfg.JWT.ResetTTL)
 	userSvc.SetLogTokens(cfg.AppEnv != "production") // log tokens in dev/test, not in prod
+	if cfg.FirebaseAuthProjectID != "" {
+		userSvc.SetFirebaseSignupProject(cfg.FirebaseAuthProjectID)
+	}
 	userHandler := user.NewHandler(userSvc, tm)
 
 	churchRepo := church.NewRepository(pool)

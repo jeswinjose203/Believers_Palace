@@ -39,7 +39,7 @@ believers_palace/
 │   ├── certificate/        # per-user PDF certificate storage
 │   ├── marketplace/        # community ads + shop catalog
 │   └── server/             # router + middleware wiring
-├── migrations/             # SQL migrations (0001..0027)
+├── migrations/             # SQL migrations (0001..0028)
 ├── .env.example
 ├── Makefile
 └── go.mod
@@ -124,6 +124,7 @@ Key environment variables (see `.env.example` for the full list):
 | `MAX_UPLOAD_BYTES` | `10485760` (10 MiB)        | Max certificate file size              |
 | `MEDIA_DIR`        | `./storage/media`          | Where uploaded images are stored       |
 | `MAX_IMAGE_BYTES`  | `5242880` (5 MiB)          | Max image upload size                  |
+| `FIREBASE_AUTH_PROJECT_ID` | — | Firebase project issuing signup phone tokens. Use the same value as the Flutter `FCM_PROJECT_ID` build setting. |
 | `MAIL_PROVIDER`    | `log`                      | `log` (console) or `smtp` (real email) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `MAIL_FROM` | — | Required when `MAIL_PROVIDER=smtp` (e.g. Gmail: host `smtp.gmail.com`, port `587`, a 16-char App Password) |
 
@@ -160,7 +161,7 @@ service requests by name/deceased/description).
 ### Authentication
 | Method | Path                     | Description                                   |
 |--------|--------------------------|-----------------------------------------------|
-| POST   | `/auth/register`         | Register a user                               |
+| POST   | `/auth/register`         | Validate Firebase phone proof and create an account |
 | POST   | `/auth/login`            | Log in                                        |
 | POST   | `/auth/refresh`          | Exchange a refresh token for a new token pair |
 | POST   | `/auth/logout`           | Revoke a single refresh token                 |
@@ -439,10 +440,10 @@ See [interfaces.md](interfaces.md) for query parameters and payloads.
 ### Example
 
 ```bash
-# Register and capture the token
-TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/register \
+# Sign in to an existing account and capture the token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Jane Doe","email":"jane@example.com","password":"supersecret"}' \
+  -d '{"email":"jane@example.com","password":"supersecret"}' \
   | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
 
 # Upload a certificate for yourself (USER_ID from /users/me)
@@ -453,6 +454,49 @@ curl -X POST "http://localhost:8080/api/users/$USER_ID/certificates" \
   -F 'certificateNumber=BAP-001' \
   -F 'fullName=Jane Doe'
 ```
+### Firebase phone verification for signup
+
+Use the Firebase project already registered for the mobile app. The Android
+application ID is `com.example.believers_palace` and the iOS bundle ID is
+`com.example.believersPalace`.
+
+1. In Firebase Console, open **Authentication → Sign-in method** and enable
+   **Phone**. Add a fictional number and a six-digit test code in a development
+   Firebase project for testing. For live SMS, link billing and allow the
+   intended destination countries under **Authentication → Settings → SMS
+   region policy**.
+2. For Android, run `.\gradlew.bat signingReport` from `frontend/android`.
+   In **Project settings → Your apps**, add SHA-1 and SHA-256 for the debug
+   and distribution signing certificates you use. For Play builds, use the
+   Play App Signing certificate fingerprints.
+3. For iOS, in the generated Runner project, enable **Push Notifications**
+   and **Background Modes** for background fetch and remote notifications.
+   Upload an APNs key to Firebase Cloud Messaging. Add the iOS **Encoded
+   App ID** from Firebase Project settings under **Runner → Info → URL Types**
+   as a URL scheme for reCAPTCHA fallback.
+4. Set `FIREBASE_AUTH_PROJECT_ID` in the API environment to the Firebase
+   Project ID and apply migration `0028` if it is pending. The API verifies
+   Google's public signing certificates over HTTPS. Signup verification
+   does not require a service account key.
+5. Build or run the Flutter app with the same Firebase project values used
+   for push. For example, run from `frontend` for Android:
+
+   ```powershell
+   flutter run `
+     --dart-define=FCM_PROJECT_ID=YOUR_PROJECT_ID `
+     --dart-define=FCM_API_KEY=YOUR_ANDROID_API_KEY `
+     --dart-define=FCM_SENDER_ID=YOUR_MESSAGING_SENDER_ID `
+     --dart-define=FCM_ANDROID_APP_ID=YOUR_ANDROID_FIREBASE_APP_ID
+   ```
+
+   For iOS, use `FCM_IOS_APP_ID` and the iOS app API key.
+
+Firebase handles SMS delivery and throttling. The Go API accepts a Firebase
+ID token issued after phone sign-in, checks the exact submitted number and
+requires authentication within ten minutes. The application still creates
+its own account and session in PostgreSQL. Use a fictional number to test
+signup without sending an SMS. The Flutter signup flow supports Android and iOS.
+
 ## Personal calendar (migrations 0017, 0020)
  
 Authenticated users have a **per-user** private calendar at `/api/users/me/calendar/*`. Events, tasks, goals, check-ins, achievements, and preferences are stored with `user_id` and are never shared between accounts. The aggregated **schedule** also includes defaults only: public holidays (country from the user's preferences) and church platform events for the church selected on the user's profile (`users.church_id`, not the JWT claim). After logout or switching accounts, the Flutter app clears in-memory calendar state and local reminders.

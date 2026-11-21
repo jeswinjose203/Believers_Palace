@@ -3,6 +3,7 @@ class User {
   final String name;
   final String email;
   final String? phone;
+  final bool phoneVerified;
   final String? unit;
   final String? profilePic;
   final String role;
@@ -15,6 +16,7 @@ class User {
     required this.name,
     required this.email,
     this.phone,
+    this.phoneVerified = false,
     this.unit,
     this.profilePic,
     required this.role,
@@ -28,6 +30,7 @@ class User {
         name: json['name'] as String,
         email: json['email'] as String,
         phone: json['phone'] as String?,
+        phoneVerified: (json['phoneVerified'] as bool?) ?? false,
         unit: json['unit'] as String?,
         profilePic: json['profilePic'] as String?,
         role: json['role'] as String,
@@ -41,6 +44,7 @@ class User {
         'name': name,
         'email': email,
         'phone': phone,
+        'phoneVerified': phoneVerified,
         'unit': unit,
         'profilePic': profilePic,
         'role': role,

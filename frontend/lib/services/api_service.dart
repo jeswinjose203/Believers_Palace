@@ -73,7 +73,8 @@ class ApiService {
     required String name,
     required String email,
     required String password,
-    String? phone,
+    required String phone,
+    required String firebaseIdToken,
     String? unit,
     String? churchId,
   }) =>
@@ -85,10 +86,11 @@ class ApiService {
           'email': email,
           'password': password,
           'phone': phone,
+          'firebaseIdToken': firebaseIdToken,
           'unit': unit,
           'churchId': churchId,
         },
-      );
+      ).timeout(const Duration(seconds: 35));
  
   Future<AuthResponse> refresh(String refreshToken) => _client.post(
         '/auth/refresh',
