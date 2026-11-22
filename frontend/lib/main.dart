@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/auth_provider.dart';
 import 'providers/calendar_provider.dart';
 import 'services/calendar_notification_service.dart';
+import 'services/android_update_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_screen.dart';
 
@@ -19,15 +20,25 @@ class BelieversPalaceApp extends ConsumerStatefulWidget {
 }
 
 class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
+  final _navigator = GlobalKey<NavigatorState>();
+  late final _updates = AndroidUpdatePrompter(_navigator);
+
   @override
   void initState() {
     super.initState();
+    _updates.start();
     Future.microtask(() async {
       await ref.read(authProvider.notifier).init();
       await CalendarNotificationService.instance.init();
     });
   }
- 
+
+  @override
+  void dispose() {
+    _updates.dispose();
+    super.dispose();
+  }
+
   void _onAuthSessionChange(AuthState? prev, AuthState next) {
     final prevUserId = prev?.user?.id;
     final nextUserId = next.user?.id;
@@ -47,6 +58,7 @@ class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
     ref.listen<AuthState>(authProvider, _onAuthSessionChange);
 
     return MaterialApp(
+      navigatorKey: _navigator,
       title: 'Believers Palace',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

@@ -571,3 +571,29 @@ lag, notification lag, CDN cache hits, and bytes served by the origin. For high
 video volume, provision direct object uploads with asset scanning and video
 transcoding before publication. Put reporting, blocking, and a moderation
 workflow in place for public posts and direct messages.
+
+## Android APK distribution
+
+The Android download page and the Android app check the latest published GitHub
+Release in this repository. Use a release tag such as v0.1.0+1 and attach the
+verified APK as believers-palace.apk. Keep the build number after the plus sign
+strictly increasing. Use published stable releases for Android and leave
+previews as prereleases. The page shows the download once the APK is uploaded.
+
+Build a universal APK from the configured Flutter Android checkout with
+frontend/tools/build-android-release.ps1. Pass Version, Build, ApiUrl,
+Keystore, KeyAlias, and the Android SDK apksigner path. Supply Firebase public
+build settings with DefinesFile when needed. Pass signing passwords through
+BP_ANDROID_STORE_PASSWORD and BP_ANDROID_KEY_PASSWORD in the environment.
+The script uses the same Android build number for the update check, re-signs the
+release output, and verifies the signing certificate before reporting the APK
+path and checksum. Keep passwords and the keystore outside version control.
+Keep the package ID and signing key consistent from release to release.
+
+The app checks for a newer APK on launch and foreground resume, with a cooldown.
+The update prompt opens the verified repository's APK in the browser. Users
+open the downloaded file and confirm Update in the Android installer. An
+installed debug build signed with a different certificate must be replaced
+before it can receive future signed releases. Set up the public HTTPS backend
+and register the release signing fingerprints with Firebase before distributing
+a build that uses phone verification.
