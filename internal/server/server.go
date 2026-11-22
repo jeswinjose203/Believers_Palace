@@ -252,6 +252,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Hand
 			protected.Mount("/halls", hallHandler.Routes())
 			protected.Mount("/bookings", bookingHandler.Routes())
 			protected.Mount("/catechism-classes", catechismHandler.ClassRoutes())
+			protected.Mount("/catechism-teacher/classes", catechismHandler.TeacherRoutes())
 			protected.Mount("/catechism-enrollments", catechismHandler.EnrollmentRoutes())
 			protected.Mount("/catechism-sessions", catechismHandler.SessionRoutes())
 			protected.Mount("/events", eventHandler.RoutesWith(chatHandler.EventRoutes(userRepo.RequireVerifiedEmail)))

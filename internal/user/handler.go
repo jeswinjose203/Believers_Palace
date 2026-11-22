@@ -26,6 +26,7 @@ func (h *Handler) AuthRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Post("/register", h.register)
 	r.Post("/login", h.login)
+	r.Post("/teacher-login", h.teacherLogin)
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
 	r.Post("/forgot-password", h.forgotPassword)
@@ -69,13 +70,21 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
+	h.loginWithMode(w, r, false)
+}
+
+func (h *Handler) teacherLogin(w http.ResponseWriter, r *http.Request) {
+	h.loginWithMode(w, r, true)
+}
+
+func (h *Handler) loginWithMode(w http.ResponseWriter, r *http.Request, teacher bool) {
 	var in LoginInput
 	if err := httpx.DecodeJSON(r, &in); err != nil {
 		httpx.ErrorCode(w, http.StatusBadRequest, "invalid JSON body", "bad_request")
 		return
 	}
 
-	resp, err := h.svc.Login(r.Context(), in)
+	resp, err := h.svc.login(r.Context(), in, teacher)
 	if errors.Is(err, ErrInvalidCredentials) {
 		httpx.ErrorCode(w, http.StatusUnauthorized, "invalid email or password", "unauthorized")
 		return

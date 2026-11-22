@@ -299,3 +299,10 @@ func (r *Repository) UpdateRole(ctx context.Context, id string, role auth.Role) 
 	}
 	return u, nil
 }
+
+func (r *Repository) hasCatechismAssignment(ctx context.Context, userID string) (bool, error) {
+	var assigned bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM catechism_teachers WHERE user_id=$1)
+		OR EXISTS(SELECT 1 FROM catechism_classes WHERE teacher_user_id=$1)`, userID).Scan(&assigned)
+	return assigned, err
+}

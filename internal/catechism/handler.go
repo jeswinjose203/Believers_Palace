@@ -2,6 +2,7 @@ package catechism
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -32,6 +33,9 @@ func (h *Handler) ChurchRoutes() chi.Router {
 func (h *Handler) ClassRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/{classId}", h.getClass)
+	r.Get("/{classId}/workspace", h.getWorkspace)
+	r.Get("/{classId}/workspace/students/{studentId}", h.studentHistory)
+	r.Post("/{classId}/workspace/{action}", h.changeWorkspace)
 	r.Put("/{classId}", h.updateClass)
 	r.Delete("/{classId}", h.deleteClass)
 	r.Get("/{classId}/enrollments", h.listEnrollments)
@@ -256,6 +260,7 @@ func (h *Handler) writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrNotFound):
 		httpx.ErrorCode(w, http.StatusNotFound, "resource not found", "not_found")
 	default:
+		slog.Error("catechism request failed", "error", err)
 		httpx.ErrorCode(w, http.StatusInternalServerError, "internal server error", "internal")
 	}
 }

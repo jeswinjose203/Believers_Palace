@@ -1,0 +1,5 @@
+DROP INDEX catechism_workspace_marks;
+DROP INDEX catechism_workspace_announcements;
+DROP INDEX catechism_workspace_guardian;
+DROP INDEX catechism_workspace_roster;
+DROP INDEX catechism_classes_teacher;
