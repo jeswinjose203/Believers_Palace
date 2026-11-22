@@ -7,6 +7,7 @@ import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
 import '../widgets/status_chip.dart';
 import 'enroll_form_screen.dart';
+import 'catechism_workspace_screen.dart';
 import 'manage_class_form_screen.dart';
 import 'manage_enrollments_screen.dart';
 import 'session_form_screen.dart';
@@ -115,6 +116,21 @@ class _CatechismDetailScreenState extends ConsumerState<CatechismDetailScreen> {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.school_outlined),
+                  title: const Text('Class workspace'),
+                  subtitle: const Text('Syllabus, announcements, attendance and marks'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CatechismWorkspaceScreen(
+                        classId: widget.classId,
+                        title: cls.name,
+                      ),
+                    ),
+                  ),
+                ),
                 if (cls.image != null && cls.image!.isNotEmpty)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),

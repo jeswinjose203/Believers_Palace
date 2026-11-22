@@ -168,6 +168,10 @@ func (s *Service) ResendVerification(ctx context.Context, in ResendVerificationI
 
 // Login verifies credentials and issues a token.
 func (s *Service) Login(ctx context.Context, in LoginInput) (*AuthResponse, error) {
+	return s.login(ctx, in, false)
+}
+
+func (s *Service) login(ctx context.Context, in LoginInput, teacher bool) (*AuthResponse, error) {
 	if !validEmail(strings.TrimSpace(in.Email)) || in.Password == "" {
 		return nil, invalid("email and password are required")
 	}
@@ -182,6 +186,15 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*AuthResponse, erro
 
 	if !auth.CheckPassword(u.PasswordHash, in.Password) {
 		return nil, ErrInvalidCredentials
+	}
+	if teacher {
+		assigned, err := s.repo.hasCatechismAssignment(ctx, u.ID)
+		if err != nil {
+			return nil, err
+		}
+		if !assigned {
+			return nil, ErrInvalidCredentials
+		}
 	}
 
 	return s.authResponse(ctx, u)

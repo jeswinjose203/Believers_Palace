@@ -14,6 +14,28 @@ class CatechismApi {
 
   CatechismApi(this._client);
 
+  Future<Map<String, dynamic>> teacherClasses(int page) =>
+      _client.get('/catechism-teacher/classes', (json) => json,
+          query: {'page': page, 'limit': 20});
+
+  Future<Map<String, dynamic>> workspace(String classId, int page) =>
+      _client.get('/catechism-classes/$classId/workspace', (json) => json,
+          query: {'page': page, 'limit': 20});
+
+  Future<Map<String, dynamic>> studentHistory(
+    String classId,
+    String studentId,
+    int page,
+  ) =>
+      _client.get(
+        '/catechism-classes/$classId/workspace/students/$studentId',
+        (json) => json,
+        query: {'page': page, 'limit': 20},
+      );
+  Future<void> saveWorkspace(String classId, String action, Map<String, dynamic> body) async {
+    await _client.post("/catechism-classes/$classId/workspace/$action", (json) => json, body: body);
+  }
+
   Future<PaginatedResponse<CatechismClass>> listClasses(
     String churchId, {
     int page = 1,

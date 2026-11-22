@@ -63,6 +63,7 @@ class _ManageClassFormScreenState extends ConsumerState<ManageClassFormScreen> {
       'description': _description.text.trim().isEmpty ? null : _description.text.trim(),
       'level': _level,
       'teacherName': _teacher.text.trim().isEmpty ? null : _teacher.text.trim(),
+      'teacherUserId': widget.existing?.teacherUserId,
       'location': _location.text.trim().isEmpty ? null : _location.text.trim(),
       'schedule': <Map<String, String>>[],
       'startDate': _start.toIso8601String().split('T').first,

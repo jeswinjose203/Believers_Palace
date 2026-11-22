@@ -69,8 +69,8 @@ class ApiService {
       _client.postVoid('/chat/push-devices/remove', body: {'token': token});
  
   // Auth
-  Future<AuthResponse> login(String email, String password) => _client.post(
-        '/auth/login',
+  Future<AuthResponse> login(String email, String password, {bool teacher = false}) => _client.post(
+        teacher ? '/auth/teacher-login' : '/auth/login',
         AuthResponse.fromJson,
         body: {'email': email, 'password': password},
       );

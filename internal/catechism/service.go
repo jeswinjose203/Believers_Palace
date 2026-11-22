@@ -115,6 +115,9 @@ func (s *Service) CreateClass(ctx context.Context, id auth.Identity, churchID st
 	if !canManageChurch(id, churchID) {
 		return nil, ErrForbidden
 	}
+	if in.TeacherUserID != nil && !auth.CanManageChurch(id, churchID) {
+		return nil, ErrForbidden
+	}
 	if err := s.ensureChurch(ctx, churchID); err != nil {
 		return nil, err
 	}
@@ -135,6 +138,11 @@ func (s *Service) UpdateClass(ctx context.Context, id auth.Identity, classID str
 	}
 	if err := validateClassRequest(in); err != nil {
 		return nil, err
+	}
+	if in.TeacherUserID != nil &&
+		(existing.TeacherUserID == nil || *in.TeacherUserID != *existing.TeacherUserID) &&
+		!auth.CanManageChurch(id, existing.ChurchID) {
+		return nil, ErrForbidden
 	}
 	return s.repo.UpdateClass(ctx, classID, in)
 }

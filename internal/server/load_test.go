@@ -43,6 +43,8 @@ func TestMixedAPILoad(t *testing.T) {
 	const churchID = "e2222222-0000-0000-0000-000000000002"
 	const roomID = "e2222222-0000-0000-0000-000000000003"
 	const eventID = "e2222222-0000-0000-0000-000000000004"
+	const classID = "e2222222-0000-0000-0000-000000000006"
+	const enrollmentID = "e2222222-0000-0000-0000-000000000007"
 	for _, statement := range []struct {
 		sql  string
 		args []any
@@ -54,6 +56,10 @@ func TestMixedAPILoad(t *testing.T) {
 		{`INSERT INTO communities (id,creator_id,name,church_id) VALUES ($1,$2,'Load test group',$3)`, []any{roomID, userID, churchID}},
 		{`INSERT INTO community_memberships (community_id,user_id,status,is_admin) VALUES ($1,$2,'active',true)`, []any{roomID, userID}},
 		{`INSERT INTO events (id,church_id,title,start_date) VALUES ($1,$2,'Load test event',now())`, []any{eventID, churchID}},
+		{`INSERT INTO catechism_classes(id,church_id,name,level,teacher_user_id,start_date,end_date,capacity)
+			VALUES ($1,$2,'Load test catechism','other',$3,CURRENT_DATE,CURRENT_DATE,100)`, []any{classID, churchID, userID}},
+		{`INSERT INTO catechism_enrollments(id,class_id,guardian_id,student_name,date_of_birth,status)
+			VALUES ($1,$2,$3,'Load student','2014-01-01','approved')`, []any{enrollmentID, classID, userID}},
 	} {
 		if _, err := pool.Exec(ctx, statement.sql, statement.args...); err != nil {
 			t.Fatal(err)
@@ -111,6 +117,9 @@ func TestMixedAPILoad(t *testing.T) {
 		{"GET", "/api/churches/" + churchID + "/halls?limit=20"},
 		{"GET", "/api/churches/" + churchID + "/events?limit=20"},
 		{"GET", "/api/churches/" + churchID + "/catechism-classes?limit=20"},
+		{"GET", "/api/catechism-teacher/classes"},
+		{"GET", "/api/catechism-classes/" + classID + "/workspace"},
+		{"GET", "/api/catechism-classes/" + classID + "/workspace/students/" + enrollmentID},
 		{"GET", "/api/churches/" + churchID + "/cemetery-plots?limit=20"},
 		{"GET", "/api/bookings?limit=20"},
 		{"GET", "/api/users/" + userID + "/certificates?limit=20"},

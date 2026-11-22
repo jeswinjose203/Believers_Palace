@@ -9,13 +9,16 @@ class AuthState {
   final User? user;
   final bool isLoading;
 
-  const AuthState({this.user, this.isLoading = true});
+  final bool teacherMode;
+
+  const AuthState({this.user, this.isLoading = true, this.teacherMode = false});
 
   bool get isAuthenticated => user != null;
 
   AuthState copyWith({User? user, bool? isLoading}) => AuthState(
         user: user ?? this.user,
         isLoading: isLoading ?? this.isLoading,
+        teacherMode: teacherMode,
       );
 }
 
@@ -74,7 +77,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _api.setToken(token);
       try {
         final user = await _api.getMe();
-        state = AuthState(user: user, isLoading: false);
+        state = AuthState(user: user, isLoading: false, teacherMode: prefs.getBool('teacherMode') ?? false);
       } catch (e) {
         // Access token likely expired; try refreshing before giving up.
         final refreshed = await _tryRefresh(prefs);
@@ -101,8 +104,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> login(String email, String password) async {
-    final res = await _api.login(email, password);
+  Future<void> login(String email, String password, {bool teacher = false}) async {
+    final res = await _api.login(email, password, teacher: teacher);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('teacherMode', teacher);
     _lastRotatedToken = null;
     await _save(res.accessToken, res.refreshToken, res.user);
   }
@@ -136,6 +141,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       } catch (_) {}
     }
     await prefs.remove('token');
+    await prefs.remove('teacherMode');
     await prefs.remove('refreshToken');
     _api.setToken(null);
     _lastRotatedToken = null;
@@ -151,6 +157,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _push?.signOut();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
+    await prefs.remove('teacherMode');
     await prefs.remove('refreshToken');
     _api.setToken(null);
     _lastRotatedToken = null;
@@ -171,7 +178,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
     _api.setToken(token, rotated: refreshing != null);
-    state = AuthState(user: user, isLoading: false);
+    state = AuthState(user: user, isLoading: false, teacherMode: prefs.getBool('teacherMode') ?? false);
   }
 
   Future<void> verifyPhone(String phone, String token) async {
@@ -181,13 +188,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> updateProfile(Map<String, dynamic> body) async {
     final user = await _api.updateMe(body);
-    state = AuthState(user: user, isLoading: false);
+    state = state.copyWith(user: user, isLoading: false);
   }
 
   /// Re-fetches the current user (e.g. to pick up a changed emailVerified flag).
   Future<void> refreshUser() async {
     final user = await _api.getMe();
-    state = AuthState(user: user, isLoading: false);
+    state = state.copyWith(user: user, isLoading: false);
   }
 
   /// Requests an email verification code for the current user's address.

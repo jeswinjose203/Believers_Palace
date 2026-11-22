@@ -261,6 +261,10 @@ func scanEnrollment(row pgx.Row) (*Enrollment, error) {
 
 // CreateEnrollment inserts an enrollment inside a transaction with capacity and duplicate checks.
 func (r *Repository) CreateEnrollment(ctx context.Context, classID, guardianID string, in EnrollmentRequest) (*Enrollment, error) {
+	return r.createEnrollment(ctx, classID, guardianID, in, EnrollPending)
+}
+
+func (r *Repository) createEnrollment(ctx context.Context, classID, guardianID string, in EnrollmentRequest, enrollmentStatus EnrollmentStatus) (*Enrollment, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, err
@@ -276,7 +280,7 @@ func (r *Repository) CreateEnrollment(ctx context.Context, classID, guardianID s
 	} else if err != nil {
 		return nil, err
 	}
-	if status != StatusOpen {
+	if enrollmentStatus == EnrollPending && status != StatusOpen {
 		return nil, ErrClassNotOpen
 	}
 
@@ -293,10 +297,10 @@ func (r *Repository) CreateEnrollment(ctx context.Context, classID, guardianID s
 
 	const q = `
 		INSERT INTO catechism_enrollments (class_id, guardian_id, student_name, date_of_birth, notes, status)
-		VALUES ($1, $2, $3, $4, $5, 'pending')
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING ` + enrollmentColumns
 	e, err := scanEnrollment(tx.QueryRow(ctx, q,
-		classID, guardianID, strings.TrimSpace(in.StudentName), in.DateOfBirth, nullify(in.Notes),
+		classID, guardianID, strings.TrimSpace(in.StudentName), in.DateOfBirth, nullify(in.Notes), enrollmentStatus,
 	))
 	if err != nil {
 		var pgErr *pgconn.PgError
