@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -110,6 +111,35 @@ func TestSocialWorkflowsDB(t *testing.T) {
 		t.Fatal("Expected the liked post with its attachment")
 	}
 	call(bob, "DELETE", "/posts/"+first.(string)+"/like", "", 200)
+	if _, err := db.Exec(ctx, `INSERT INTO social_posts(author_id,body,client_id)
+		SELECT $1,'Ranked seed','ranked-'||i FROM generate_series(1,129) i`, alice); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[any]bool{}
+	path := "/feed"
+	for page := 0; page < 8; page++ {
+		result := call(bob, "GET", path, "", 200)
+		for _, raw := range result["data"].([]any) {
+			id := raw.(map[string]any)["id"]
+			if seen[id] {
+				t.Fatal("Ranked cursor repeated a post")
+			}
+			seen[id] = true
+		}
+		next, ok := result["nextCursor"].(string)
+		if !ok {
+			break
+		}
+		if page == 0 {
+			// Interacting mid-scroll changes ranking signals but must leave the
+			// in-flight candidate ordering intact.
+			call(bob, "PUT", "/posts/"+first.(string)+"/like", "", 200)
+		}
+		path = "/feed?cursor=" + url.QueryEscape(next)
+	}
+	if len(seen) != 130 {
+		t.Fatalf("Expected 130 unique feed items, got %d", len(seen))
+	}
 
 	if len(call(alice, "GET", "/people?q=bob_"+suffix, "", 200)["data"].([]any)) != 1 {
 		t.Fatal("Username search did not find Bob")

@@ -39,6 +39,7 @@ func TestMixedAPILoad(t *testing.T) {
 	defer pool.Close()
 
 	const userID = "e2222222-0000-0000-0000-000000000001"
+	const peerID = "e2222222-0000-0000-0000-000000000005"
 	const churchID = "e2222222-0000-0000-0000-000000000002"
 	const roomID = "e2222222-0000-0000-0000-000000000003"
 	const eventID = "e2222222-0000-0000-0000-000000000004"
@@ -49,6 +50,7 @@ func TestMixedAPILoad(t *testing.T) {
 		{`INSERT INTO churches (id,name,address) VALUES ($1,'Load test church','Test')`, []any{churchID}},
 		{`INSERT INTO users (id,name,email,password_hash,email_verified,church_id)
 			VALUES ($1,'Load test','mixed-load@example.test','unused',true,$2)`, []any{userID, churchID}},
+		{`INSERT INTO users (id,name,email,password_hash,email_verified) VALUES ($1,'Load test peer','mixed-peer@example.test','unused',true)`, []any{peerID}},
 		{`INSERT INTO communities (id,creator_id,name,church_id) VALUES ($1,$2,'Load test group',$3)`, []any{roomID, userID, churchID}},
 		{`INSERT INTO community_memberships (community_id,user_id,status,is_admin) VALUES ($1,$2,'active',true)`, []any{roomID, userID}},
 		{`INSERT INTO events (id,church_id,title,start_date) VALUES ($1,$2,'Load test event',now())`, []any{eventID, churchID}},
@@ -58,7 +60,7 @@ func TestMixedAPILoad(t *testing.T) {
 		}
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM churches WHERE id=$1`, churchID)
-	defer pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, userID)
+	defer pool.Exec(context.Background(), `DELETE FROM users WHERE id IN ($1,$2)`, userID, peerID)
 	if _, err := pool.Exec(ctx, `INSERT INTO communities (creator_id,name,church_id)
 		SELECT $1, 'Load test group ' || i, $2 FROM generate_series(1,10000) AS i`, userID, churchID); err != nil {
 		t.Fatal(err)
@@ -85,6 +87,18 @@ func TestMixedAPILoad(t *testing.T) {
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
+	secondPool, err := pgxpool.NewWithConfig(ctx, poolConfig.Copy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer secondPool.Close()
+	secondHandler, err := New(appCtx, cfg, secondPool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondServer := httptest.NewServer(secondHandler)
+	defer secondServer.Close()
+	replicas := []string{server.URL, secondServer.URL}
 	token, err := auth.NewTokenManager(secret, time.Hour, "load-test").Generate(userID, auth.RoleUser, churchID)
 	if err != nil {
 		t.Fatal(err)
@@ -107,6 +121,7 @@ func TestMixedAPILoad(t *testing.T) {
 		{"GET", "/api/communities?limit=30"},
 		{"GET", "/api/social/feed"},
 		{"GET", "/api/social/threads"},
+		{"POST", "/api/social/messages"},
 		{"GET", "/api/chat/joined-communities"},
 		{"GET", community + "?limit=20"},
 		{"GET", event + "?limit=20"},
@@ -178,10 +193,12 @@ func TestMixedAPILoad(t *testing.T) {
 			for i := worker; i < requests; i += workers {
 				route := routes[i%len(routes)]
 				body := ""
-				if route.method == "POST" {
+				if route.path == "/api/social/messages" {
+					body = fmt.Sprintf(`{"peerId":%q,"body":"local load test","clientId":"%032x"}`, peerID, i)
+				} else if route.method == "POST" {
 					body = fmt.Sprintf(`{"content":"local load test","clientId":"load-%d"}`, i)
 				}
-				req, err := http.NewRequestWithContext(ctx, route.method, server.URL+route.path, strings.NewReader(body))
+				req, err := http.NewRequestWithContext(ctx, route.method, replicas[(i/workers+worker)%len(replicas)]+route.path, strings.NewReader(body))
 				if err != nil {
 					t.Error(err)
 					continue
@@ -212,6 +229,22 @@ func TestMixedAPILoad(t *testing.T) {
 	}
 	group.Wait()
 	elapsed := time.Since(start)
+	expectedMessages := 0
+	for i := 0; i < requests; i++ {
+		if routes[i%len(routes)].path == "/api/social/messages" {
+			expectedMessages++
+		}
+	}
+	var messageCount, highestSequence int
+	if err := pool.QueryRow(ctx, `SELECT count(*),COALESCE(max(m.seq),0)
+		FROM direct_messages m JOIN direct_threads t ON t.id=m.thread_id
+		WHERE t.user_a=least($1::uuid,$2::uuid) AND t.user_b=greatest($1::uuid,$2::uuid)`,
+		userID, peerID).Scan(&messageCount, &highestSequence); err != nil {
+		t.Fatal(err)
+	}
+	if messageCount != expectedMessages || highestSequence != expectedMessages {
+		t.Fatalf("Expected %d ordered direct messages, got %d with highest sequence %d", expectedMessages, messageCount, highestSequence)
+	}
 	sort.Slice(results, func(i, j int) bool { return results[i] < results[j] })
 	t.Logf("%d requests, %d workers, %.0f req/s, p50=%s p95=%s p99=%s", requests, workers,
 		float64(requests)/elapsed.Seconds(), results[requests/2], results[requests*95/100], results[requests*99/100])

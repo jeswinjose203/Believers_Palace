@@ -33,6 +33,7 @@ func (h *Handler) Routes(authMiddleware func(http.Handler) http.Handler) chi.Rou
 
 	// Public download.
 	r.Get("/{key}", h.download)
+	r.Head("/{key}", h.download)
 
 	// Authenticated upload.
 	r.Group(func(protected chi.Router) {

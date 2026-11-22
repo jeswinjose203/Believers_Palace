@@ -212,7 +212,9 @@ class _PostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final key = post['mediaKey'] as String?;
-    final url = key == null ? null : Uri.parse('$apiBaseUrl/media/$key');
+    final url = key == null
+        ? null
+        : Uri.parse(post['mediaUrl'] as String? ?? '$apiBaseUrl/media/$key');
     final video =
         key?.endsWith('.mp4') == true || key?.endsWith('.webm') == true;
     final liked = post['liked'] as bool;

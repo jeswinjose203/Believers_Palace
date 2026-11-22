@@ -529,3 +529,45 @@ encoding, and certificate file storage (including path-traversal protection).
 & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse tcp:8080 tcp:8080
 
 & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" reverse --list
+
+### Social traffic and media delivery
+
+The feed is global. It ranks bounded windows with freshness, recent likes, and
+reader affinity based on recent likes of an author's posts. The first window can
+also retrieve older posts from those authors. Exploration gives new posts early
+visibility, and an author diversity penalty reduces repetition on a page. Feed
+cursors preserve the selected order between pages and exclude previously
+featured posts from the chronological continuation. Migration 0030 adds the
+indexes used by these queries.
+
+For an API fleet, mount the same durable, writable filesystem at MEDIA_DIR for
+every replica. With Docker Compose, set MEDIA_VOLUME_SOURCE to the absolute
+path of the shared storage mount. The default volume is local to its host. Set
+MEDIA_CDN_BASE_URL to the HTTPS prefix that serves files from that shared media
+origin, for example https://media.example.com. Configure the CDN to preserve
+Content-Type, byte ranges, and the existing immutable cache directives. Route
+GET and HEAD to the media origin, and keep authenticated writes on the API.
+Existing media keys and API download URLs continue to work if the files are
+copied to the shared volume before switching origins. Set
+SOCIAL_UPLOAD_CONCURRENCY per replica to reserve capacity for feed and chat
+requests during upload bursts. Uploads currently pass through the API.
+
+Use /livez for process liveness and /health for PostgreSQL readiness. Budget
+DB_MAX_CONNS across all API replicas and leave capacity for notification
+listeners, jobs, and operators. Support WebSocket upgrades at the ingress and
+set the idle timeout above the app's 25-second heartbeat. Use edge limits that
+apply across replicas and exclusively trust forwarded client IPs from the
+configured ingress.
+
+To run the mixed benchmark, set API_LOAD_DATABASE_URL to a disposable migrated
+PostgreSQL database and run go test -v ./internal/server -run TestMixedAPILoad.
+Set API_LOAD_CONCURRENCY and API_LOAD_REQUESTS to vary the workload. The fixture
+uses two API instances with separate connection pools and includes feed and inbox reads and concurrent DM writes to a single conversation.
+
+Before a large public rollout, measure a multi-replica soak test with realistic
+reader and author distributions, uploads, reconnect bursts, and DB failover.
+Measure per-route latency, rejected uploads, pool wait and saturation, replica
+lag, notification lag, CDN cache hits, and bytes served by the origin. For high
+video volume, provision direct object uploads with asset scanning and video
+transcoding before publication. Put reporting, blocking, and a moderation
+workflow in place for public posts and direct messages.

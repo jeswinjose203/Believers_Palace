@@ -59,7 +59,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Hand
 	r.Use(securityHeaders)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+		AllowedMethods:   []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Debug-User-Id", "X-Debug-Role", "X-Debug-Church-Id"},
 		ExposedHeaders:   []string{"Link", "Retry-After"},
 		AllowCredentials: false,
@@ -181,14 +181,20 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Hand
 	if err != nil {
 		return nil, err
 	}
-	mediaSvc := media.NewService(mediaStorage, cfg.PublicBaseURL, cfg.Storage.MaxImageBytes)
+	mediaSvc := media.NewService(mediaStorage, cfg.PublicBaseURL, cfg.Storage.MaxImageBytes).WithCDN(cfg.Storage.MediaCDNBaseURL)
 	mediaHandler := media.NewHandler(mediaSvc)
 
 	personalCalRepo := personalcalendar.NewRepository(pool)
 	personalCalSvc := personalcalendar.NewService(personalCalRepo, bookingRepo, eventRepo, userRepo)
 	personalCalHandler := personalcalendar.NewHandler(personalCalSvc)
 
-	// Health check.
+	// Liveness stays independent of database health so database outages do
+	// not cause all API replicas to restart.
+	r.Get("/livez", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	// Database readiness check.
 	r.Get("/health", func(w http.ResponseWriter, req *http.Request) {
 		if err := pool.Ping(req.Context()); err != nil {
 			httpx.Error(w, http.StatusServiceUnavailable, "database unavailable")
@@ -249,7 +255,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Hand
 			protected.Mount("/catechism-enrollments", catechismHandler.EnrollmentRoutes())
 			protected.Mount("/catechism-sessions", catechismHandler.SessionRoutes())
 			protected.Mount("/events", eventHandler.RoutesWith(chatHandler.EventRoutes(userRepo.RequireVerifiedEmail)))
-			protected.Mount("/social", social.New(pool, mediaSvc).Routes(userRepo.RequireVerifiedEmail))
+			protected.Mount("/social", social.New(pool, mediaSvc).WithUploadConcurrency(cfg.Storage.SocialUploadConcurrency).Routes(userRepo.RequireVerifiedEmail))
 			protected.Mount("/communities", communityHandler.Routes(userRepo.RequireVerifiedEmail))
 			protected.Mount("/marketplace", marketplaceHandler.Routes())
 			protected.Mount("/cemetery-service-requests", cemeteryHandler.RequestRoutes())

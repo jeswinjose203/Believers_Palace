@@ -46,6 +46,7 @@ type UploadResult struct {
 type Service struct {
 	storage  *Storage
 	baseURL  string
+	cdnURL   string
 	maxBytes int64
 }
 
@@ -53,6 +54,26 @@ type Service struct {
 // URL of the API (e.g. https://api.example.com) with no trailing slash.
 func NewService(storage *Storage, baseURL string, maxBytes int64) *Service {
 	return &Service{storage: storage, baseURL: strings.TrimRight(baseURL, "/"), maxBytes: maxBytes}
+}
+
+// WithCDN configures public object delivery before the service is shared.
+func (s *Service) WithCDN(base string) *Service {
+	s.cdnURL = strings.TrimRight(base, "/")
+	return s
+}
+
+func (s *Service) CDNURL(key string) string {
+	if s.cdnURL == "" {
+		return ""
+	}
+	return s.cdnURL + "/" + key
+}
+
+func (s *Service) publicURL(key string) string {
+	if url := s.CDNURL(key); url != "" {
+		return url
+	}
+	return s.baseURL + "/api/media/" + key
 }
 
 // MaxBytes returns the configured maximum upload size in bytes.
@@ -80,7 +101,7 @@ func (s *Service) Upload(originalName, declaredMime string, size int64, content 
 	}
 
 	return &UploadResult{
-		URL:      s.baseURL + "/api/media/" + key,
+		URL:      s.publicURL(key),
 		FileName: key,
 		MimeType: mime,
 		FileSize: written,

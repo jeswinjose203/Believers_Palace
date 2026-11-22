@@ -31,7 +31,7 @@ func (s *Service) UploadSocial(content io.Reader) (*UploadResult, error) {
 		s.Remove(key)
 		return nil, ErrTooLarge
 	}
-	return &UploadResult{URL: s.baseURL + "/api/media/" + key, FileName: key, MimeType: mime, FileSize: size}, nil
+	return &UploadResult{URL: s.publicURL(key), FileName: key, MimeType: mime, FileSize: size}, nil
 }
 
 func (s *Service) Remove(key string) {

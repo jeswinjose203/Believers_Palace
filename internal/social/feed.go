@@ -45,78 +45,10 @@ type post struct {
 	Username  string    `json:"username"`
 	Body      string    `json:"body"`
 	MediaKey  *string   `json:"mediaKey"`
+	MediaURL  string    `json:"mediaUrl,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	Likes     int       `json:"likes"`
 	Liked     bool      `json:"liked"`
-}
-
-const feedPageSize = 24
-
-func (h *Handler) feed(w http.ResponseWriter, r *http.Request) {
-	cursor, ok := readCursor(w, r)
-	if !ok {
-		return
-	}
-	var at *time.Time
-	var id *string
-	if cursor.ID != "" {
-		at, id = &cursor.At, &cursor.ID
-	}
-	// Rank each bounded chronological batch. The next cursor is based on the
-	// candidate order, so reactions and church changes cannot skip posts.
-	rows, err := h.db.Query(r.Context(), `WITH candidates AS MATERIALIZED (
-        SELECT * FROM social_posts
-        WHERE (created_at,id) < (COALESCE($2::timestamptz,'infinity'),COALESCE($3::uuid,'ffffffff-ffff-ffff-ffff-ffffffffffff'))
-        ORDER BY created_at DESC,id DESC LIMIT $4
-    ), numbered AS (
-        SELECT *, row_number() OVER (ORDER BY created_at DESC,id DESC) AS position FROM candidates
-    )
-    SELECT p.id,u.name,u.username,p.body,p.media_key,p.created_at,
-           n.likes, EXISTS(SELECT 1 FROM social_likes WHERE post_id=p.id AND user_id=$1),
-           p.position
-    FROM numbered p
-    JOIN users u ON u.id=p.author_id
-    JOIN users reader ON reader.id=$1
-    CROSS JOIN LATERAL (SELECT count(*) AS likes FROM
-        (SELECT 1 FROM social_likes WHERE post_id=p.id LIMIT 201) sample) n
-    ORDER BY (p.position=$4), (
-        ln(1+n.likes)*0.65
-        + CASE WHEN p.church_id=reader.church_id THEN 1.5 ELSE 0 END
-        - ln(1+GREATEST(0,EXTRACT(epoch FROM (now()-p.created_at))/3600))*0.9
-    ) DESC, p.created_at DESC,p.id DESC`, viewer(r), at, id, feedPageSize+1)
-	if err != nil {
-		failure(w, err)
-		return
-	}
-	defer rows.Close()
-	items := make([]post, 0, feedPageSize)
-	var tail pageCursor
-	more := false
-	for rows.Next() {
-		var p post
-		var position int
-		if err := rows.Scan(&p.ID, &p.Name, &p.Username, &p.Body, &p.MediaKey, &p.CreatedAt, &p.Likes, &p.Liked, &position); err != nil {
-			failure(w, err)
-			return
-		}
-		if position > feedPageSize {
-			more = true
-			continue
-		}
-		if position == feedPageSize {
-			tail = pageCursor{p.CreatedAt, p.ID}
-		}
-		items = append(items, p)
-	}
-	if err := rows.Err(); err != nil {
-		failure(w, err)
-		return
-	}
-	result := map[string]any{"data": items}
-	if more {
-		result["nextCursor"] = tail.encode()
-	}
-	httpx.JSON(w, 200, result)
 }
 
 func verificationRequired(w http.ResponseWriter) {
@@ -179,6 +111,14 @@ func (h *Handler) react(w http.ResponseWriter, r *http.Request, query string, li
 }
 
 func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
+	select {
+	case h.uploadSlots <- struct{}{}:
+		defer func() { <-h.uploadSlots }()
+	default:
+		w.Header().Set("Retry-After", "2")
+		httpx.ErrorCode(w, 503, "Upload capacity is busy. Try again shortly.", "upload_busy")
+		return
+	}
 	var verified bool
 	if err := h.db.QueryRow(r.Context(), `SELECT email_verified AND phone_verified FROM users WHERE id=$1`, viewer(r)).Scan(&verified); err != nil {
 		failure(w, err)

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -94,7 +95,9 @@ type StorageConfig struct {
 	// MaxUploadBytes is the maximum allowed size for an uploaded file.
 	MaxUploadBytes int64
 	// MediaDir is the base directory where uploaded images are stored.
-	MediaDir string
+	MediaDir                string
+	MediaCDNBaseURL         string
+	SocialUploadConcurrency int
 	// MaxImageBytes is the maximum allowed size for an uploaded image.
 	MaxImageBytes int64
 }
@@ -138,10 +141,12 @@ func Load() (*Config, error) {
 			Issuer:     getEnv("JWT_ISSUER", "believers_palace"),
 		},
 		Storage: StorageConfig{
-			Dir:            getEnv("STORAGE_DIR", "./storage/certificates"),
-			MaxUploadBytes: getEnvInt64("MAX_UPLOAD_BYTES", 10*1024*1024), // 10 MiB
-			MediaDir:       getEnv("MEDIA_DIR", "./storage/media"),
-			MaxImageBytes:  getEnvInt64("MAX_IMAGE_BYTES", 5*1024*1024), // 5 MiB
+			Dir:                     getEnv("STORAGE_DIR", "./storage/certificates"),
+			MaxUploadBytes:          getEnvInt64("MAX_UPLOAD_BYTES", 10*1024*1024), // 10 MiB
+			MediaDir:                getEnv("MEDIA_DIR", "./storage/media"),
+			MediaCDNBaseURL:         getEnv("MEDIA_CDN_BASE_URL", ""),
+			SocialUploadConcurrency: int(getEnvInt64("SOCIAL_UPLOAD_CONCURRENCY", 8)),
+			MaxImageBytes:           getEnvInt64("MAX_IMAGE_BYTES", 5*1024*1024), // 5 MiB
 		},
 		FirebaseAuthProjectID: getEnv("FIREBASE_AUTH_PROJECT_ID", ""),
 		Mail: MailConfig{
@@ -167,6 +172,15 @@ func Load() (*Config, error) {
 	}
 	if cfg.HTTPMaxInFlight < 1 || cfg.ChatMaxConnections < 1 {
 		return nil, fmt.Errorf("HTTP_MAX_IN_FLIGHT and CHAT_MAX_CONNECTIONS must be positive")
+	}
+	if cfg.Storage.SocialUploadConcurrency < 1 {
+		return nil, fmt.Errorf("SOCIAL_UPLOAD_CONCURRENCY must be positive")
+	}
+	if cfg.Storage.MediaCDNBaseURL != "" {
+		base, err := url.Parse(cfg.Storage.MediaCDNBaseURL)
+		if err != nil || base.Scheme != "https" || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
+			return nil, fmt.Errorf("MEDIA_CDN_BASE_URL must be an HTTPS origin or path prefix")
+		}
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

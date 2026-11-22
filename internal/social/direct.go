@@ -3,6 +3,7 @@ package social
 import (
 	"context"
 	"errors"
+	"hash/maphash"
 	"net/http"
 	"strconv"
 	"strings"
@@ -143,7 +144,18 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		bad(w, "Choose a recipient and enter up to 4,000 characters.")
 		return
 	}
-	id, err := h.saveMessage(r.Context(), sender, in.PeerID, body, in.ClientID)
+	peer := strings.ToLower(in.PeerID)
+	// Serialize same-thread writers per instance before acquiring a database
+	// connection. The row lock still orders writes across instances.
+	key := min(sender, peer) + max(sender, peer)
+	slot := h.directWrites[maphash.String(h.writeSeed, key)%uint64(len(h.directWrites))]
+	select {
+	case slot <- struct{}{}:
+		defer func() { <-slot }()
+	case <-r.Context().Done():
+		return
+	}
+	id, err := h.saveMessage(r.Context(), sender, peer, body, in.ClientID)
 	if err != nil {
 		failure(w, err)
 		return
@@ -152,42 +164,54 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) saveMessage(ctx context.Context, sender, peer, body, clientID string) (string, error) {
+	id, err := appendMessage(ctx, h.db, sender, peer, body, clientID)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return id, err
+	}
+
+	// Thread bootstrap is uncommon. A transaction keeps a failed first send
+	// from leaving an empty conversation and is safe if replicas race.
 	tx, err := h.db.Begin(ctx)
 	if err != nil {
 		return "", err
 	}
 	defer tx.Rollback(ctx)
-	_, err = tx.Exec(ctx, `INSERT INTO direct_threads(user_a,user_b)
-        SELECT least($1::uuid,u.id),greatest($1::uuid,u.id) FROM users u WHERE u.id=$2 AND u.email_verified
-        ON CONFLICT (user_a,user_b) DO NOTHING`, sender, peer)
+	if _, err = tx.Exec(ctx, `INSERT INTO direct_threads(user_a,user_b)
+		SELECT least($1::uuid,u.id),greatest($1::uuid,u.id) FROM users u WHERE u.id=$2 AND u.email_verified
+		ON CONFLICT (user_a,user_b) DO NOTHING`, sender, peer); err != nil {
+		return "", err
+	}
+	id, err = appendMessage(ctx, tx, sender, peer, body, clientID)
 	if err != nil {
 		return "", err
-	}
-
-	var id string
-	var sequence int64
-	err = tx.QueryRow(ctx, `SELECT id,last_seq FROM direct_threads
-        WHERE user_a=least($1::uuid,$2::uuid) AND user_b=greatest($1::uuid,$2::uuid) FOR UPDATE`, sender, peer).Scan(&id, &sequence)
-	if err != nil {
-		return "", err
-	}
-	tag, err := tx.Exec(ctx, `INSERT INTO direct_messages(thread_id,seq,sender_id,body,client_id) VALUES($1,$2,$3,$4,$5)
-        ON CONFLICT (thread_id,sender_id,client_id) DO NOTHING`, id, sequence+1, sender, body, clientID)
-	if err != nil {
-		return "", err
-	}
-	if tag.RowsAffected() == 0 {
-		return id, tx.Commit(ctx)
-	}
-	if _, err = tx.Exec(ctx, `UPDATE direct_threads SET last_seq=$2,updated_at=clock_timestamp() WHERE id=$1`, id, sequence+1); err != nil {
-		return "", err
-	}
-	for _, participant := range []string{sender, peer} {
-		if _, err = tx.Exec(ctx, `SELECT pg_notify('chat_changes',jsonb_build_object('kind','direct','id',$1::uuid)::text)`, participant); err != nil {
-			return "", err
-		}
 	}
 	return id, tx.Commit(ctx)
+}
+
+type messageQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func appendMessage(ctx context.Context, db messageQuerier, sender, peer, body, clientID string) (string, error) {
+	var id string
+	var signals int
+	err := db.QueryRow(ctx, `WITH thread AS MATERIALIZED (
+		SELECT id,last_seq FROM direct_threads
+		WHERE user_a=least($1::uuid,$2::uuid) AND user_b=greatest($1::uuid,$2::uuid)
+		FOR NO KEY UPDATE
+	), written AS (
+		INSERT INTO direct_messages(thread_id,seq,sender_id,body,client_id)
+		SELECT id,last_seq+1,$1,$3,$4 FROM thread
+		ON CONFLICT(thread_id,sender_id,client_id) DO NOTHING RETURNING thread_id,seq
+	), updated AS (
+		UPDATE direct_threads t SET last_seq=w.seq,updated_at=clock_timestamp()
+		FROM written w WHERE t.id=w.thread_id RETURNING t.user_a,t.user_b
+	), signals AS MATERIALIZED (
+		SELECT pg_notify('chat_changes',jsonb_build_object('kind','direct','id',participant.id)::text)
+		FROM updated CROSS JOIN LATERAL (VALUES(user_a),(user_b)) AS participant(id)
+	)
+	SELECT id,(SELECT count(*) FROM signals) FROM thread`, sender, peer, body, clientID).Scan(&id, &signals)
+	return id, err
 }
 
 func (h *Handler) hide(w http.ResponseWriter, r *http.Request) {

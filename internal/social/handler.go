@@ -2,6 +2,7 @@ package social
 
 import (
 	"errors"
+	"hash/maphash"
 	"log"
 	"net/http"
 	"regexp"
@@ -18,12 +19,26 @@ import (
 )
 
 type Handler struct {
-	db    *pgxpool.Pool
-	media *media.Service
+	db           *pgxpool.Pool
+	media        *media.Service
+	uploadSlots  chan struct{}
+	writeSeed    maphash.Seed
+	directWrites [256]chan struct{}
 }
 
 func New(db *pgxpool.Pool, mediaService *media.Service) *Handler {
-	return &Handler{db: db, media: mediaService}
+	h := &Handler{db: db, media: mediaService, writeSeed: maphash.MakeSeed()}
+	for i := range h.directWrites {
+		h.directWrites[i] = make(chan struct{}, 1)
+	}
+	return h.WithUploadConcurrency(8)
+}
+
+func (h *Handler) WithUploadConcurrency(limit int) *Handler {
+	if limit > 0 {
+		h.uploadSlots = make(chan struct{}, limit)
+	}
+	return h
 }
 
 func (h *Handler) Routes(verifiedEmail func(http.Handler) http.Handler) chi.Router {
