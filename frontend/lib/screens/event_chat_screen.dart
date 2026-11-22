@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/api_client.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
@@ -370,16 +371,16 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete message?'),
+        title: Text(context.tr('Delete message?')),
         content: Text(m.content),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            child: Text(context.tr('Delete')),
           ),
         ],
       ),
@@ -425,11 +426,11 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
         body: const ChatEmailVerification(),
       );
     }
-    final timeFmt = DateFormat.MMMd().add_jm();
+    final timeFmt = DateFormat.MMMd(context.dateLocale).add_jm();
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.event.title} · Chat'),
+        title: Text(context.tr('{0} · Chat', [widget.event.title])),
         actions: [
           if (!_loading && !_notRegistered && _error == null)
             ChatNotificationButton(kind: ChatKind.event, id: widget.event.id),
@@ -445,11 +446,11 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
                     color: Colors.orange.shade100,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: const Row(
+                    child: Row(
                       children: [
                         Icon(Icons.cloud_off, size: 16),
                         SizedBox(width: 8),
-                        Text('Reconnecting…'),
+                        Text(context.tr('Reconnecting…')),
                         SizedBox(width: 6),
                         _Dots(size: 5),
                       ],
@@ -467,22 +468,22 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
   Widget _body(User? me, DateFormat timeFmt) {
     if (_loading) return const Center(child: _Dots(size: 10));
     if (_notRegistered) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Text(
-            'Only registered attendees can use this chat.\n'
-            'Register for the event to join the conversation.',
+            "${context.tr('Only registered attendees can use this chat.')}\n"
+            "${context.tr('Register for the event to join the conversation.')}",
             textAlign: TextAlign.center,
           ),
         ),
       );
     }
     if (_error != null && _messages.isEmpty) {
-      return Center(child: Text('Error: $_error'));
+      return Center(child: Text(context.tr('Error: {0}', [_error])));
     }
     if (_messages.isEmpty && _pending.isEmpty) {
-      return const Center(child: Text('No messages yet. Say hello!'));
+      return Center(child: Text(context.tr('No messages yet. Say hello!')));
     }
 
     // Reversed list: index 0 is the newest item, pinned to the bottom.
@@ -527,7 +528,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
                     sentAt.year != previousSentAt.year ||
                     sentAt.month != previousSentAt.month ||
                     sentAt.day != previousSentAt.day
-                ? DateFormat.yMMMd().format(sentAt)
+                ? DateFormat.yMMMd(context.dateLocale).format(sentAt)
                 : null;
             final canDelete = _canDelete(m, me);
             return GroupChatBubble(
@@ -559,7 +560,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
                       key: const ValueKey('unseen'),
                       avatar: const Icon(Icons.arrow_downward, size: 16),
                       label: Text(
-                          '$_unseen new message${_unseen == 1 ? '' : 's'}'),
+                          context.tr('{0} new message{1}', [_unseen, _unseen == 1 ? '' : 's'])),
                       onPressed: () {
                         setState(() => _unseen = 0);
                         _scrollToBottom();
@@ -587,7 +588,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
                 maxLines: 4,
                 textInputAction: TextInputAction.send,
                 decoration: InputDecoration(
-                  hintText: 'Message',
+                  hintText: context.tr('Message'),
                   filled: true,
                   fillColor:
                       Theme.of(context).colorScheme.surfaceContainerHighest,

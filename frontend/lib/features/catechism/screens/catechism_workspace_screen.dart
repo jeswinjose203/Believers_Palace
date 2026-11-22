@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../l10n/app_locale.dart';
 import '../../../core/api_client.dart';
 import '../../../core/auth_provider.dart';
 import '../services/catechism_api.dart';
@@ -46,10 +47,10 @@ class _CatechismTeacherScreenState
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: const Text('Catechism teacher'),
+          title: Text(context.tr('Catechism teacher')),
           actions: [
             IconButton(
-              tooltip: 'Sign out',
+              tooltip: context.tr('Sign out'),
               icon: const Icon(Icons.logout),
               onPressed: () => ref.read(authProvider.notifier).logout(),
             ),
@@ -63,7 +64,7 @@ class _CatechismTeacherScreenState
             return ListView(
               children: [
                 if (classes.isEmpty)
-                  const ListTile(title: Text('No assigned classes')),
+                  ListTile(title: Text(context.tr('No assigned classes'))),
                 for (final cls in classes.take(_pageSize))
                   ListTile(
                     leading: const Icon(Icons.school_outlined),
@@ -152,7 +153,7 @@ class _CatechismWorkspaceScreenState
     if (saved == true && mounted) {
       setState(_load);
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Saved')));
+          .showSnackBar(SnackBar(content: Text(context.tr('Saved'))));
     }
   }
 
@@ -162,7 +163,7 @@ class _CatechismWorkspaceScreenState
           title: Text(widget.title),
           actions: [
             IconButton(
-              tooltip: 'Refresh',
+              tooltip: context.tr('Refresh'),
               onPressed: () => setState(_load),
               icon: const Icon(Icons.refresh),
             ),
@@ -197,7 +198,7 @@ class _CatechismWorkspaceScreenState
                   ('email', 'Guardian account email'),
                   ('notes', 'Notes (optional)'),
                 ]),
-                child: const Text('Register student'),
+                child: Text(context.tr('Register student')),
               ),
               OutlinedButton(
                 onPressed: () => _edit('teachers', 'Register teacher', const [
@@ -205,7 +206,7 @@ class _CatechismWorkspaceScreenState
                   ('name', 'Name for a new account'),
                   ('password', 'Initial password for a new account'),
                 ]),
-                child: const Text('Register teacher'),
+                child: Text(context.tr('Register teacher')),
               ),
             ],
             if (canTeach) ...[
@@ -217,7 +218,7 @@ class _CatechismWorkspaceScreenState
                   initial: syllabus ?? const {},
                 ),
                 child: Text(
-                    syllabus == null ? 'Publish syllabus' : 'Update syllabus'),
+                    syllabus == null ? context.tr('Publish syllabus') : context.tr('Update syllabus')),
               ),
               OutlinedButton(
                 onPressed: () => _edit(
@@ -225,27 +226,27 @@ class _CatechismWorkspaceScreenState
                   'Post announcement',
                   const [('title', 'Title'), ('body', 'Announcement')],
                 ),
-                child: const Text('Post announcement'),
+                child: Text(context.tr('Post announcement')),
               ),
             ],
           ],
         ),
         if (canRegister) ...[
-          const ListTile(title: Text('Teachers')),
+          ListTile(title: Text(context.tr('Teachers'))),
           if (teachers.isEmpty)
-            const ListTile(subtitle: Text('No teachers assigned')),
+            ListTile(subtitle: Text(context.tr('No teachers assigned'))),
           for (final teacher in teachers.take(_pageSize))
             ListTile(
               title: Text(teacher['name'] as String),
               subtitle: Text(teacher['email'] as String),
               trailing: Text(
-                  teacher['substitute'] == true ? 'Substitute' : 'Teacher'),
+                  teacher['substitute'] == true ? context.tr('Substitute') : context.tr('Teacher')),
             ),
         ],
         if (canRegister || canTeach || students.isNotEmpty) ...[
-          const ListTile(title: Text('Students')),
+          ListTile(title: Text(context.tr('Students'))),
           if (students.isEmpty)
-            const ListTile(subtitle: Text('No registered students')),
+            ListTile(subtitle: Text(context.tr('No registered students'))),
           for (final student in students.take(_pageSize))
             ExpansionTile(
               title: Text(student['name'] as String),
@@ -261,7 +262,7 @@ class _CatechismWorkspaceScreenState
                           const [('date', 'Lesson date')],
                           student: student,
                         ),
-                        child: const Text('Mark attendance'),
+                        child: Text(context.tr('Mark attendance')),
                       ),
                       OutlinedButton(
                         onPressed: () => _edit(
@@ -274,7 +275,7 @@ class _CatechismWorkspaceScreenState
                           ],
                           student: student,
                         ),
-                        child: const Text('Publish marks'),
+                        child: Text(context.tr('Publish marks')),
                       ),
                     ],
                   ),
@@ -289,14 +290,14 @@ class _CatechismWorkspaceScreenState
                         ),
                       ),
                     ),
-                    child: const Text('View attendance and marks'),
+                    child: Text(context.tr('View attendance and marks')),
                   ),
               ],
             ),
         ],
-        const ListTile(title: Text('Syllabus and announcements')),
+        ListTile(title: Text(context.tr('Syllabus and announcements'))),
         if (publications.isEmpty && syllabus == null)
-          const ListTile(subtitle: Text('No class updates available')),
+          ListTile(subtitle: Text(context.tr('No class updates available'))),
         for (final publication in [
           if (syllabus != null) syllabus,
           ...publications.take(_pageSize),
@@ -305,7 +306,7 @@ class _CatechismWorkspaceScreenState
             child: ListTile(
               title: Text(publication['title'] as String),
               leading: Text(
-                publication['kind'] == 'syllabus' ? 'Syllabus' : 'Announcement',
+                publication['kind'] == 'syllabus' ? context.tr('Syllabus') : context.tr('Announcement'),
               ),
               subtitle: Text(publication['body'] as String),
             ),
@@ -343,12 +344,12 @@ class _PageControls extends StatelessWidget {
       children: [
         TextButton(
           onPressed: page > 1 ? () => onChanged(page - 1) : null,
-          child: const Text('Previous'),
+          child: Text(context.tr('Previous')),
         ),
-        Text('Page $page'),
+        Text(context.tr('Page {0}', [page])),
         TextButton(
           onPressed: hasMore ? () => onChanged(page + 1) : null,
-          child: const Text('Next'),
+          child: Text(context.tr('Next')),
         ),
       ],
     );
@@ -398,21 +399,21 @@ class _StudentHistoryState extends ConsumerState<_StudentHistoryScreen> {
             final marks = _rows(data, 'marks');
             final attendance = _rows(data, 'attendance');
             return ListView(children: [
-              const ListTile(title: Text('Published marks')),
+              ListTile(title: Text(context.tr('Published marks'))),
               if (marks.isEmpty)
-                const ListTile(subtitle: Text('No marks on this page')),
+                ListTile(subtitle: Text(context.tr('No marks on this page'))),
               for (final mark in marks.take(_pageSize))
                 ListTile(
                   title: Text(mark['assessment'] as String),
                   trailing: Text("${mark['score']} / ${mark['maximum']}"),
                 ),
-              const ListTile(title: Text('Attendance')),
+              ListTile(title: Text(context.tr('Attendance'))),
               if (attendance.isEmpty)
-                const ListTile(subtitle: Text('No attendance on this page')),
+                ListTile(subtitle: Text(context.tr('No attendance on this page'))),
               for (final entry in attendance.take(_pageSize))
                 ListTile(
                   title: Text(entry['lesson_date'] as String),
-                  trailing: Text(entry['status'] as String),
+                  trailing: Text(context.tr(entry['status'] as String)),
                 ),
               _PageControls(
                 page: _page,
@@ -453,7 +454,7 @@ class _WorkspaceData extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(_errorMessage(snapshot.error)),
-                  TextButton(onPressed: retry, child: const Text('Retry')),
+                  TextButton(onPressed: retry, child: Text(context.tr('Retry'))),
                 ],
               ),
             );
@@ -591,9 +592,9 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                   ),
                 ),
               if (widget.action == 'teachers') ...[
-                const Text('For an existing account, enter the email only.'),
+                Text(context.tr('For an existing account, enter the email only.')),
                 SwitchListTile(
-                  title: const Text('Substitute teacher'),
+                  title: Text(context.tr('Substitute teacher')),
                   value: _substitute,
                   onChanged: _saving
                       ? null
@@ -603,17 +604,17 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
               if (widget.action == 'attendance')
                 DropdownButton<String>(
                   value: _status,
-                  items: const [
-                    DropdownMenuItem(value: 'present', child: Text('Present')),
-                    DropdownMenuItem(value: 'absent', child: Text('Absent')),
-                    DropdownMenuItem(value: 'excused', child: Text('Excused')),
+                  items: [
+                    DropdownMenuItem(value: 'present', child: Text(context.tr('Present'))),
+                    DropdownMenuItem(value: 'absent', child: Text(context.tr('Absent'))),
+                    DropdownMenuItem(value: 'excused', child: Text(context.tr('Excused'))),
                   ],
                   onChanged: _saving
                       ? null
                       : (value) => setState(() => _status = value!),
                 ),
               if (_error != null)
-                Text(_error!,
+                Text(context.tr(_error!),
                     style:
                         TextStyle(color: Theme.of(context).colorScheme.error)),
             ],
@@ -621,11 +622,11 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
           actions: [
             TextButton(
               onPressed: _saving ? null : () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(context.tr('Cancel')),
             ),
             FilledButton(
               onPressed: _saving ? null : _save,
-              child: Text(_saving ? 'Saving…' : 'Save'),
+              child: Text(_saving ? context.tr('Saving…') : context.tr('Save')),
             ),
           ],
         ),

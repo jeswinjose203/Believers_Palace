@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../services/api_service.dart';
 
@@ -42,7 +43,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
       await auth.refreshUser();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email verified')),
+        SnackBar(content: Text(context.tr('Email verified'))),
       );
       Navigator.of(context).pop();
     } catch (e) {
@@ -61,7 +62,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
       await ref.read(authProvider.notifier).resendVerification();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Check your inbox for a recent code.')),
+          SnackBar(content: Text(context.tr('Check your inbox for a recent code.'))),
         );
       }
     } catch (e) {
@@ -80,7 +81,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     final email = ref.watch(authProvider).user?.email;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Verify Email')),
+      appBar: AppBar(title: Text(context.tr('Verify Email'))),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -88,8 +89,8 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
             children: [
               Text(
                 email == null
-                    ? 'Enter the six-digit code from your email.'
-                    : 'Request a code for $email and enter it below.',
+                    ? context.tr('Enter the six-digit code from your email.')
+                    : context.tr('Request a code for {0} and enter it below.', [email]),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -101,13 +102,13 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(6),
                 ],
-                decoration: const InputDecoration(labelText: 'Six-digit code'),
+                decoration: InputDecoration(labelText: context.tr('Six-digit code')),
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _submit(),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
+                Text(context.tr(_error!), style: const TextStyle(color: Colors.red)),
               ],
               const SizedBox(height: 24),
               ElevatedButton(
@@ -119,14 +120,14 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Verify'),
+                    : Text(context.tr('Verify')),
               ),
               TextButton(
                 onPressed:
                     _loading || _resending || email == null ? null : _resend,
                 child: _resending
-                    ? const Text('Sending...')
-                    : const Text('Send verification code'),
+                    ? Text(context.tr('Sending...'))
+                    : Text(context.tr('Send verification code')),
               ),
             ],
           ),

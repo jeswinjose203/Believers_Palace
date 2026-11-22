@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_locale.dart';
 import '../screens/verify_email_screen.dart';
 
 class ChatEmailVerification extends StatelessWidget {
@@ -13,13 +14,13 @@ class ChatEmailVerification extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Verify your email to access chat.'),
+            Text(context.tr('Verify your email to access chat.')),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const VerifyEmailScreen()),
               ),
-              child: const Text('Verify email'),
+              child: Text(context.tr('Verify email')),
             ),
           ],
         ),

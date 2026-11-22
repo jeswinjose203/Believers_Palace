@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../services/chat_live_service.dart';
 import '../services/social_api.dart';
@@ -17,7 +18,7 @@ class DirectMessagesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider).user;
     return Scaffold(
-      appBar: AppBar(title: const Text('Direct messages')),
+      appBar: AppBar(title: Text(context.tr('Direct messages'))),
       body: user == null
           ? const SizedBox.shrink()
           : user.emailVerified
@@ -175,16 +176,16 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete this chat for yourself?'),
-        content: const Text('A new message will bring the conversation back.'),
+        title: Text(context.tr('Delete this chat for yourself?')),
+        content: Text(context.tr('A new message will bring the conversation back.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: Text(context.tr('Delete')),
           ),
         ],
       ),
@@ -207,7 +208,7 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
         children: [
           ListTile(
             title: Text(_account == null
-                ? 'Your username'
+                ? context.tr('Your username')
                 : '@${_account!['username']}'),
           ),
           Padding(
@@ -226,10 +227,10 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
                 });
               },
               decoration: InputDecoration(
-                labelText: 'Find by username',
+                labelText: context.tr('Find by username'),
                 prefixText: '@',
                 suffixIcon: IconButton(
-                  tooltip: 'Search',
+                  tooltip: context.tr('Search'),
                   onPressed: _find,
                   icon: const Icon(Icons.search),
                 ),
@@ -249,7 +250,7 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
     }
     if (_matches case final matches?) {
       if (matches.isEmpty) {
-        return const Center(child: Text('No matching usernames.'));
+        return Center(child: Text(context.tr('No matching usernames.')));
       }
       return ListView.builder(
         itemCount: matches.length,
@@ -273,19 +274,19 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
           if (index == _threads.length) {
             if (_error != null) {
               return ListTile(
-                title: Text(_error!),
+                title: Text(context.tr(_error!)),
                 trailing:
-                    TextButton(onPressed: _load, child: const Text('Retry')),
+                    TextButton(onPressed: _load, child: Text(context.tr('Retry'))),
               );
             }
             if (_threads.isEmpty) {
-              return const ListTile(
-                  title: Text('Find someone by username to start a chat.'));
+              return ListTile(
+                  title: Text(context.tr('Find someone by username to start a chat.')));
             }
             if (_cursor != null) {
               return TextButton(
                 onPressed: _loading ? null : () => _load(more: true),
-                child: const Text('Load more chats'),
+                child: Text(context.tr('Load more chats')),
               );
             }
             return const SizedBox.shrink();
@@ -298,8 +299,8 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
                 maxLines: 1, overflow: TextOverflow.ellipsis),
             trailing: PopupMenuButton(
               onSelected: (_) => _delete(row),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'delete', child: Text('Delete chat')),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'delete', child: Text(context.tr('Delete chat'))),
               ],
             ),
             onTap: () => _open(row, fromSearch: false),
@@ -485,13 +486,13 @@ class _ConversationState extends ConsumerState<_Conversation>
                 ListTile(
                   title: Text(error),
                   trailing:
-                      TextButton(onPressed: _load, child: const Text('Retry')),
+                      TextButton(onPressed: _load, child: Text(context.tr('Retry'))),
                 ),
               Expanded(
                 child: !_loaded
                     ? const Center(child: CircularProgressIndicator())
                     : _messages.isEmpty
-                        ? const Center(child: Text('Start the conversation.'))
+                        ? Center(child: Text(context.tr('Start the conversation.')))
                         : ListView.builder(
                             reverse: true,
                             padding: const EdgeInsets.all(12),
@@ -503,7 +504,7 @@ class _ConversationState extends ConsumerState<_Conversation>
                                   onPressed: _loading
                                       ? null
                                       : () => _load(older: true),
-                                  child: const Text('Load earlier messages'),
+                                  child: Text(context.tr('Load earlier messages')),
                                 );
                               }
                               return _bubble(context, _messages[index]);
@@ -522,14 +523,14 @@ class _ConversationState extends ConsumerState<_Conversation>
                         maxLength: 4000,
                         maxLines: 5,
                         minLines: 1,
-                        decoration: const InputDecoration(
-                          hintText: 'Message',
+                        decoration: InputDecoration(
+                          hintText: context.tr('Message'),
                           counterText: '',
                         ),
                       ),
                     ),
                     IconButton(
-                      tooltip: 'Send message',
+                      tooltip: context.tr('Send message'),
                       onPressed: _sending ? null : _send,
                       icon: const Icon(Icons.send),
                     ),
@@ -560,7 +561,7 @@ class _ConversationState extends ConsumerState<_Conversation>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SharedPostMessage(message['body'] as String),
-                Text(DateFormat.MMMd().add_jm().format(sent),
+                Text(DateFormat.MMMd(context.dateLocale).add_jm().format(sent),
                     style: Theme.of(context).textTheme.labelSmall),
               ],
             ),

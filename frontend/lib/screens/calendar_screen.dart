@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
  
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../core/calendar_time.dart';
 import '../models/calendar_models.dart';
@@ -161,33 +162,33 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     var start = DateTime.now();
     var end = start.add(const Duration(hours: 1));
     final reminders = <int>{15};
-    final fmt = DateFormat.yMMMd().add_jm();
+    final fmt = DateFormat.yMMMd(context.dateLocale).add_jm();
  
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('New event'),
+          title: Text(ctx.tr('New event')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
-                TextField(controller: desc, decoration: const InputDecoration(labelText: 'Description')),
+                TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
+                TextField(controller: desc, decoration: InputDecoration(labelText: ctx.tr('Description'))),
                 DropdownButtonFormField<String>(
                   value: category,
-                  items: const [
-                    DropdownMenuItem(value: 'personal', child: Text('Personal')),
-                    DropdownMenuItem(value: 'work', child: Text('Work')),
-                    DropdownMenuItem(value: 'family', child: Text('Family')),
-                    DropdownMenuItem(value: 'meetings', child: Text('Meetings')),
+                  items: [
+                    DropdownMenuItem(value: 'personal', child: Text(ctx.tr('Personal'))),
+                    DropdownMenuItem(value: 'work', child: Text(ctx.tr('Work'))),
+                    DropdownMenuItem(value: 'family', child: Text(ctx.tr('Family'))),
+                    DropdownMenuItem(value: 'meetings', child: Text(ctx.tr('Meetings'))),
                   ],
                   onChanged: (v) => setSt(() => category = v ?? 'personal'),
-                  decoration: const InputDecoration(labelText: 'Category'),
+                  decoration: InputDecoration(labelText: ctx.tr('Category')),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Starts'),
+                  title: Text(ctx.tr('Starts')),
                   subtitle: Text(fmt.format(start)),
                   trailing: const Icon(Icons.calendar_today),
                   onTap: () async {
@@ -204,7 +205,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Ends'),
+                  title: Text(ctx.tr('Ends')),
                   subtitle: Text(fmt.format(end)),
                   trailing: const Icon(Icons.schedule),
                   onTap: () async {
@@ -214,9 +215,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                     }
                   },
                 ),
-                const Align(
+                Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Reminders (minutes before start — e.g. 5 = 5 min earlier)'),
+                  child: Text(ctx.tr('Reminders (minutes before start — e.g. 5 = 5 min earlier)')),
                 ),
                 Wrap(
                   spacing: 8,
@@ -239,15 +240,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
           ],
         ),
       ),
     );
     if (ok != true || title.text.trim().isEmpty) return;
     if (!end.isAfter(start)) {
-      _toast('End must be after start');
+      if (mounted) _toast(context.tr('End must be after start'));
       return;
     }
     try {
@@ -263,7 +264,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await ref.read(calendarProvider.notifier).refreshSchedule();
       await _loadEvents();
       await _syncNotifications();
-      _toast('Event created');
+      if (mounted) _toast(context.tr('Event created'));
     } catch (e) {
       _toast('$e');
     }
@@ -272,19 +273,19 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   Future<void> _editTask(CalendarTask t) async {
     final title = TextEditingController(text: t.title);
     var due = t.dueDate.toLocal();
-    final fmt = DateFormat.yMMMd().add_jm();
+    final fmt = DateFormat.yMMMd(context.dateLocale).add_jm();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('Edit task'),
+          title: Text(ctx.tr('Edit task')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
+              TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Due'),
+                title: Text(ctx.tr('Due')),
                 subtitle: Text(fmt.format(due)),
                 trailing: const Icon(Icons.schedule),
                 onTap: () async {
@@ -295,8 +296,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
           ],
         ),
       ),
@@ -310,7 +311,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await _loadSideData();
       await ref.read(calendarProvider.notifier).refreshSchedule();
       await _syncNotifications();
-      _toast('Task updated');
+      if (mounted) _toast(context.tr('Task updated'));
     } catch (e) {
       _toast('$e');
     }
@@ -319,19 +320,19 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   Future<void> _addTask() async {
     final title = TextEditingController();
     var due = DateTime.now().add(const Duration(hours: 1));
-    final fmt = DateFormat.yMMMd().add_jm();
+    final fmt = DateFormat.yMMMd(context.dateLocale).add_jm();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('New task'),
+          title: Text(ctx.tr('New task')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
+              TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Due'),
+                title: Text(ctx.tr('Due')),
                 subtitle: Text(fmt.format(due)),
                 trailing: const Icon(Icons.schedule),
                 onTap: () async {
@@ -342,8 +343,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
           ],
         ),
       ),
@@ -357,7 +358,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await _loadSideData();
       await ref.read(calendarProvider.notifier).refreshSchedule();
       await _syncNotifications();
-      _toast('Task added');
+      if (mounted) _toast(context.tr('Task added'));
     } catch (e) {
       _toast('$e');
     }
@@ -370,17 +371,17 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('New goal'),
+          title: Text(ctx.tr('New goal')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
-              TextField(controller: target, decoration: const InputDecoration(labelText: 'Target days'), keyboardType: TextInputType.number),
+              TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
+              TextField(controller: target, decoration: InputDecoration(labelText: ctx.tr('Target days')), keyboardType: TextInputType.number),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
           ],
         ),
       ),
@@ -396,7 +397,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       });
       await _loadSideData();
       await ref.read(calendarProvider.notifier).refreshSchedule();
-      _toast('Goal created');
+      if (mounted) _toast(context.tr('Goal created'));
     } catch (e) {
       _toast('$e');
     }
@@ -409,21 +410,21 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('Edit goal'),
+          title: Text(ctx.tr('Edit goal')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
+              TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
               TextField(
                 controller: target,
-                decoration: const InputDecoration(labelText: 'Target days'),
+                decoration: InputDecoration(labelText: ctx.tr('Target days')),
                 keyboardType: TextInputType.number,
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
           ],
         ),
       ),
@@ -436,7 +437,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       });
       await _loadSideData();
       await ref.read(calendarProvider.notifier).refreshSchedule();
-      _toast('Goal updated');
+      if (mounted) _toast(context.tr('Goal updated'));
     } catch (e) {
       _toast('$e');
     }
@@ -446,10 +447,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete goal?'),
+        title: Text(ctx.tr('Delete goal?')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Delete'))),
         ],
       ),
     );
@@ -474,9 +475,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         await showDialog<void>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Achievement unlocked!'),
+            title: Text(ctx.tr('Achievement unlocked!')),
             content: Text(resp.newAchievements.map((a) => a.title).join('\n')),
-            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Nice'))],
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('Nice')))],
           ),
         );
       }
@@ -497,10 +498,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
           child: Row(
             children: [
               SegmentedButton<CalendarViewMode>(
-                segments: const [
-                  ButtonSegment(value: CalendarViewMode.month, label: Text('Month')),
-                  ButtonSegment(value: CalendarViewMode.week, label: Text('Week')),
-                  ButtonSegment(value: CalendarViewMode.day, label: Text('Day')),
+                segments: [
+                  ButtonSegment(value: CalendarViewMode.month, label: Text(context.tr('Month'))),
+                  ButtonSegment(value: CalendarViewMode.week, label: Text(context.tr('Week'))),
+                  ButtonSegment(value: CalendarViewMode.day, label: Text(context.tr('Day'))),
                 ],
                 selected: {ui.viewMode},
                 onSelectionChanged: (s) async {
@@ -514,6 +515,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         ),
         if (ui.viewMode == CalendarViewMode.month)
           TableCalendar(
+            locale: context.dateLocale,
+            availableCalendarFormats: {
+              CalendarFormat.month: context.tr('Month'),
+              CalendarFormat.twoWeeks: context.tr('Two weeks'),
+              CalendarFormat.week: context.tr('Week'),
+            },
             firstDay: DateTime.utc(2020),
             lastDay: DateTime.utc(2035, 12, 31),
             focusedDay: ui.focusedDay,
@@ -541,7 +548,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   Widget _buildWeekStrip(CalendarUiState ui) {
     final sundayStart = ui.preferences?.weekStartsOn == 'sunday';
     final ws = CalendarNotifier.weekStart(ui.selectedDay, sundayStart: sundayStart);
-  final fmt = DateFormat.E();
+  final fmt = DateFormat.E(context.dateLocale);
     return SizedBox(
       height: 72,
       child: ListView.builder(
@@ -588,7 +595,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
           ),
           Expanded(
             child: Text(
-              DateFormat.yMMMEd().format(ui.selectedDay),
+              DateFormat.yMMMEd(context.dateLocale).format(ui.selectedDay),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium,
             ),
@@ -619,11 +626,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         return ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            Text(DateFormat.yMMMd().format(ui.selectedDay),
+            Text(DateFormat.yMMMd(context.dateLocale).format(ui.selectedDay),
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             if (_itemsForDay(ui.selectedDay).isEmpty)
-              const Text('Nothing on this day')
+              Text(context.tr('Nothing on this day'))
             else
               ..._itemsForDay(ui.selectedDay).map(_scheduleTile),
           ],
@@ -641,14 +648,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       children.add(
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-          child: Text(DateFormat.yMMMEd().format(day),
+          child: Text(DateFormat.yMMMEd(context.dateLocale).format(day),
               style: Theme.of(context).textTheme.titleSmall),
         ),
       );
       if (items.isEmpty) {
-        children.add(const Padding(
+        children.add(Padding(
           padding: EdgeInsets.symmetric(horizontal: 12),
-          child: Text('No items'),
+          child: Text(context.tr('No items')),
         ));
       } else {
         children.addAll(items.map(_scheduleTile));
@@ -663,26 +670,26 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     final timed = items.where((i) => i.startAt != null).toList()
       ..sort((a, b) => a.startAt!.compareTo(b.startAt!));
     final untimed = items.where((i) => i.startAt == null).toList();
-    final fmt = DateFormat.jm();
+    final fmt = DateFormat.jm(context.dateLocale);
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
         if (timed.isNotEmpty)
-          Text('Timed', style: Theme.of(context).textTheme.titleMedium),
+          Text(context.tr('Timed'), style: Theme.of(context).textTheme.titleMedium),
         ...timed.map((i) {
           final t = i.startAt!;
           return ListTile(
             leading: Text(fmt.format(t)),
-            title: Text(i.title ?? 'Untitled'),
+            title: Text(i.title ?? context.tr('Untitled')),
             subtitle: Text(i.kind),
           );
         }),
         if (untimed.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Text('All day / other', style: Theme.of(context).textTheme.titleMedium),
+          Text(context.tr('All day / other'), style: Theme.of(context).textTheme.titleMedium),
           ...untimed.map(_scheduleTile),
         ],
-        if (items.isEmpty) const Text('Nothing on this day'),
+        if (items.isEmpty) Text(context.tr('Nothing on this day')),
       ],
     );
   }
@@ -693,12 +700,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       accent = _parseColor(i.color!);
     }
     final subtitle = switch (i.kind) {
-      'booking' => 'Hall booking • ${i.status ?? ''}',
-      'church_event' => 'Church event',
-      'holiday' => 'Public holiday',
-      'task' => 'Task',
-      'goal_checkin_due' => i.checkedInOnDay == true ? 'Checked in' : 'Check in for this day',
-      _ => i.category ?? 'Personal',
+      'booking' => context.tr('Hall booking • {0}', [context.tr(i.status ?? '')]),
+      'church_event' => context.tr('Church event'),
+      'holiday' => context.tr('Public holiday'),
+      'task' => context.tr('Task'),
+      'goal_checkin_due' => context.tr(
+          i.checkedInOnDay == true ? 'Checked in' : 'Check in for this day',
+        ),
+      _ => i.category ?? context.tr('Personal'),
     };
     final selected = ref.read(calendarProvider).selectedDay;
   Widget? trailing;
@@ -708,7 +717,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       final day = i.date ?? selected;
       trailing = TextButton(
         onPressed: () => _checkInGoalById(i.goalId!, forDay: day),
-        child: const Text('Check in'),
+        child: Text(context.tr('Check in')),
       );
     }
     return ListTile(
@@ -716,7 +725,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         backgroundColor: accent ?? Theme.of(context).colorScheme.primaryContainer,
         child: Icon(_iconFor(i.kind), size: 18),
       ),
-      title: Text(i.title ?? 'Untitled'),
+      title: Text(i.title ?? context.tr('Untitled')),
       subtitle: Text(subtitle),
       trailing: trailing,
       onTap: switch (i.kind) {
@@ -754,12 +763,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
           children: [
             ListTile(
               leading: const Icon(Icons.edit),
-              title: const Text('Edit event'),
+              title: Text(ctx.tr('Edit event')),
               onTap: () => Navigator.pop(ctx, 'edit'),
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete event'),
+              title: Text(ctx.tr('Delete event')),
               onTap: () => Navigator.pop(ctx, 'delete'),
             ),
           ],
@@ -783,39 +792,40 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       _toast('$err');
       return;
     }
+    if (!mounted) return;
     final title = TextEditingController(text: e.title);
     final desc = TextEditingController(text: e.description ?? '');
     var category = e.category;
     var start = e.startAt.toLocal();
     var end = e.endAt.toLocal();
     final reminders = e.reminderMinutes.toSet();
-    final fmt = DateFormat.yMMMd().add_jm();
+    final fmt = DateFormat.yMMMd(context.dateLocale).add_jm();
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('Edit event'),
+          title: Text(ctx.tr('Edit event')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
-                TextField(controller: desc, decoration: const InputDecoration(labelText: 'Description')),
+                TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
+                TextField(controller: desc, decoration: InputDecoration(labelText: ctx.tr('Description'))),
                 DropdownButtonFormField<String>(
                   value: category,
-                  items: const [
-                    DropdownMenuItem(value: 'personal', child: Text('Personal')),
-                    DropdownMenuItem(value: 'work', child: Text('Work')),
-                    DropdownMenuItem(value: 'family', child: Text('Family')),
-                    DropdownMenuItem(value: 'meetings', child: Text('Meetings')),
+                  items: [
+                    DropdownMenuItem(value: 'personal', child: Text(ctx.tr('Personal'))),
+                    DropdownMenuItem(value: 'work', child: Text(ctx.tr('Work'))),
+                    DropdownMenuItem(value: 'family', child: Text(ctx.tr('Family'))),
+                    DropdownMenuItem(value: 'meetings', child: Text(ctx.tr('Meetings'))),
                   ],
                   onChanged: (v) => setSt(() => category = v ?? category),
-                  decoration: const InputDecoration(labelText: 'Category'),
+                  decoration: InputDecoration(labelText: ctx.tr('Category')),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Starts'),
+                  title: Text(ctx.tr('Starts')),
                   subtitle: Text(fmt.format(start)),
                   onTap: () async {
                     final picked = await _pickDateTime(ctx, start, 'start');
@@ -824,16 +834,16 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Ends'),
+                  title: Text(ctx.tr('Ends')),
                   subtitle: Text(fmt.format(end)),
                   onTap: () async {
                     final picked = await _pickDateTime(ctx, end, 'end');
                     if (picked != null) setSt(() => end = picked);
                   },
                 ),
-                const Align(
+                Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Reminders (minutes before start — e.g. 5 = 5 min earlier)'),
+                  child: Text(ctx.tr('Reminders (minutes before start — e.g. 5 = 5 min earlier)')),
                 ),
                 Wrap(
                   spacing: 8,
@@ -856,15 +866,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
           ],
         ),
       ),
     );
     if (ok != true || title.text.trim().isEmpty) return;
     if (!end.isAfter(start)) {
-      _toast('End must be after start');
+      if (mounted) _toast(context.tr('End must be after start'));
       return;
     }
     try {
@@ -880,7 +890,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await ref.read(calendarProvider.notifier).refreshSchedule();
       await _loadEvents();
       await _syncNotifications();
-      _toast('Event updated');
+      if (mounted) _toast(context.tr('Event updated'));
     } catch (err) {
       _toast('$err');
     }
@@ -890,10 +900,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete event?'),
+        title: Text(ctx.tr('Delete event?')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Delete'))),
         ],
       ),
     );
@@ -911,7 +921,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text(DateFormat.yMMMEd().format(day), style: Theme.of(context).textTheme.titleLarge),
+            Text(DateFormat.yMMMEd(context.dateLocale).format(day), style: Theme.of(context).textTheme.titleLarge),
             ..._itemsForDay(day).map(_scheduleTile),
           ],
         ),
@@ -931,15 +941,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     final ui = ref.watch(calendarProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Calendar'),
+        title: Text(context.tr('My Calendar')),
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [
-            Tab(text: 'Calendar'),
-            Tab(text: 'Events'),
-            Tab(text: 'Tasks'),
-            Tab(text: 'Goals'),
-            Tab(text: 'Trophies'),
+          tabs: [
+            Tab(text: context.tr('Calendar')),
+            Tab(text: context.tr('Events')),
+            Tab(text: context.tr('Tasks')),
+            Tab(text: context.tr('Goals')),
+            Tab(text: context.tr('Trophies')),
           ],
         ),
         actions: [
@@ -971,7 +981,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   }
  
   Widget _eventsTab() {
-    final dateFmt = DateFormat.yMMMd().add_jm();
+    final dateFmt = DateFormat.yMMMd(context.dateLocale).add_jm();
     return RefreshIndicator(
       onRefresh: _loadEvents,
       child: ListView(
@@ -982,7 +992,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             child: FilledButton.icon(
               onPressed: _addEvent,
               icon: const Icon(Icons.add),
-              label: const Text('New event'),
+              label: Text(context.tr('New event')),
             ),
           ),
           const SizedBox(height: 8),
@@ -993,17 +1003,17 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             child: Column(
               children: [
                 ListTile(
-                  title: Text('Upcoming (7 days)', style: Theme.of(context).textTheme.titleMedium),
+                  title: Text(context.tr('Upcoming (7 days)'), style: Theme.of(context).textTheme.titleMedium),
                   trailing: Icon(_upcomingExpanded ? Icons.expand_less : Icons.expand_more),
                   onTap: () => setState(() => _upcomingExpanded = !_upcomingExpanded),
                 ),
                 if (_upcomingExpanded) ...[
                   const Divider(height: 1),
                   if (_upcomingEvents.isEmpty)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.all(16),
                       child: Text(
-                        'No upcoming events in the next 7 days (set My church to see church events)',
+                        context.tr('No upcoming events in the next 7 days (set My church to see church events)'),
                       ),
                     )
                   else
@@ -1013,7 +1023,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                       final kindLabel = isPersonal ? 'Your event' : 'Church event';
                       return ListTile(
                         leading: Icon(isPersonal ? Icons.event : Icons.church),
-                        title: Text(i.title ?? 'Untitled'),
+                        title: Text(i.title ?? context.tr('Untitled')),
                         subtitle: Text(
                           when != null ? '$kindLabel • ${dateFmt.format(when)}' : kindLabel,
                         ),
@@ -1027,25 +1037,25 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             ),
           ),
           const SizedBox(height: 16),
-          Text('Your events', style: Theme.of(context).textTheme.titleMedium),
+          Text(context.tr('Your events'), style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           if (_events.isEmpty)
-            const Text('No events yet. Tap New event to create one.')
+            Text(context.tr('No events yet. Tap New event to create one.'))
           else
             ..._events.map((e) {
               final start = e.startAt.toLocal();
               final end = e.endAt.toLocal();
               final range = e.allDay
-                  ? DateFormat.yMMMd().format(start)
-                  : '${dateFmt.format(start)} – ${DateFormat.jm().format(end)}';
+                  ? DateFormat.yMMMd(context.dateLocale).format(start)
+                  : '${dateFmt.format(start)} – ${DateFormat.jm(context.dateLocale).format(end)}';
               return Card(
                 child: ListTile(
                   title: Text(e.title),
                   subtitle: Text('$range • ${e.category}'),
                   trailing: PopupMenuButton<String>(
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    itemBuilder: (_) => [
+                      PopupMenuItem(value: 'edit', child: Text(context.tr('Edit'))),
+                      PopupMenuItem(value: 'delete', child: Text(context.tr('Delete'))),
                     ],
                     onSelected: (v) async {
                       switch (v) {
@@ -1073,12 +1083,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             child: FilledButton.icon(
               onPressed: _addTask,
               icon: const Icon(Icons.add),
-              label: const Text('Add task'),
+              label: Text(context.tr('Add task')),
             ),
           ),
           ..._tasks.map((t) {
             final dueLocal = t.dueDate.toLocal();
-            final subtitle = DateFormat.yMMMd().add_jm().format(dueLocal);
+            final subtitle = DateFormat.yMMMd(context.dateLocale).add_jm().format(dueLocal);
             return Card(
               child: Row(
                 children: [
@@ -1115,7 +1125,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             child: FilledButton.icon(
               onPressed: _addGoal,
               icon: const Icon(Icons.add),
-              label: const Text('Add goal'),
+              label: Text(context.tr('Add goal')),
             ),
           ),
           ..._goals.map((g) {
@@ -1151,8 +1161,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                 ),
                 subtitle: Text(
                   streakLabel != null
-                      ? '${g.checkInCount}/${g.targetDays} days • $streakLabel • ${g.status}'
-                      : '${g.checkInCount}/${g.targetDays} days • ${g.status}',
+                      ? context.tr('{0}/{1} days • {2} • {3}', [g.checkInCount, g.targetDays, streakLabel, g.status])
+                      : context.tr('{0}/{1} days • {2}', [g.checkInCount, g.targetDays, g.status]),
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1169,12 +1179,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                             value: 'checkin',
                             child: Text(
                               CalendarTime.sameCalendarDay(selectedDay, DateTime.now())
-                                  ? 'Check in today'
-                                  : 'Check in for ${DateFormat.yMMMd().format(selectedDay)}',
+                                  ? context.tr('Check in today')
+                                  : context.tr('Check in for {0}', [DateFormat.yMMMd(context.dateLocale).format(selectedDay)]),
                             ),
                           ),
-                        const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                        const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                        PopupMenuItem(value: 'edit', child: Text(context.tr('Edit'))),
+                        PopupMenuItem(value: 'delete', child: Text(context.tr('Delete'))),
                       ],
                       onSelected: (v) async {
                         switch (v) {

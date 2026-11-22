@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
 import 'community_ad_detail_screen.dart';
@@ -82,7 +83,7 @@ class _CommunityAdsBrowseScreenState extends ConsumerState<CommunityAdsBrowseScr
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openCreate,
         icon: const Icon(Icons.add),
-        label: const Text('Sell an item'),
+        label: Text(context.tr('Sell an item')),
       ),
       body: RefreshIndicator(
         onRefresh: () => _load(page: _page),
@@ -97,7 +98,7 @@ class _CommunityAdsBrowseScreenState extends ConsumerState<CommunityAdsBrowseScr
                     TextField(
                       controller: _search,
                       decoration: InputDecoration(
-                        hintText: 'Search listings',
+                        hintText: context.tr('Search listings'),
                         prefixIcon: const Icon(Icons.search),
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.clear),
@@ -117,13 +118,13 @@ class _CommunityAdsBrowseScreenState extends ConsumerState<CommunityAdsBrowseScr
                         Expanded(
                           child: DropdownButtonFormField<String?>(
                             value: _categoryId,
-                            decoration: const InputDecoration(
-                              labelText: 'Category',
+                            decoration: InputDecoration(
+                              labelText: context.tr('Category'),
                               border: OutlineInputBorder(),
                               isDense: true,
                             ),
                             items: [
-                              const DropdownMenuItem(value: null, child: Text('All')),
+                              DropdownMenuItem(value: null, child: Text(context.tr('All'))),
                               ..._categories.map(
                                 (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
                               ),
@@ -136,7 +137,7 @@ class _CommunityAdsBrowseScreenState extends ConsumerState<CommunityAdsBrowseScr
                         ),
                         const SizedBox(width: 8),
                         FilterChip(
-                          label: const Text('Hide sold'),
+                          label: Text(context.tr('Hide sold')),
                           selected: _excludeSold,
                           onSelected: (v) {
                             setState(() => _excludeSold = v);
@@ -155,11 +156,11 @@ class _CommunityAdsBrowseScreenState extends ConsumerState<CommunityAdsBrowseScr
               )
             else if (_error != null)
               SliverFillRemaining(
-                child: Center(child: Text(_error!, textAlign: TextAlign.center)),
+                child: Center(child: Text(context.tr(_error!), textAlign: TextAlign.center)),
               )
             else if (_ads.isEmpty)
-              const SliverFillRemaining(
-                child: Center(child: Text('No listings yet.')),
+              SliverFillRemaining(
+                child: Center(child: Text(context.tr('No listings yet.'))),
               )
             else
               SliverPadding(
@@ -205,7 +206,7 @@ class _CommunityAdsBrowseScreenState extends ConsumerState<CommunityAdsBrowseScr
                       onPressed: _page > 1 ? () => _load(page: _page - 1) : null,
                       icon: const Icon(Icons.chevron_left),
                     ),
-                    Text('Page $_page / $_totalPages'),
+                    Text(context.tr('Page {0} / {1}', [_page, _totalPages])),
                     IconButton(
                       onPressed:
                           _page < _totalPages ? () => _load(page: _page + 1) : null,
@@ -257,7 +258,7 @@ class _AdCard extends StatelessWidget {
                     if (ad.categoryName != null)
                       Text(ad.categoryName!, style: Theme.of(context).textTheme.bodySmall),
                     if (ad.isSold)
-                      const Chip(label: Text('Sold'), visualDensity: VisualDensity.compact),
+                      Chip(label: Text(context.tr('Sold')), visualDensity: VisualDensity.compact),
                   ],
                 ),
               ),

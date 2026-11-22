@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import 'community_ads_browse_screen.dart';
 import 'marketplace_admin_screen.dart';
@@ -48,14 +49,14 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen>
                 controller: _tabs,
                 labelColor: _kPurple,
                 indicatorColor: _kPurple,
-                tabs: const [
-                  Tab(text: 'Community'),
-                  Tab(text: 'Shop'),
+                tabs: [
+                  Tab(text: context.tr('Community')),
+                  Tab(text: context.tr('Shop')),
                 ],
               ),
             ),
             IconButton(
-              tooltip: 'My listings',
+              tooltip: context.tr('My listings'),
               icon: const Icon(Icons.inventory_2_outlined),
               onPressed: () {
                 Navigator.of(context).push(
@@ -66,7 +67,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen>
             ),
             if (_isAdmin)
               IconButton(
-                tooltip: 'Manage marketplace',
+                tooltip: context.tr('Manage marketplace'),
                 icon: const Icon(Icons.admin_panel_settings_outlined),
                 onPressed: () {
                   Navigator.of(context).push(

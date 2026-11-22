@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
 import '../widgets/multi_image_picker_field.dart';
@@ -125,7 +126,7 @@ class _CommunityAdFormScreenState extends ConsumerState<CommunityAdFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.existing == null ? 'New listing' : 'Edit listing'),
+        title: Text(widget.existing == null ? context.tr('New listing') : context.tr('Edit listing')),
       ),
       body: Form(
         key: _formKey,
@@ -134,24 +135,24 @@ class _CommunityAdFormScreenState extends ConsumerState<CommunityAdFormScreen> {
           children: [
             TextFormField(
               controller: _title,
-              decoration: const InputDecoration(labelText: 'Item name'),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              decoration: InputDecoration(labelText: context.tr('Item name')),
+              validator: (v) => (v == null || v.trim().isEmpty) ? context.tr('Required') : null,
             ),
             TextFormField(
               controller: _description,
-              decoration: const InputDecoration(labelText: 'Description'),
+              decoration: InputDecoration(labelText: context.tr('Description')),
               maxLines: 4,
             ),
             const SizedBox(height: 8),
             MultiImagePickerField(
-              label: 'Photos',
+              label: context.tr('Photos'),
               initialUrls: _images,
               onChanged: (urls) => setState(() => _images = urls),
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: _categoryId,
-              decoration: const InputDecoration(labelText: 'Category'),
+              decoration: InputDecoration(labelText: context.tr('Category')),
               items: _categories
                   .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
                   .toList(),
@@ -159,37 +160,37 @@ class _CommunityAdFormScreenState extends ConsumerState<CommunityAdFormScreen> {
             ),
             TextFormField(
               controller: _price,
-              decoration: const InputDecoration(labelText: 'Price (USD)'),
+              decoration: InputDecoration(labelText: context.tr('Price (USD)')),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              validator: (v) => (v == null || v.trim().isEmpty) ? context.tr('Required') : null,
             ),
             DropdownButtonFormField<String>(
               value: _condition,
-              decoration: const InputDecoration(labelText: 'Condition'),
-              items: const [
-                DropdownMenuItem(value: 'new', child: Text('New')),
-                DropdownMenuItem(value: 'used', child: Text('Used')),
+              decoration: InputDecoration(labelText: context.tr('Condition')),
+              items: [
+                DropdownMenuItem(value: 'new', child: Text(context.tr('New'))),
+                DropdownMenuItem(value: 'used', child: Text(context.tr('Used'))),
               ],
               onChanged: (v) => setState(() => _condition = v ?? 'used'),
             ),
             TextFormField(
               controller: _location,
-              decoration: const InputDecoration(labelText: 'Location'),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              decoration: InputDecoration(labelText: context.tr('Location')),
+              validator: (v) => (v == null || v.trim().isEmpty) ? context.tr('Required') : null,
             ),
             TextFormField(
               controller: _phone,
-              decoration: const InputDecoration(labelText: 'Contact phone'),
+              decoration: InputDecoration(labelText: context.tr('Contact phone')),
               keyboardType: TextInputType.phone,
             ),
             TextFormField(
               controller: _email,
-              decoration: const InputDecoration(labelText: 'Contact email'),
+              decoration: InputDecoration(labelText: context.tr('Contact email')),
               keyboardType: TextInputType.emailAddress,
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(_error!, style: const TextStyle(color: Colors.red)),
+              Text(context.tr(_error!), style: const TextStyle(color: Colors.red)),
             ],
             const SizedBox(height: 16),
             FilledButton(
@@ -200,7 +201,7 @@ class _CommunityAdFormScreenState extends ConsumerState<CommunityAdFormScreen> {
                       width: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Save'),
+                  : Text(context.tr('Save')),
             ),
           ],
         ),

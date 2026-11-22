@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_locale.dart';
 import '../config.dart';
 import '../core/auth_provider.dart';
 import '../services/api_service.dart';
@@ -39,7 +40,7 @@ class SocialPostCard extends StatelessWidget {
             leading: const CircleAvatar(child: Icon(Icons.person_outline)),
             title: Text(post['name'] as String),
             subtitle: Text(
-                '@${post['username']} · ${DateFormat.MMMd().add_jm().format(DateTime.parse(post['createdAt'] as String).toLocal())}'),
+                '@${post['username']} · ${DateFormat.MMMd(context.dateLocale).add_jm().format(DateTime.parse(post['createdAt'] as String).toLocal())}'),
           ),
           if (body.isNotEmpty)
             Padding(
@@ -52,15 +53,15 @@ class SocialPostCard extends StatelessWidget {
               child: Image.network(
                 url.toString(),
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Center(
-                  child: Text('Image unavailable'),
+                errorBuilder: (_, __, ___) => Center(
+                  child: Text(context.tr('Image unavailable')),
                 ),
               ),
             ),
           if (url != null && video)
             ListTile(
               leading: const Icon(Icons.play_circle_outline, size: 32),
-              title: const Text('Play video'),
+              title: Text(context.tr('Play video')),
               onTap: () async {
                 try {
                   if (!await launchUrl(url) && context.mounted) {
@@ -75,7 +76,7 @@ class SocialPostCard extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               IconButton(
-                tooltip: liked ? 'Unlike' : 'Like',
+                tooltip: liked ? context.tr('Unlike') : context.tr('Like'),
                 onPressed: react,
                 icon: Icon(liked ? Icons.favorite : Icons.favorite_border,
                     color: liked ? Theme.of(context).colorScheme.error : null),
@@ -84,17 +85,17 @@ class SocialPostCard extends StatelessWidget {
                 onPressed: likes == 0
                     ? null
                     : () => _showEngagement(context, id, likes: true),
-                child: Text('$likes ${likes == 1 ? 'like' : 'likes'}'),
+                child: Text(context.tr(likes == 1 ? '{0} like' : '{0} likes', [likes])),
               ),
               TextButton.icon(
                 onPressed: () =>
                     _showEngagement(context, id, onComment: onComment),
                 icon: const Icon(Icons.mode_comment_outlined),
                 label:
-                    Text('$comments ${comments == 1 ? 'comment' : 'comments'}'),
+                    Text(context.tr(comments == 1 ? '{0} comment' : '{0} comments', [comments])),
               ),
               IconButton(
-                tooltip: 'Share post',
+                tooltip: context.tr('Share post'),
                 onPressed: () => _showShare(context, id),
                 icon: const Icon(Icons.send_outlined),
               ),
@@ -103,7 +104,7 @@ class SocialPostCard extends StatelessWidget {
           if (recent != null && likes > 0)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: Text('Liked by @$recent${likes > 1 ? ' and others' : ''}'),
+              child: Text(context.tr(likes > 1 ? 'Liked by @{0} and others' : 'Liked by @{0}', [recent])),
             ),
         ],
       ),
@@ -210,7 +211,7 @@ class _EngagementSheetState extends ConsumerState<_EngagementSheet> {
     final canComment = ref.watch(authProvider).user?.emailVerified == true;
     return _sheet(
       context,
-      title: widget.likes ? 'Likes' : 'Comments',
+      title: widget.likes ? context.tr('Likes') : context.tr('Comments'),
       children: [
         Expanded(
           child: ListView.builder(
@@ -230,21 +231,21 @@ class _EngagementSheetState extends ConsumerState<_EngagementSheet> {
               if (_loading) return const LinearProgressIndicator();
               if (_error != null) {
                 return ListTile(
-                  title: Text(_error!),
+                  title: Text(context.tr(_error!)),
                   trailing:
-                      TextButton(onPressed: _load, child: const Text('Retry')),
+                      TextButton(onPressed: _load, child: Text(context.tr('Retry'))),
                 );
               }
               if (_cursor != null) {
                 return TextButton(
                   onPressed: _sending ? null : _load,
-                  child: const Text('Load more'),
+                  child: Text(context.tr('Load more')),
                 );
               }
               if (_rows.isEmpty) {
                 return ListTile(
                     title: Text(
-                        widget.likes ? 'No likes yet.' : 'No comments yet.'));
+                        widget.likes ? context.tr('No likes yet.') : context.tr('No comments yet.')));
               }
               return const SizedBox.shrink();
             },
@@ -261,9 +262,9 @@ class _EngagementSheetState extends ConsumerState<_EngagementSheet> {
                 maxLength: 1000,
                 onSubmitted: (_) => _send(),
                 decoration: InputDecoration(
-                  labelText: 'Add a comment',
+                  labelText: context.tr('Add a comment'),
                   suffixIcon: IconButton(
-                    tooltip: 'Post comment',
+                    tooltip: context.tr('Post comment'),
                     onPressed:
                         _sending || _loading || _error != null ? null : _send,
                     icon: const Icon(Icons.send_outlined),
@@ -272,7 +273,7 @@ class _EngagementSheetState extends ConsumerState<_EngagementSheet> {
               ),
             )
           else
-            const ListTile(title: Text('Verify your email to comment.')),
+            ListTile(title: Text(context.tr('Verify your email to comment.'))),
       ],
     );
   }
@@ -290,7 +291,7 @@ class SharedPostMessage extends StatelessWidget {
     if (id == null) return selectable ? SelectableText(message) : Text(message);
     return TextButton.icon(
       icon: const Icon(Icons.article_outlined),
-      label: const Text('View shared post'),
+      label: Text(context.tr('View shared post')),
       onPressed: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => _SharedPostScreen(id)),
       ),
@@ -337,7 +338,7 @@ class _SharedPostScreenState extends ConsumerState<_SharedPostScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Shared post')),
+        appBar: AppBar(title: Text(context.tr('Shared post'))),
         body: FutureBuilder<SocialRow>(
           future: _post,
           builder: (context, snapshot) {
@@ -346,9 +347,9 @@ class _SharedPostScreenState extends ConsumerState<_SharedPostScreen> {
             }
             if (snapshot.hasError) {
               return ListTile(
-                title: const Text('Could not open this post.'),
+                title: Text(context.tr('Could not open this post.')),
                 trailing:
-                    TextButton(onPressed: _reload, child: const Text('Retry')),
+                    TextButton(onPressed: _reload, child: Text(context.tr('Retry'))),
               );
             }
             return ListView(
@@ -484,17 +485,17 @@ class _ShareSheetState extends ConsumerState<_ShareSheet> {
   @override
   Widget build(BuildContext context) {
     if (ref.watch(authProvider).user?.emailVerified != true) {
-      return const ListTile(
-          title: Text('Verify your email to share posts in chats.'));
+      return ListTile(
+          title: Text(context.tr('Verify your email to share posts in chats.')));
     }
     return _sheet(
       context,
-      title: 'Share post',
+      title: context.tr('Share post'),
       children: [
         SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: false, label: Text('Chats')),
-            ButtonSegment(value: true, label: Text('Groups')),
+          segments: [
+            ButtonSegment(value: false, label: Text(context.tr('Chats'))),
+            ButtonSegment(value: true, label: Text(context.tr('Groups'))),
           ],
           selected: {_groups},
           onSelectionChanged: _loading || _sending
@@ -519,9 +520,9 @@ class _ShareSheetState extends ConsumerState<_ShareSheet> {
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _find(),
               decoration: InputDecoration(
-                labelText: 'Find by username',
+                labelText: context.tr('Find by username'),
                 suffixIcon: IconButton(
-                  tooltip: 'Search',
+                  tooltip: context.tr('Search'),
                   onPressed: _loading || _sending ? null : _find,
                   icon: const Icon(Icons.search),
                 ),
@@ -542,30 +543,30 @@ class _ShareSheetState extends ConsumerState<_ShareSheet> {
                       : Text('@${target.username}'),
                   trailing: FilledButton.tonal(
                     onPressed: sent || _sending ? null : () => _send(target),
-                    child: Text(sent ? 'Sent' : 'Send'),
+                    child: Text(sent ? context.tr('Sent') : context.tr('Send')),
                   ),
                 );
               }
               if (_loading) return const LinearProgressIndicator();
               if (_error != null) {
                 return ListTile(
-                    title: Text(_error!),
+                    title: Text(context.tr(_error!)),
                     trailing: TextButton(
                         onPressed: _sending ? null : _load,
-                        child: const Text('Retry')));
+                        child: Text(context.tr('Retry'))));
               }
               if (_cursor != null) {
                 return TextButton(
                     onPressed: _sending ? null : _load,
-                    child: const Text('Load more'));
+                    child: Text(context.tr('Load more')));
               }
               if (_targets.isEmpty) {
                 return ListTile(
                     title: Text(_groups
-                        ? 'No group chats found.'
+                        ? context.tr('No group chats found.')
                         : _query.isEmpty
-                            ? 'Search for someone by username.'
-                            : 'No matching usernames.'));
+                            ? context.tr('Search for someone by username.')
+                            : context.tr('No matching usernames.')));
               }
               return const SizedBox.shrink();
             },
@@ -593,7 +594,7 @@ Widget _sheet(BuildContext context,
             ListTile(
               title: Text(title, style: Theme.of(context).textTheme.titleLarge),
               trailing: IconButton(
-                tooltip: 'Close',
+                tooltip: context.tr('Close'),
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.close),
               ),
@@ -606,5 +607,5 @@ Widget _sheet(BuildContext context,
 
 void _showError(BuildContext context, Object error) {
   ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(error.toString())));
+      .showSnackBar(SnackBar(content: Text(context.tr(error.toString()))));
 }

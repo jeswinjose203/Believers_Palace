@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
@@ -46,7 +47,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void _toast(String msg) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
-  void _comingSoon(String what) => _toast('$what is not available yet');
+  void _comingSoon(String what) => _toast(context.tr('{0} is not available yet', [context.tr(what)]));
 
   void _changeChurch() {
     Navigator.of(context).push(
@@ -61,16 +62,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('You will need to sign in again.'),
+        title: Text(context.tr('Log out?')),
+        content: Text(context.tr('You will need to sign in again.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Log out'),
+            child: Text(context.tr('Log out')),
           ),
         ],
       ),
@@ -101,22 +102,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         children: [
           _Header(
             user: user,
-            roleLabel: _roleLabel(user.role),
+            roleLabel: context.tr(_roleLabel(user.role)),
             onEditPhoto: () => _edit(user),
-            onBell: () => _toast('No new notifications'),
+            onBell: () => _toast(context.tr('No new notifications')),
           ),
           const SizedBox(height: 16),
           _Card(
             children: [
               _InfoRow(
                 icon: Icons.mail_outline,
-                label: 'Email',
+                label: context.tr('Email'),
                 value: user.email,
                 trailing: user.emailVerified
-                    ? const Padding(
+                    ? Padding(
                         padding: EdgeInsets.only(left: 8),
                         child: Tooltip(
-                          message: 'Email verified',
+                          message: context.tr('Email verified'),
                           child: Icon(Icons.verified, color: Colors.green),
                         ),
                       )
@@ -132,15 +133,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               _InfoRow(
                 icon: Icons.phone_outlined,
                 label: (user.phone ?? '').isEmpty
-                    ? 'Mobile'
+                    ? context.tr('Mobile')
                     : user.phoneVerified
-                        ? 'Mobile (verified)'
-                        : 'Mobile (unverified)',
+                        ? context.tr('Mobile (verified)')
+                        : context.tr('Mobile (unverified)'),
                 value: (user.phone ?? '').isEmpty ? '-' : user.phone!,
               ),
               _InfoRow(
                 icon: Icons.church_outlined,
-                label: 'Church',
+                label: context.tr('Church'),
                 value: churchValue,
                 onTap: isMember ? _changeChurch : null,
               ),
@@ -151,19 +152,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             children: [
               _MenuRow(
                 icon: Icons.person_outline,
-                title: 'Edit Profile',
+                title: context.tr('Edit Profile'),
                 onTap: () => _edit(user),
               ),
               _MenuRow(
                 icon: Icons.settings_outlined,
-                title: 'Settings',
+                title: context.tr('Settings'),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const SettingsScreen()),
                 ),
               ),
               _MenuRow(
                 icon: Icons.calendar_month,
-                title: 'Calendar',
+                title: context.tr('Calendar'),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const CalendarScreen()),
                 ),
@@ -171,42 +172,43 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               if (!isSuperAdmin)
                 _MenuRow(
                   icon: Icons.bookmark_border,
-                  title: 'My Bookings',
+                  title: context.tr('My Bookings'),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const MyBookingsScreen()),
                   ),
                 ),
               _MenuRow(
                 icon: Icons.school,
-                title: 'Certificates',
+                title: context.tr('Certificates'),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const CertificatesScreen()),
                 ),
               ),
               _MenuRow(
                 icon: Icons.favorite_border,
-                title: 'My Family',
+                title: context.tr('My Family'),
                 onTap: () => _comingSoon('My Family'),
               ),
               _MenuRow(
                 icon: Icons.help_outline,
-                title: 'Help & Support',
+                title: context.tr('Help & Support'),
                 onTap: () => _comingSoon('Help & Support'),
               ),
               _MenuRow(
                 icon: Icons.info_outline,
-                title: 'About',
+                title: context.tr('About'),
                 onTap: () => showAboutDialog(
                   context: context,
                   applicationName: 'Believers Palace',
                   applicationVersion: kAppVersion,
-                  applicationLegalese:
-                      'Bringing people and places of faith together.',
+                  applicationLegalese: context.tr(
+                    'Bringing people and places of faith together.',
+                  ),
                 ),
               ),
               _MenuRow(
                 icon: Icons.logout,
-                title: 'Logout',
+                title: context.tr('Logout'),
                 color: Colors.red,
                 showChevron: false,
                 onTap: _logout,
@@ -242,21 +244,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit Profile'),
+        title: Text(dialogContext.tr('Edit Profile')),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: name,
-                decoration: const InputDecoration(labelText: 'Name'),
+                decoration: InputDecoration(labelText: dialogContext.tr('Name')),
               ),
               TextField(
                 controller: unit,
-                decoration: const InputDecoration(labelText: 'Unit'),
+                decoration: InputDecoration(labelText: dialogContext.tr('Unit')),
               ),
               ImagePickerField(
-                label: 'Profile picture',
+                label: dialogContext.tr('Profile picture'),
                 initialUrl: user.profilePic,
                 onChanged: (url) => profilePic = url,
               ),
@@ -266,7 +268,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
+            child: Text(dialogContext.tr('Cancel')),
           ),
           TextButton(
             onPressed: () async {
@@ -280,12 +282,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           : profilePic,
                 });
                 if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-                if (mounted) _toast('Profile updated');
+                if (mounted) _toast(context.tr('Profile updated'));
               } catch (e) {
                 if (mounted) _toast(e.toString());
               }
             },
-            child: const Text('Save'),
+            child: Text(dialogContext.tr('Save')),
           ),
         ],
       ),
@@ -328,9 +330,9 @@ class _Header extends StatelessWidget {
           Row(
             children: [
               const SizedBox(width: 48),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Profile',
+                  context.tr('Profile'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
@@ -341,7 +343,7 @@ class _Header extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.notifications_none, color: Colors.white),
-                tooltip: 'Notifications',
+                tooltip: context.tr('Notifications'),
                 onPressed: onBell,
               ),
             ],

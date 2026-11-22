@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
@@ -56,7 +57,7 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
           .read(authProvider.notifier)
           .updateProfile({'churchId': church.id});
       if (!mounted) return;
-      _show('${church.name} selected');
+      _show(context.tr('{0} selected', [church.name]));
       if (widget.popOnSelect && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
@@ -73,7 +74,7 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
       try {
         full = await ref.read(apiServiceProvider).getChurch(existing.id);
       } catch (e) {
-        _show('Could not load church details: $e');
+        if (mounted) _show(context.tr('Could not load church details: {0}', [e]));
         return;
       }
     }
@@ -89,17 +90,17 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete ${church.name}?'),
-        content: const Text(
-            'This permanently removes the church and is not reversible.'),
+        title: Text(context.tr('Delete {0}?', [church.name])),
+        content: Text(
+            context.tr('This permanently removes the church and is not reversible.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            child: Text(context.tr('Delete')),
           ),
         ],
       ),
@@ -107,7 +108,7 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
     if (confirmed != true) return;
     try {
       await ref.read(apiServiceProvider).deleteChurch(church.id);
-      _show('Church deleted');
+      if (mounted) _show(context.tr('Church deleted'));
       _refresh();
     } catch (e) {
       _show(e.toString());
@@ -125,13 +126,13 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.selectMode ? 'Select your church' : 'Churches'),
+        title: Text(widget.selectMode ? context.tr('Select your church') : context.tr('Churches')),
       ),
       floatingActionButton: isSuperAdmin
           ? FloatingActionButton.extended(
               onPressed: () => _createOrEdit(),
               icon: const Icon(Icons.add),
-              label: const Text('Add Church'),
+              label: Text(context.tr('Add Church')),
             )
           : null,
       body: Column(
@@ -141,9 +142,8 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
               width: double.infinity,
               color: Theme.of(context).colorScheme.primaryContainer,
               padding: const EdgeInsets.all(12),
-              child: const Text(
-                'Select your church to see its details, announcements and '
-                'events on your home page.',
+              child: Text(
+                context.tr('Select your church to see its details, announcements and events on your home page.'),
               ),
             ),
           Padding(
@@ -151,7 +151,7 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
             child: TextField(
               controller: _search,
               decoration: InputDecoration(
-                hintText: 'Search churches',
+                hintText: context.tr('Search churches'),
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.search),
                   onPressed: _refresh,
@@ -172,13 +172,13 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
-                      child: Text('Error: ${snapshot.error}'),
+                      child: Text(context.tr('Error: {0}', [snapshot.error])),
                     ),
                   );
                 }
                 final churches = snapshot.data?.data ?? [];
                 if (churches.isEmpty) {
-                  return const Center(child: Text('No churches found.'));
+                  return Center(child: Text(context.tr('No churches found.')));
                 }
                 return RefreshIndicator(
                   onRefresh: _refresh,
@@ -211,23 +211,23 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
                                   if (v == 'delete') _delete(c);
                                 },
                                 itemBuilder: (_) => [
-                                  const PopupMenuItem(
+                                  PopupMenuItem(
                                     value: 'edit',
-                                    child: Text('Edit'),
+                                    child: Text(context.tr('Edit')),
                                   ),
                                   if (isSuperAdmin)
-                                    const PopupMenuItem(
+                                    PopupMenuItem(
                                       value: 'delete',
-                                      child: Text('Delete'),
+                                      child: Text(context.tr('Delete')),
                                     ),
                                 ],
                               )
                             : widget.selectMode
                                 ? (c.id == user?.churchId
-                                    ? const Chip(label: Text('Current'))
+                                    ? Chip(label: Text(context.tr('Current')))
                                     : FilledButton.tonal(
                                         onPressed: () => _select(c),
-                                        child: const Text('Select'),
+                                        child: Text(context.tr('Select')),
                                       ))
                                 : const Icon(Icons.chevron_right),
                         onTap: () => Navigator.of(context).push(
@@ -385,12 +385,12 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Choose location'),
+        title: Text(ctx.tr('Choose location')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Enter the map coordinates for this church.',
+            Text(
+              ctx.tr('Enter the map coordinates for this church.'),
               style: TextStyle(fontSize: 13, color: Colors.black54),
             ),
             const SizedBox(height: 12),
@@ -398,9 +398,9 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
               controller: latCtrl,
               keyboardType: const TextInputType.numberWithOptions(
                   decimal: true, signed: true),
-              decoration: const InputDecoration(
-                labelText: 'Latitude',
-                hintText: 'e.g. 10.1632',
+              decoration: InputDecoration(
+                labelText: ctx.tr('Latitude'),
+                hintText: context.tr('e.g. 10.1632'),
               ),
             ),
             const SizedBox(height: 8),
@@ -408,9 +408,9 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
               controller: lngCtrl,
               keyboardType: const TextInputType.numberWithOptions(
                   decimal: true, signed: true),
-              decoration: const InputDecoration(
-                labelText: 'Longitude',
-                hintText: 'e.g. 76.4319',
+              decoration: InputDecoration(
+                labelText: ctx.tr('Longitude'),
+                hintText: context.tr('e.g. 76.4319'),
               ),
             ),
           ],
@@ -418,11 +418,11 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: Text(ctx.tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Set'),
+            child: Text(ctx.tr('Set')),
           ),
         ],
       ),
@@ -449,8 +449,8 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _FormHeader(
-            title: isEdit ? 'Edit Church' : 'Add Church',
-            subtitle: 'Register a new church or prayer venue',
+            title: isEdit ? context.tr('Edit Church') : context.tr('Add Church'),
+            subtitle: context.tr('Register a new church or prayer venue'),
             onBack: _saving ? null : () => Navigator.of(context).pop(false),
           ),
           Flexible(
@@ -461,7 +461,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                 children: [
                   _FormSection(
                     icon: Icons.church_outlined,
-                    title: 'Basic Details',
+                    title: context.tr('Basic Details'),
                     children: [
                       _FieldLabel('Name', required: true),
                       _OutlinedField(
@@ -491,7 +491,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                   ),
                   _FormSection(
                     icon: Icons.location_on_outlined,
-                    title: 'Contact & Location',
+                    title: context.tr('Contact & Location'),
                     children: [
                       _FieldLabel('Address', required: true),
                       _OutlinedField(
@@ -526,7 +526,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                   ),
                   _FormSection(
                     icon: Icons.person_outline,
-                    title: 'Priest / Administrator',
+                    title: context.tr('Priest / Administrator'),
                     children: [
                       _FieldLabel('Name'),
                       _OutlinedField(
@@ -562,7 +562,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                   ),
                   _CollapsibleSection(
                     icon: Icons.groups_outlined,
-                    title: 'Associate Priest',
+                    title: context.tr('Associate Priest'),
                     trailingLabel: '(Optional)',
                     children: [
                       _FieldLabel('Name'),
@@ -599,7 +599,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                   ),
                   _FormSection(
                     icon: Icons.photo_library_outlined,
-                    title: 'Gallery & Additional Information',
+                    title: context.tr('Gallery & Additional Information'),
                     children: [
                       _FieldLabel('Gallery Images'),
                       MultiImagePickerField(
@@ -624,7 +624,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
                     Padding(
                       padding: const EdgeInsets.only(top: 4, bottom: 4),
                       child: Text(
-                        _error!,
+                        context.tr(_error!),
                         style: const TextStyle(color: Colors.red),
                       ),
                     ),
@@ -789,7 +789,7 @@ class _LocationField extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onChoose,
                 icon: const Icon(Icons.location_on_outlined, size: 18),
-                label: const Text('Choose on Map'),
+                label: Text(context.tr('Choose on Map')),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _kFormPurple,
                   side: BorderSide(
@@ -1044,7 +1044,7 @@ class _OutlinedField extends StatelessWidget {
       keyboardType: keyboardType,
       style: const TextStyle(fontSize: 14),
       decoration: InputDecoration(
-        hintText: hint,
+        hintText: context.tr(hint),
         hintStyle: const TextStyle(color: Colors.black38, fontSize: 14),
         isDense: true,
         counterText: showCounter ? null : '',
@@ -1096,7 +1096,7 @@ class _FormActionBar extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Cancel',
+              child: Text(context.tr('Cancel'),
                   style: TextStyle(fontWeight: FontWeight.w600)),
             ),
           ),
@@ -1121,7 +1121,7 @@ class _FormActionBar extends StatelessWidget {
                         color: Colors.white,
                       ),
                     )
-                  : const Text('Save',
+                  : Text(context.tr('Save'),
                       style: TextStyle(fontWeight: FontWeight.w700)),
             ),
           ),

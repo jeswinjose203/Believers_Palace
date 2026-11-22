@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
  
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
@@ -68,16 +69,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Could not load your church: ${snapshot.error}',
+                  Text(context.tr('Could not load your church: {0}', [snapshot.error]),
                       textAlign: TextAlign.center),
                   const SizedBox(height: 12),
                   FilledButton(
                     onPressed: () => _reload(churchId),
-                    child: const Text('Retry'),
+                    child: Text(context.tr('Retry')),
                   ),
                   TextButton(
                     onPressed: _chooseChurch,
-                    child: const Text('Choose another church'),
+                    child: Text(context.tr('Choose another church')),
                   ),
                 ],
               ),

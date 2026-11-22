@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../l10n/app_locale.dart';
 import '../../../widgets/image_picker_field.dart';
 import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
@@ -76,11 +77,11 @@ class _ManageClassFormScreenState extends ConsumerState<ManageClassFormScreen> {
 
   Future<void> _save() async {
     if (_name.text.trim().isEmpty) {
-      _show('Name is required');
+      _show(context.tr('Name is required'));
       return;
     }
     if (_end.isBefore(_start)) {
-      _show('End date must be after start date');
+      _show(context.tr('End date must be after start date'));
       return;
     }
     setState(() => _saving = true);
@@ -124,64 +125,64 @@ class _ManageClassFormScreenState extends ConsumerState<ManageClassFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.existing == null ? 'New class' : 'Edit class')),
+      appBar: AppBar(title: Text(widget.existing == null ? context.tr('New class') : context.tr('Edit class'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(controller: _name, decoration: const InputDecoration(labelText: 'Name *')),
+          TextField(controller: _name, decoration: InputDecoration(labelText: context.tr('Name *'))),
           TextField(
             controller: _description,
-            decoration: const InputDecoration(labelText: 'Description'),
+            decoration: InputDecoration(labelText: context.tr('Description')),
             maxLines: 3,
           ),
           DropdownButtonFormField<String>(
             initialValue: _level,
-            decoration: const InputDecoration(labelText: 'Level'),
-            items: const [
-              DropdownMenuItem(value: 'first_communion', child: Text('First Communion')),
-              DropdownMenuItem(value: 'confirmation', child: Text('Confirmation')),
-              DropdownMenuItem(value: 'baptism_prep', child: Text('Baptism prep')),
-              DropdownMenuItem(value: 'sunday_school', child: Text('Sunday school')),
-              DropdownMenuItem(value: 'adult', child: Text('Adult')),
-              DropdownMenuItem(value: 'other', child: Text('Other')),
+            decoration: InputDecoration(labelText: context.tr('Level')),
+            items: [
+              DropdownMenuItem(value: 'first_communion', child: Text(context.tr('First Communion'))),
+              DropdownMenuItem(value: 'confirmation', child: Text(context.tr('Confirmation'))),
+              DropdownMenuItem(value: 'baptism_prep', child: Text(context.tr('Baptism prep'))),
+              DropdownMenuItem(value: 'sunday_school', child: Text(context.tr('Sunday school'))),
+              DropdownMenuItem(value: 'adult', child: Text(context.tr('Adult'))),
+              DropdownMenuItem(value: 'other', child: Text(context.tr('Other'))),
             ],
             onChanged: (v) => setState(() => _level = v ?? _level),
           ),
           DropdownButtonFormField<String>(
             initialValue: _status,
-            decoration: const InputDecoration(labelText: 'Status'),
-            items: const [
-              DropdownMenuItem(value: 'draft', child: Text('Draft')),
-              DropdownMenuItem(value: 'open', child: Text('Open')),
-              DropdownMenuItem(value: 'closed', child: Text('Closed')),
-              DropdownMenuItem(value: 'completed', child: Text('Completed')),
+            decoration: InputDecoration(labelText: context.tr('Status')),
+            items: [
+              DropdownMenuItem(value: 'draft', child: Text(context.tr('Draft'))),
+              DropdownMenuItem(value: 'open', child: Text(context.tr('Open'))),
+              DropdownMenuItem(value: 'closed', child: Text(context.tr('Closed'))),
+              DropdownMenuItem(value: 'completed', child: Text(context.tr('Completed'))),
             ],
             onChanged: (v) => setState(() => _status = v ?? _status),
           ),
-          TextField(controller: _teacher, decoration: const InputDecoration(labelText: 'Teacher name')),
-          TextField(controller: _location, decoration: const InputDecoration(labelText: 'Location')),
+          TextField(controller: _teacher, decoration: InputDecoration(labelText: context.tr('Teacher name'))),
+          TextField(controller: _location, decoration: InputDecoration(labelText: context.tr('Location'))),
           TextField(
             controller: _capacity,
-            decoration: const InputDecoration(labelText: 'Capacity *'),
+            decoration: InputDecoration(labelText: context.tr('Capacity *')),
             keyboardType: TextInputType.number,
           ),
           ListTile(
-            title: Text('Start: ${_start.toLocal().toString().split(' ').first}'),
+            title: Text(context.tr('Start: {0}', [_start.toLocal().toString().split(' ').first])),
             onTap: () => _pickDate(true),
           ),
           ListTile(
-            title: Text('End: ${_end.toLocal().toString().split(' ').first}'),
+            title: Text(context.tr('End: {0}', [_end.toLocal().toString().split(' ').first])),
             onTap: () => _pickDate(false),
           ),
           ImagePickerField(
-            label: 'Image',
+            label: context.tr('Image'),
             initialUrl: _image,
             onChanged: (url) => _image = url,
           ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _saving ? null : _save,
-            child: Text(_saving ? 'Saving…' : 'Save'),
+            child: Text(_saving ? context.tr('Saving…') : context.tr('Save')),
           ),
         ],
       ),

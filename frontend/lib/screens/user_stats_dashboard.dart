@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../services/api_service.dart';
 import 'admin_users_screen.dart' show roleLabel;
 
@@ -65,7 +66,7 @@ class _UserStatsDashboardState extends ConsumerState<UserStatsDashboard> {
         if (snapshot.hasError) {
           return Padding(
             padding: const EdgeInsets.all(16),
-            child: Text('Could not load stats: ${snapshot.error}'),
+            child: Text(context.tr('Could not load stats: {0}', [snapshot.error])),
           );
         }
         final stats = snapshot.data!;
@@ -87,7 +88,7 @@ class _UserStatsDashboardState extends ConsumerState<UserStatsDashboard> {
                 ],
               ),
               const SizedBox(height: 16),
-              Text('Users by role',
+              Text(context.tr('Users by role'),
                   style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
               _RoleBarChart(
@@ -130,7 +131,7 @@ class _TotalCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text('$total',
                 style: Theme.of(context).textTheme.headlineMedium),
-            const Text('Total users'),
+            Text(context.tr('Total users')),
           ],
         ),
       ),
@@ -159,7 +160,7 @@ class _AdminsCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text('$superAdmins', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(width: 6),
-                const Expanded(child: Text('Super admins')),
+                Expanded(child: Text(context.tr('Super admins'))),
               ],
             ),
             const SizedBox(height: 8),
@@ -169,7 +170,7 @@ class _AdminsCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text('$churchAdmins', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(width: 6),
-                const Expanded(child: Text('Church admins')),
+                Expanded(child: Text(context.tr('Church admins'))),
               ],
             ),
           ],
@@ -207,7 +208,7 @@ class _RoleBarChart extends StatelessWidget {
               children: [
                 SizedBox(
                   width: 110,
-                  child: Text(b.label,
+                  child: Text(context.tr(b.label),
                       style: Theme.of(context).textTheme.bodySmall),
                 ),
                 Expanded(

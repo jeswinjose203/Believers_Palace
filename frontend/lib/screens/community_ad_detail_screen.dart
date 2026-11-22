@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
 
@@ -53,7 +54,7 @@ class _CommunityAdDetailScreenState extends ConsumerState<CommunityAdDetailScree
     if (!await launchUrl(link)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open $uri')),
+          SnackBar(content: Text(context.tr('Could not open {0}', [uri]))),
         );
       }
     }
@@ -62,11 +63,11 @@ class _CommunityAdDetailScreenState extends ConsumerState<CommunityAdDetailScree
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Listing')),
+      appBar: AppBar(title: Text(context.tr('Listing'))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
+              ? Center(child: Text(context.tr(_error!)))
               : _buildBody(_ad!),
     );
   }
@@ -102,7 +103,7 @@ class _CommunityAdDetailScreenState extends ConsumerState<CommunityAdDetailScree
         Text(ad.priceLabel,
             style: const TextStyle(fontSize: 20, color: Color(0xFF702078))),
         if (ad.isSold)
-          const Chip(label: Text('Sold')),
+          Chip(label: Text(context.tr('Sold'))),
         const SizedBox(height: 8),
         Text(ad.description),
         const SizedBox(height: 12),
@@ -111,7 +112,7 @@ class _CommunityAdDetailScreenState extends ConsumerState<CommunityAdDetailScree
         _row(Icons.sell, ad.condition == 'new' ? 'New' : 'Used'),
         if (ad.seller != null) ...[
           const SizedBox(height: 16),
-          Text('Seller', style: Theme.of(context).textTheme.titleMedium),
+          Text(context.tr('Seller'), style: Theme.of(context).textTheme.titleMedium),
           ListTile(
             leading: CircleAvatar(
               backgroundImage: ad.seller!.profilePic != null
@@ -123,7 +124,7 @@ class _CommunityAdDetailScreenState extends ConsumerState<CommunityAdDetailScree
           ),
         ],
         const SizedBox(height: 8),
-        Text('Contact', style: Theme.of(context).textTheme.titleMedium),
+        Text(context.tr('Contact'), style: Theme.of(context).textTheme.titleMedium),
         if (ad.contactPhone != null)
           ListTile(
             leading: const Icon(Icons.phone),

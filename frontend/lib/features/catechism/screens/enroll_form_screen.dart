@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../l10n/app_locale.dart';
 import '../../../core/api_client.dart';
 import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
@@ -51,11 +52,11 @@ class _EnrollFormScreenState extends ConsumerState<EnrollFormScreen> {
     final age = _ageOn(_dob!);
     final cls = widget.catechismClass;
     if (cls.minAge != null && age < cls.minAge!) {
-      _msg('Student must be at least ${cls.minAge} years old');
+      _msg(context.tr('Student must be at least {0} years old', [cls.minAge]));
       return;
     }
     if (cls.maxAge != null && age > cls.maxAge!) {
-      _msg('Student must be at most ${cls.maxAge} years old');
+      _msg(context.tr('Student must be at most {0} years old', [cls.maxAge]));
       return;
     }
     setState(() => _saving = true);
@@ -82,7 +83,7 @@ class _EnrollFormScreenState extends ConsumerState<EnrollFormScreen> {
   }
 
   void _msg(String m) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr(m))));
   }
 
   Future<void> _pickDob() async {
@@ -98,26 +99,26 @@ class _EnrollFormScreenState extends ConsumerState<EnrollFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Enroll student')),
+      appBar: AppBar(title: Text(context.tr('Enroll student'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Class: ${widget.catechismClass.name}'),
+          Text(context.tr('Class: {0}', [widget.catechismClass.name])),
           const SizedBox(height: 16),
           TextField(
             controller: _name,
-            decoration: const InputDecoration(labelText: 'Student full name *'),
+            decoration: InputDecoration(labelText: context.tr('Student full name *')),
           ),
           const SizedBox(height: 8),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text(_dob == null ? 'Date of birth *' : 'DOB: ${_dob!.toLocal().toString().split(' ').first}'),
+            title: Text(_dob == null ? context.tr('Date of birth *') : context.tr('DOB: {0}', [_dob!.toLocal().toString().split(' ').first])),
             trailing: const Icon(Icons.calendar_today),
             onTap: _pickDob,
           ),
           TextField(
             controller: _notes,
-            decoration: const InputDecoration(labelText: 'Notes'),
+            decoration: InputDecoration(labelText: context.tr('Notes')),
             maxLines: 3,
           ),
           const SizedBox(height: 24),
@@ -129,7 +130,7 @@ class _EnrollFormScreenState extends ConsumerState<EnrollFormScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Submit enrollment'),
+                : Text(context.tr('Submit enrollment')),
           ),
         ],
       ),

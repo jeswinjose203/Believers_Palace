@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
 import 'shop_product_detail_screen.dart';
@@ -76,7 +77,7 @@ class _ShopProductsBrowseScreenState extends ConsumerState<ShopProductsBrowseScr
                   TextField(
                     controller: _search,
                     decoration: InputDecoration(
-                      hintText: 'Search shop',
+                      hintText: context.tr('Search shop'),
                       prefixIcon: const Icon(Icons.search),
                       border: const OutlineInputBorder(),
                       isDense: true,
@@ -86,13 +87,13 @@ class _ShopProductsBrowseScreenState extends ConsumerState<ShopProductsBrowseScr
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String?>(
                     value: _categoryId,
-                    decoration: const InputDecoration(
-                      labelText: 'Category',
+                    decoration: InputDecoration(
+                      labelText: context.tr('Category'),
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
                     items: [
-                      const DropdownMenuItem(value: null, child: Text('All')),
+                      DropdownMenuItem(value: null, child: Text(context.tr('All'))),
                       ..._categories.map(
                         (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
                       ),
@@ -109,9 +110,9 @@ class _ShopProductsBrowseScreenState extends ConsumerState<ShopProductsBrowseScr
           if (_loading)
             const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
           else if (_error != null)
-            SliverFillRemaining(child: Center(child: Text(_error!)))
+            SliverFillRemaining(child: Center(child: Text(context.tr(_error!))))
           else if (_products.isEmpty)
-            const SliverFillRemaining(child: Center(child: Text('No shop products yet.')))
+            SliverFillRemaining(child: Center(child: Text(context.tr('No shop products yet.'))))
           else
             SliverPadding(
               padding: const EdgeInsets.all(12),

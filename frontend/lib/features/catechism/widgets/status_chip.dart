@@ -1,4 +1,7 @@
+
 import 'package:flutter/material.dart';
+
+import '../../../l10n/app_locale.dart';
 
 class CatechismStatusChip extends StatelessWidget {
   final String status;
@@ -9,7 +12,7 @@ class CatechismStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (color, label) = _style(status);
     return Chip(
-      label: Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
+      label: Text(context.tr(label), style: const TextStyle(color: Colors.white, fontSize: 12)),
       backgroundColor: color,
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,

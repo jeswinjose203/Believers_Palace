@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../services/chat_notification_service.dart';
 
@@ -65,7 +66,7 @@ class _ChatNotificationButtonState
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save notification setting.')),
+          SnackBar(content: Text(context.tr('Could not save notification setting.'))),
         );
       }
     } finally {
@@ -76,8 +77,8 @@ class _ChatNotificationButtonState
   @override
   Widget build(BuildContext context) => IconButton(
         tooltip: _muted == true
-            ? 'Enable chat notifications'
-            : 'Mute chat notifications',
+            ? context.tr('Enable chat notifications')
+            : context.tr('Mute chat notifications'),
         onPressed: _muted == null || _saving ? null : _toggle,
         icon: Icon(_muted == true
             ? Icons.notifications_off_outlined

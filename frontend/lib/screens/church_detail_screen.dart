@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
@@ -91,11 +92,11 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr(message))));
   }
 
   void _showSuccess(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr(message))));
   }
 
   /// Full administrative control (halls, booking status).
@@ -192,11 +193,11 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
             IconButton(
               icon: Icon(isMyChurch ? Icons.favorite : Icons.favorite_border),
               color: _kPurple,
-              tooltip: isMyChurch ? 'Your church' : 'Set as my church',
+              tooltip: isMyChurch ? context.tr('Your church') : context.tr('Set as my church'),
               onPressed: _setAsMyChurch,
             ),
           PopupMenuButton<String>(
-            tooltip: 'More',
+            tooltip: context.tr('More'),
             onSelected: (v) {
               switch (v) {
                 case 'change':
@@ -209,12 +210,12 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
             },
             itemBuilder: (_) => [
               if (widget.isHome)
-                const PopupMenuItem(
-                    value: 'change', child: Text('Change church')),
+                PopupMenuItem(
+                    value: 'change', child: Text(context.tr('Change church'))),
               if (canManage)
-                const PopupMenuItem(
-                    value: 'bookings', child: Text('Manage bookings')),
-              const PopupMenuItem(value: 'refresh', child: Text('Refresh')),
+                PopupMenuItem(
+                    value: 'bookings', child: Text(context.tr('Manage bookings'))),
+              PopupMenuItem(value: 'refresh', child: Text(context.tr('Refresh'))),
             ],
           ),
         ],
@@ -342,26 +343,26 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Register for ${event.title}'),
+        title: Text(context.tr('Register for {0}', [event.title])),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: name,
-                decoration: const InputDecoration(labelText: 'Name'),
+                decoration: InputDecoration(labelText: context.tr('Name')),
               ),
               TextField(
                 controller: email,
-                decoration: const InputDecoration(labelText: 'Email'),
+                decoration: InputDecoration(labelText: context.tr('Email')),
               ),
               TextField(
                 controller: phone,
-                decoration: const InputDecoration(labelText: 'Phone'),
+                decoration: InputDecoration(labelText: context.tr('Phone')),
               ),
               TextField(
                 controller: notes,
-                decoration: const InputDecoration(labelText: 'Notes'),
+                decoration: InputDecoration(labelText: context.tr('Notes')),
               ),
             ],
           ),
@@ -369,7 +370,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           TextButton(
             onPressed: () async {
@@ -391,7 +392,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
                 _showError(e.toString());
               }
             },
-            child: const Text('Register'),
+            child: Text(context.tr('Register')),
           ),
         ],
       ),
@@ -450,7 +451,7 @@ class _DateTimeFieldState extends State<_DateTimeField> {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      title: Text(widget.label),
+      title: Text(context.tr(widget.label)),
       subtitle: Text(_value.toLocal().toString()),
       trailing: const Icon(Icons.calendar_today),
       onTap: _pick,
@@ -503,22 +504,22 @@ class _AnnouncementsTabState extends ConsumerState<_AnnouncementsTab> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(existing == null ? 'New Announcement' : 'Edit Announcement'),
+        title: Text(existing == null ? context.tr('New Announcement') : context.tr('Edit Announcement')),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: title,
-                decoration: const InputDecoration(labelText: 'Title *'),
+                decoration: InputDecoration(labelText: context.tr('Title *')),
               ),
               TextField(
                 controller: content,
-                decoration: const InputDecoration(labelText: 'Content *'),
+                decoration: InputDecoration(labelText: context.tr('Content *')),
                 maxLines: 4,
               ),
               ImagePickerField(
-                label: 'Image',
+                label: context.tr('Image'),
                 initialUrl: existing?.image,
                 onChanged: (url) => image = url,
               ),
@@ -528,11 +529,11 @@ class _AnnouncementsTabState extends ConsumerState<_AnnouncementsTab> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Save'),
+            child: Text(context.tr('Save')),
           ),
         ],
       ),
@@ -572,7 +573,7 @@ class _AnnouncementsTabState extends ConsumerState<_AnnouncementsTab> {
   @override
   Widget build(BuildContext context) {
     return _ManagedList<Announcement>(
-      title: 'Announcements',
+      title: context.tr('Announcements'),
       future: _future!,
       canManage: widget.canManage,
       onAdd: () => _form(),
@@ -606,7 +607,7 @@ class _AnnouncementsTabState extends ConsumerState<_AnnouncementsTab> {
                           const Icon(Icons.calendar_today_outlined,
                               size: 14, color: _kPurple),
                           const SizedBox(width: 6),
-                          Text(_prettyDate(a.publishedAt ?? a.createdAt),
+                          Text(_prettyDate(context, a.publishedAt ?? a.createdAt),
                               style: const TextStyle(
                                   fontSize: 13, color: Colors.black54)),
                         ],
@@ -710,31 +711,31 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(existing == null ? 'New Hall' : 'Edit Hall'),
+          title: Text(existing == null ? context.tr('New Hall') : context.tr('Edit Hall')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: name,
-                  decoration: const InputDecoration(labelText: 'Name *'),
+                  decoration: InputDecoration(labelText: context.tr('Name *')),
                 ),
                 TextField(
                   controller: description,
-                  decoration: const InputDecoration(labelText: 'Description'),
+                  decoration: InputDecoration(labelText: context.tr('Description')),
                 ),
                 TextField(
                   controller: capacity,
-                  decoration: const InputDecoration(labelText: 'Capacity'),
+                  decoration: InputDecoration(labelText: context.tr('Capacity')),
                   keyboardType: TextInputType.number,
                 ),
                 TextField(
                   controller: location,
-                  decoration: const InputDecoration(labelText: 'Location'),
+                  decoration: InputDecoration(labelText: context.tr('Location')),
                 ),
                 TextField(
                   controller: price,
-                  decoration: const InputDecoration(labelText: 'Price'),
+                  decoration: InputDecoration(labelText: context.tr('Price')),
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 8),
@@ -744,7 +745,7 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
                         contentPadding: EdgeInsets.zero,
                         leading: CircleAvatar(
                             backgroundImage: NetworkImage(e.value)),
-                        title: Text('Image ${e.key + 1}',
+                        title: Text(context.tr('Image {0}', [e.key + 1]),
                             overflow: TextOverflow.ellipsis),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline),
@@ -754,7 +755,7 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
                       ),
                     ),
                 ImagePickerField(
-                  label: 'Add image',
+                  label: context.tr('Add image'),
                   onChanged: (url) {
                     if (url != null && url.isNotEmpty) {
                       setState(() => images.add(url));
@@ -767,11 +768,11 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+              child: Text(context.tr('Cancel')),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Save'),
+              child: Text(context.tr('Save')),
             ),
           ],
         ),
@@ -815,7 +816,7 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
   @override
   Widget build(BuildContext context) {
     return _ManagedList<Hall>(
-      title: 'Halls',
+      title: context.tr('Halls'),
       future: _future!,
       canManage: widget.canManage,
       onAdd: () => _form(),
@@ -867,14 +868,14 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
                                     const Icon(Icons.groups_outlined,
                                         size: 16, color: _kPurple),
                                     const SizedBox(width: 6),
-                                    Text('Capacity: ${h.capacity}',
+                                    Text(context.tr('Capacity: {0}', [h.capacity]),
                                         style: const TextStyle(fontSize: 13)),
                                   ],
                                 ),
                               if (h.price != null)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 2),
-                                  child: Text('Price: ${h.price}',
+                                  child: Text(context.tr('Price: {0}', [h.price]),
                                       style: const TextStyle(
                                           fontSize: 12,
                                           color: Colors.black54)),
@@ -988,15 +989,15 @@ class _BookingsTabState extends ConsumerState<_BookingsTab> {
           ? FloatingActionButton.extended(
               onPressed: _newBooking,
               icon: const Icon(Icons.add),
-              label: const Text('Book a hall'),
+              label: Text(context.tr('Book a hall')),
             )
           : null,
       itemBuilder: (b) => ListTile(
         leading: const CircleAvatar(child: Icon(Icons.event_seat)),
         title: Text('${_shortDate(b.startDate)} → ${_shortDate(b.endDate)}'),
-        subtitle: Text('Purpose: ${b.purpose ?? "-"}'),
+        subtitle: Text(context.tr('Purpose: {0}', [b.purpose ?? "-"])),
         trailing: Chip(
-          label: Text(b.status),
+          label: Text(context.tr(b.status)),
           backgroundColor: _statusColor(b.status),
         ),
       ),
@@ -1055,42 +1056,42 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(existing == null ? 'New Event' : 'Edit Event'),
+          title: Text(existing == null ? context.tr('New Event') : context.tr('Edit Event')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: title,
-                  decoration: const InputDecoration(labelText: 'Title *'),
+                  decoration: InputDecoration(labelText: context.tr('Title *')),
                 ),
                 TextField(
                   controller: description,
-                  decoration: const InputDecoration(labelText: 'Description'),
+                  decoration: InputDecoration(labelText: context.tr('Description')),
                   maxLines: 3,
                 ),
                 TextField(
                   controller: location,
-                  decoration: const InputDecoration(labelText: 'Location'),
+                  decoration: InputDecoration(labelText: context.tr('Location')),
                 ),
                 _DateTimeField(
-                  label: 'Start date *',
+                  label: context.tr('Start date *'),
                   initial: startDate,
                   onPicked: (d) => startDate = d ?? startDate,
                 ),
                 _DateTimeField(
-                  label: 'End date (optional)',
+                  label: context.tr('End date (optional)'),
                   initial: endDate ?? startDate.add(const Duration(hours: 2)),
                   onPicked: (d) => endDate = d,
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Registration required'),
+                  title: Text(context.tr('Registration required')),
                   value: registrationRequired,
                   onChanged: (v) => setState(() => registrationRequired = v),
                 ),
                 ImagePickerField(
-                  label: 'Image',
+                  label: context.tr('Image'),
                   initialUrl: existing?.image,
                   onChanged: (url) => image = url,
                 ),
@@ -1100,11 +1101,11 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+              child: Text(context.tr('Cancel')),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Save'),
+              child: Text(context.tr('Save')),
             ),
           ],
         ),
@@ -1142,17 +1143,21 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cancel registration?'),
-        content: Text('You will no longer be registered for "${e.title}".'
-            '${e.registrationRequired == true ? ' You will also lose access to its chat.' : ''}'),
+        title: Text(context.tr('Cancel registration?')),
+        content: Text(
+          context.tr('You will no longer be registered for "{0}".', [e.title]) +
+              (e.registrationRequired == true
+                  ? ' ' + context.tr('You will also lose access to its chat.')
+                  : ''),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep'),
+            child: Text(context.tr('Keep')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Cancel registration'),
+            child: Text(context.tr('Cancel registration')),
           ),
         ],
       ),
@@ -1181,15 +1186,15 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
   @override
   Widget build(BuildContext context) {
     return _ManagedList<Event>(
-      title: 'Events',
+      title: context.tr('Events'),
       future: _future!,
       canManage: widget.canManage,
       onAdd: () => _form(),
       itemBuilder: (e) {
         final start = e.startDate.toLocal();
         final time = e.endDate != null
-            ? '${DateFormat('h:mm a').format(start)} – ${DateFormat('h:mm a').format(e.endDate!.toLocal())}'
-            : DateFormat('h:mm a').format(start);
+            ? '${DateFormat('h:mm a', context.dateLocale).format(start)} – ${DateFormat('h:mm a', context.dateLocale).format(e.endDate!.toLocal())}'
+            : DateFormat('h:mm a', context.dateLocale).format(start);
         void openChat() => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => EventChatScreen(event: e)),
             );
@@ -1207,12 +1212,12 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
                 ),
                 child: Column(
                   children: [
-                    Text(DateFormat('MMM').format(start),
+                    Text(DateFormat('MMM', context.dateLocale).format(start),
                         style: const TextStyle(
                             fontSize: 13,
                             color: _kPurple,
                             fontWeight: FontWeight.w600)),
-                    Text(DateFormat('dd').format(start),
+                    Text(DateFormat('dd', context.dateLocale).format(start),
                         style: const TextStyle(
                             fontSize: 24, fontWeight: FontWeight.w700)),
                   ],
@@ -1268,7 +1273,7 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
                                     ? Icons.check_circle
                                     : Icons.how_to_reg,
                                 size: 16),
-                            label: Text(e.registered ? 'Registered' : 'Register'),
+                            label: Text(e.registered ? context.tr('Registered') : context.tr('Register')),
                             style: TextButton.styleFrom(
                               foregroundColor: _kPurple,
                               padding: EdgeInsets.zero,
@@ -1281,7 +1286,7 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
                         TextButton.icon(
                           onPressed: openChat,
                           icon: const Icon(Icons.chat_bubble_outline, size: 16),
-                          label: const Text('Chat'),
+                          label: Text(context.tr('Chat')),
                           style: TextButton.styleFrom(
                             foregroundColor: _kPurple,
                             padding: EdgeInsets.zero,
@@ -1299,7 +1304,7 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
                               ),
                             ),
                             icon: const Icon(Icons.groups, size: 16),
-                            label: const Text('Attendees'),
+                            label: Text(context.tr('Attendees')),
                             style: TextButton.styleFrom(
                               foregroundColor: _kPurple,
                               padding: EdgeInsets.zero,
@@ -1339,16 +1344,16 @@ Future<bool> _confirmDelete(BuildContext context, String label) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text('Delete "$label"?'),
-      content: const Text('This action cannot be undone.'),
+      title: Text(context.tr('Delete "{0}"?', [label])),
+      content: Text(context.tr('This action cannot be undone.')),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(context.tr('Cancel')),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Delete'),
+          child: Text(context.tr('Delete')),
         ),
       ],
     ),
@@ -1369,9 +1374,9 @@ class _EditDeleteMenu extends StatelessWidget {
         if (v == 'edit') onEdit();
         if (v == 'delete') onDelete();
       },
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: 'edit', child: Text('Edit')),
-        PopupMenuItem(value: 'delete', child: Text('Delete')),
+      itemBuilder: (_) => [
+        PopupMenuItem(value: 'edit', child: Text(context.tr('Edit'))),
+        PopupMenuItem(value: 'delete', child: Text(context.tr('Delete'))),
       ],
     );
   }
@@ -1422,7 +1427,7 @@ class _ManagedList<T> extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
+          return Center(child: Text(context.tr('Error: {0}', [snapshot.error])));
         }
         final items = snapshot.data?.data ?? [];
         return Stack(
@@ -1432,7 +1437,7 @@ class _ManagedList<T> extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (title != null) _SectionTitle(title!),
-                  const Expanded(child: Center(child: Text('Nothing here yet.'))),
+                  Expanded(child: Center(child: Text(context.tr('Nothing here yet.')))),
                 ],
               )
             else
@@ -1510,7 +1515,7 @@ class _TintCard extends StatelessWidget {
       );
 }
 
-String _prettyDate(DateTime d) => DateFormat('MMM d, y').format(d.toLocal());
+String _prettyDate(BuildContext context, DateTime d) => DateFormat('MMM d, y', context.dateLocale).format(d.toLocal());
 
 // ---------------------------------------------------------------------------
 // Booking dialog (shared by the header button, hall cards and Bookings tab).
@@ -1552,14 +1557,14 @@ Future<bool> _showNewBookingDialog(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
-        title: const Text('New Booking'),
+        title: Text(context.tr('New Booking')),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
                 initialValue: hallId,
-                decoration: const InputDecoration(labelText: 'Hall *'),
+                decoration: InputDecoration(labelText: context.tr('Hall *')),
                 items: halls
                     .map((h) =>
                         DropdownMenuItem(value: h.id, child: Text(h.name)))
@@ -1567,22 +1572,22 @@ Future<bool> _showNewBookingDialog(
                 onChanged: (v) => setState(() => hallId = v),
               ),
               _DateTimeField(
-                label: 'Start',
+                label: context.tr('Start'),
                 initial: start,
                 onPicked: (d) => start = d ?? start,
               ),
               _DateTimeField(
-                label: 'End',
+                label: context.tr('End'),
                 initial: end,
                 onPicked: (d) => end = d ?? end,
               ),
               TextField(
                 controller: purpose,
-                decoration: const InputDecoration(labelText: 'Purpose'),
+                decoration: InputDecoration(labelText: context.tr('Purpose')),
               ),
               TextField(
                 controller: notes,
-                decoration: const InputDecoration(labelText: 'Notes'),
+                decoration: InputDecoration(labelText: context.tr('Notes')),
               ),
             ],
           ),
@@ -1590,11 +1595,11 @@ Future<bool> _showNewBookingDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Request booking'),
+            child: Text(context.tr('Request booking')),
           ),
         ],
       ),
@@ -1755,7 +1760,7 @@ class _PillTabsDelegate extends SliverPersistentHeaderDelegate {
                   children: [
                     Icon(t.$1, size: 18),
                     const SizedBox(width: 6),
-                    Text(t.$2),
+                    Text(context.tr(t.$2)),
                   ],
                 ),
               ),
@@ -1896,7 +1901,7 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                title,
+                context.tr(title),
                 style:
                     const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
@@ -1904,7 +1909,7 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
             if (onViewAll != null)
               TextButton(
                 onPressed: onViewAll,
-                child: const Text('View All'),
+                child: Text(context.tr('View All')),
               ),
           ],
         ),
@@ -1945,7 +1950,7 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
                   children: [
                     Icon(icon, color: _kPurple),
                     const SizedBox(height: 4),
-                    Text(label, style: const TextStyle(fontSize: 12)),
+                    Text(context.tr(label), style: const TextStyle(fontSize: 12)),
                   ],
                 ),
               ),
@@ -1970,7 +1975,7 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
           );
         }
         if (snap.hasError) {
-          return Text('Error: ${snap.error}',
+          return Text(context.tr('Error: {0}', [snap.error]),
               style: const TextStyle(color: Colors.red));
         }
         final items = snap.data?.data ?? <T>[];
@@ -1995,14 +2000,14 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
         children: [
           _sectionHeader('About'),
           Text(
-            description.isNotEmpty ? description : 'No description available.',
+            description.isNotEmpty ? description : context.tr('No description available.'),
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           if (widget.loadError != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                'Could not load full details: ${widget.loadError}',
+                context.tr('Could not load full details: {0}', [widget.loadError]),
                 style: const TextStyle(color: Colors.red),
               ),
             ),
@@ -2076,7 +2081,7 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        DateFormat('MMM d, y').format(date.toLocal()),
+                        DateFormat('MMM d, y', context.dateLocale).format(date.toLocal()),
                         style: const TextStyle(
                             fontSize: 11, color: Colors.black54),
                       ),
@@ -2115,7 +2120,7 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
                   .toList()
                 ..sort((a, b) => a.startDate.compareTo(b.startDate));
               if (upcoming.isEmpty) {
-                return const Text('No upcoming events.',
+                return Text(context.tr('No upcoming events.'),
                     style: TextStyle(color: Colors.black54));
               }
               return Column(children: upcoming.take(3).map(_eventTile).toList());
@@ -2166,7 +2171,7 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
                   children: [
                     Expanded(
                       child: Text(
-                        h.capacity != null ? 'Capacity: ${h.capacity}' : '',
+                        h.capacity != null ? context.tr('Capacity: {0}', [h.capacity]) : '',
                         style: const TextStyle(
                             fontSize: 11, color: Colors.black54),
                       ),
@@ -2181,7 +2186,7 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: const Text('Book'),
+                        child: Text(context.tr('Book')),
                       ),
                   ],
                 ),
@@ -2203,8 +2208,8 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
   Widget _eventTile(Event e) {
     final start = e.startDate.toLocal();
     final time = e.endDate != null
-        ? '${DateFormat('h:mm a').format(start)} – ${DateFormat('h:mm a').format(e.endDate!.toLocal())}'
-        : DateFormat('h:mm a').format(start);
+        ? '${DateFormat('h:mm a', context.dateLocale).format(start)} – ${DateFormat('h:mm a', context.dateLocale).format(e.endDate!.toLocal())}'
+        : DateFormat('h:mm a', context.dateLocale).format(start);
     return _tintedCard(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => EventChatScreen(event: e)),
@@ -2221,12 +2226,12 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
             ),
             child: Column(
               children: [
-                Text(DateFormat('MMM').format(start),
+                Text(DateFormat('MMM', context.dateLocale).format(start),
                     style: const TextStyle(
                         fontSize: 12,
                         color: _kPurple,
                         fontWeight: FontWeight.w600)),
-                Text(DateFormat('d').format(start),
+                Text(DateFormat('d', context.dateLocale).format(start),
                     style: const TextStyle(
                         fontSize: 20, fontWeight: FontWeight.w700)),
               ],

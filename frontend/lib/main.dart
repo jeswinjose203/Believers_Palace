@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/auth_provider.dart';
+import 'l10n/app_locale.dart';
 import 'features/catechism/screens/catechism_workspace_screen.dart';
 import 'providers/calendar_provider.dart';
 import 'services/calendar_notification_service.dart';
@@ -29,6 +31,8 @@ class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
     super.initState();
     _updates.start();
     Future.microtask(() async {
+      await ref.read(appLocaleProvider.notifier).restore();
+      if (!mounted) return;
       await ref.read(authProvider.notifier).init();
       await CalendarNotificationService.instance.init();
     });
@@ -60,6 +64,9 @@ class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
 
     return MaterialApp(
       navigatorKey: _navigator,
+      locale: ref.watch(appLocaleProvider),
+      supportedLocales: supportedAppLocales,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       title: 'Believers Palace',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

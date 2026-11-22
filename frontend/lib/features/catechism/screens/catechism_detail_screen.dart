@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../l10n/app_locale.dart';
 import '../../../core/api_client.dart';
 import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
@@ -61,22 +62,22 @@ class _CatechismDetailScreenState extends ConsumerState<CatechismDetailScreen> {
       ),
     );
     if (ok == true) {
-      _snack('Enrollment submitted');
+      if (mounted) _snack(context.tr('Enrollment submitted'));
       _refresh();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final df = DateFormat.yMMMd();
+    final df = DateFormat.yMMMd(context.dateLocale);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Class details'),
+        title: Text(context.tr('Class details')),
         actions: [
           if (widget.canManage)
             IconButton(
               icon: const Icon(Icons.groups_outlined),
-              tooltip: 'Manage enrollments',
+              tooltip: context.tr('Manage enrollments'),
               onPressed: () async {
                 await Navigator.of(context).push(
                   MaterialPageRoute(
@@ -103,9 +104,9 @@ class _CatechismDetailScreenState extends ConsumerState<CatechismDetailScreen> {
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       children: [
-                        Text('Error: ${snapshot.error}'),
+                        Text(context.tr('Error: {0}', [snapshot.error])),
                         const SizedBox(height: 12),
-                        FilledButton(onPressed: _refresh, child: const Text('Retry')),
+                        FilledButton(onPressed: _refresh, child: Text(context.tr('Retry'))),
                       ],
                     ),
                   ),
@@ -119,8 +120,8 @@ class _CatechismDetailScreenState extends ConsumerState<CatechismDetailScreen> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.school_outlined),
-                  title: const Text('Class workspace'),
-                  subtitle: const Text('Syllabus, announcements, attendance and marks'),
+                  title: Text(context.tr('Class workspace')),
+                  subtitle: Text(context.tr('Syllabus, announcements, attendance and marks')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -144,7 +145,7 @@ class _CatechismDetailScreenState extends ConsumerState<CatechismDetailScreen> {
                   ),
                 const SizedBox(height: 12),
                 Text(cls.name, style: Theme.of(context).textTheme.headlineSmall),
-                Text(levelLabel(cls.level)),
+                Text(context.tr(levelLabel(cls.level))),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -155,20 +156,20 @@ class _CatechismDetailScreenState extends ConsumerState<CatechismDetailScreen> {
                   Text(cls.description!),
                 const SizedBox(height: 8),
                 Text('${df.format(cls.startDate)} – ${df.format(cls.endDate)}'),
-                if (cls.location != null) Text('Location: ${cls.location}'),
+                if (cls.location != null) Text(context.tr('Location: {0}', [cls.location])),
                 if (cls.teacherName != null && cls.teacherName!.isNotEmpty)
-                  Text('Teacher: ${cls.teacherName}'),
-                Text('Seats: ${cls.availableSeats} available (${cls.enrolledCount}/${cls.capacity})'),
+                  Text(context.tr('Teacher: {0}', [cls.teacherName])),
+                Text(context.tr('Seats: {0} available ({1}/{2})', [cls.availableSeats, cls.enrolledCount, cls.capacity])),
                 if (cls.schedule.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  const Text('Schedule', style: TextStyle(fontWeight: FontWeight.w600)),
-                  for (final s in cls.schedule) Text('${s.day} at ${s.time}'),
+                  Text(context.tr('Schedule'), style: TextStyle(fontWeight: FontWeight.w600)),
+                  for (final s in cls.schedule) Text(context.tr('{0} at {1}', [s.day, s.time])),
                 ],
                 const SizedBox(height: 16),
                 if (!widget.canManage && cls.status == 'open' && !cls.enrolled)
                   FilledButton(
                     onPressed: cls.availableSeats > 0 ? () => _enroll(cls) : null,
-                    child: const Text('Enroll a student'),
+                    child: Text(context.tr('Enroll a student')),
                   ),
                 if (widget.canManage) ...[
                   Row(
@@ -186,7 +187,7 @@ class _CatechismDetailScreenState extends ConsumerState<CatechismDetailScreen> {
                             );
                             _refresh();
                           },
-                          child: const Text('Edit class'),
+                          child: Text(context.tr('Edit class')),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -200,14 +201,14 @@ class _CatechismDetailScreenState extends ConsumerState<CatechismDetailScreen> {
                             );
                             _refresh();
                           },
-                          child: const Text('Add lesson'),
+                          child: Text(context.tr('Add lesson')),
                         ),
                       ),
                     ],
                   ),
                 ],
                 const SizedBox(height: 24),
-                Text('Lessons', style: Theme.of(context).textTheme.titleMedium),
+                Text(context.tr('Lessons'), style: Theme.of(context).textTheme.titleMedium),
                 FutureBuilder<List<CatechismSession>>(
                   future: _sessionsFuture,
                   builder: (context, sessSnap) {
@@ -220,13 +221,13 @@ class _CatechismDetailScreenState extends ConsumerState<CatechismDetailScreen> {
                     if (sessSnap.hasError) {
                       final err = sessSnap.error;
                       if (err is ApiException && err.statusCode == 403) {
-                        return const Text('Lessons are visible after your enrollment is approved.');
+                        return Text(context.tr('Lessons are visible after your enrollment is approved.'));
                       }
-                      return Text('Could not load lessons: $err');
+                      return Text(context.tr('Could not load lessons: {0}', [err]));
                     }
                     final sessions = sessSnap.data ?? [];
                     if (sessions.isEmpty) {
-                      return const Text('No lessons scheduled yet.');
+                      return Text(context.tr('No lessons scheduled yet.'));
                     }
                     return Column(
                       children: [

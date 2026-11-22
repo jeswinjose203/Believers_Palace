@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import 'social_post.dart';
 import '../core/auth_provider.dart';
 import '../services/chat_live_service.dart';
@@ -90,7 +91,7 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Verify your account to post'),
+          title: Text(dialogContext.tr('Verify your account to post')),
           content: Text(
             'Email ${user.emailVerified ? 'verified' : 'unverified'}\n'
             'Phone ${user.phoneVerified ? 'verified' : 'unverified'}',
@@ -104,7 +105,7 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
                     builder: (_) => const VerifyEmailScreen(),
                   ));
                 },
-                child: const Text('Verify email'),
+                child: Text(dialogContext.tr('Verify email')),
               ),
             if (!user.phoneVerified)
               TextButton(
@@ -115,11 +116,11 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
                         const SignupScreen(verifyingExistingAccount: true),
                   ));
                 },
-                child: const Text('Verify phone'),
+                child: Text(dialogContext.tr('Verify phone')),
               ),
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Close'),
+              child: Text(dialogContext.tr('Close')),
             ),
           ],
         ),
@@ -135,10 +136,10 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: const Text('Feed'),
+          title: Text(context.tr('Feed')),
           actions: [
             IconButton(
-              tooltip: 'Direct messages',
+              tooltip: context.tr('Direct messages'),
               icon: const Icon(Icons.chat_bubble_outline),
               onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => const DirectMessagesScreen(),
@@ -149,7 +150,7 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _compose,
           icon: const Icon(Icons.add),
-          label: const Text('Post'),
+          label: Text(context.tr('Post')),
         ),
         body: !_started
             ? const Center(child: CircularProgressIndicator())
@@ -182,21 +183,21 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
                     }
                     if (_error != null) {
                       return ListTile(
-                        title: Text(_error!),
+                        title: Text(context.tr(_error!)),
                         trailing: TextButton(
                           onPressed:
                               _busy ? null : () => _load(more: _cursor != null),
-                          child: const Text('Retry'),
+                          child: Text(context.tr('Retry')),
                         ),
                       );
                     }
                     if (_posts.isEmpty) {
-                      return const ListTile(title: Text('No posts yet.'));
+                      return ListTile(title: Text(context.tr('No posts yet.')));
                     }
                     if (_cursor != null) {
                       return TextButton(
                         onPressed: _busy ? null : () => _load(more: true),
-                        child: Text(_busy ? 'Loading…' : 'Load more'),
+                        child: Text(_busy ? context.tr('Loading…') : context.tr('Load more')),
                       );
                     }
                     return const SizedBox.shrink();
@@ -208,7 +209,7 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
 
 void showSocialError(BuildContext context, Object error) {
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(error.toString())),
+    SnackBar(content: Text(context.tr(error.toString()))),
   );
 }
 
@@ -278,11 +279,11 @@ class _ComposeScreenState extends ConsumerState<_ComposeScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: const Text('New post'),
+          title: Text(context.tr('New post')),
           actions: [
             TextButton(
               onPressed: _busy ? null : _publish,
-              child: Text(_busy ? 'Posting…' : 'Publish'),
+              child: Text(_busy ? context.tr('Posting…') : context.tr('Publish')),
             ),
           ],
         ),
@@ -296,13 +297,13 @@ class _ComposeScreenState extends ConsumerState<_ComposeScreen> {
               minLines: 4,
               maxLines: 12,
               decoration:
-                  const InputDecoration(hintText: 'What’s on your mind?'),
+                  InputDecoration(hintText: context.tr('What’s on your mind?')),
             ),
             if (_file case final file?)
               ListTile(
                 title: Text(file.name),
                 trailing: IconButton(
-                  tooltip: 'Remove attachment',
+                  tooltip: context.tr('Remove attachment'),
                   onPressed: _busy
                       ? null
                       : () => setState(() {
@@ -315,7 +316,7 @@ class _ComposeScreenState extends ConsumerState<_ComposeScreen> {
             OutlinedButton.icon(
               onPressed: _busy ? null : _pick,
               icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: const Text('Attach photo or video'),
+              label: Text(context.tr('Attach photo or video')),
             ),
           ],
         ),

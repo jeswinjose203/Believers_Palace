@@ -1,6 +1,8 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import 'api_service.dart';
 import 'calendar_notification_service.dart';
 
@@ -24,17 +26,13 @@ void showCalendarReminderPermissionHint(
   if (result.ready && result.scheduled > 0) return;
   final parts = <String>[];
   if (!result.notificationsGranted) {
-    parts.add('Allow notifications for Believers Palace');
+    parts.add(context.tr('Allow notifications for Believers Palace'));
   }
   if (!result.exactAlarmsGranted) {
-    parts.add(
-      'Open Settings → Alarms & reminders (or Special app access) and allow exact alarms for this app',
-    );
+    parts.add(context.tr('Open Settings → Alarms & reminders (or Special app access) and allow exact alarms for this app'));
   }
   if (result.ready && result.scheduled == 0) {
-    parts.add(
-      'No upcoming reminders were scheduled (check event time and that the reminder is in the future)',
-    );
+    parts.add(context.tr('No upcoming reminders were scheduled (check event time and that the reminder is in the future)'));
   }
   if (parts.isEmpty) return;
   ScaffoldMessenger.of(context).showSnackBar(

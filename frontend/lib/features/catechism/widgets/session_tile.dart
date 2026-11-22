@@ -1,6 +1,8 @@
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../l10n/app_locale.dart';
 import '../models/catechism_models.dart';
 
 class SessionTile extends StatelessWidget {
@@ -11,7 +13,7 @@ class SessionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final df = DateFormat.yMMMd();
+    final df = DateFormat.yMMMd(context.dateLocale);
     return ListTile(
       title: Text(session.title),
       subtitle: Text(

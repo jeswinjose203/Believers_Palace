@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../l10n/app_locale.dart';
 import '../core/calendar_time.dart';
 import '../models/calendar_models.dart';
 import '../services/api_service.dart';
@@ -59,7 +60,7 @@ class _TodayScheduleCardState extends ConsumerState<TodayScheduleCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Today's schedule", style: Theme.of(context).textTheme.titleMedium),
+                Text(context.tr('Today\'s schedule'), style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 ...items.map((i) => ListTile(
                       dense: true,
@@ -69,10 +70,10 @@ class _TodayScheduleCardState extends ConsumerState<TodayScheduleCard> {
                 ...goalsDue.map((g) => ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      title: Text('Goal: ${g.title}'),
+                      title: Text(context.tr('Goal: {0}', [g.title])),
                       trailing: TextButton(
                         onPressed: g.goalId == null ? null : () => _checkIn(g.goalId!),
-                        child: const Text('Check in'),
+                        child: Text(context.tr('Check in')),
                       ),
                     )),
               ],

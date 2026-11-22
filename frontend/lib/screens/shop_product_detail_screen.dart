@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
 
@@ -45,11 +46,11 @@ class _ShopProductDetailScreenState extends ConsumerState<ShopProductDetailScree
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Shop item')),
+      appBar: AppBar(title: Text(context.tr('Shop item'))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
+              ? Center(child: Text(context.tr(_error!)))
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
@@ -65,13 +66,13 @@ class _ShopProductDetailScreenState extends ConsumerState<ShopProductDetailScree
                     if (_product!.categoryName != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
-                        child: Text('Category: ${_product!.categoryName}'),
+                        child: Text(context.tr('Category: {0}', [_product!.categoryName])),
                       ),
                     const SizedBox(height: 12),
                     Text(_product!.description),
                     const SizedBox(height: 16),
-                    const Text(
-                      'Official church shop catalog item. Contact your church administrator to purchase.',
+                    Text(
+                      context.tr('Official church shop catalog item. Contact your church administrator to purchase.'),
                     ),
                   ],
                 ),

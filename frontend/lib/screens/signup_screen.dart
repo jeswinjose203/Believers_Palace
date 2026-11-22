@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/api_client.dart';
 import '../core/auth_provider.dart';
 import '../core/firebase_app_config.dart';
@@ -355,7 +356,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final resendSeconds = _resendSeconds;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Verify mobile number'),
+        title: Text(context.tr('Verify mobile number')),
         leading: BackButton(onPressed: _loading ? () {} : _backToSignup),
       ),
       body: SafeArea(
@@ -369,10 +370,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 children: [
                   Text(
                       _firebaseIdToken != null
-                          ? '$_destination is verified. Continue to create your account.'
+                          ? context.tr('{0} is verified. Continue to create your account.', [_destination])
                           : _automaticCredential != null
-                              ? 'Your code was detected for $_destination.'
-                              : 'Enter the six-digit code sent to $_destination.',
+                              ? context.tr('Your code was detected for {0}.', [_destination])
+                              : context.tr('Enter the six-digit code sent to {0}.', [_destination]),
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 20),
                   if (_firebaseIdToken == null && _verificationId != null)
@@ -388,8 +389,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         ],
                         maxLength: 6,
                         onSubmitted: (_) => _verify(),
-                        decoration: const InputDecoration(
-                          labelText: 'Verification code',
+                        decoration: InputDecoration(
+                          labelText: context.tr('Verification code'),
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -403,8 +404,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         child: Text(
                           _error ??
                               (_expired
-                                  ? 'This code has expired. Request another code.'
-                                  : _notice!),
+                                  ? context.tr('This code has expired. Request another code.')
+                                  : context.tr(_notice!)),
                           style: TextStyle(
                             color: _error != null || _expired
                                 ? Theme.of(context).colorScheme.error
@@ -418,22 +419,22 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         ? null
                         : _verify,
                     child: Text(widget.verifyingExistingAccount
-                        ? 'Verify phone'
-                        : 'Verify and create account'),
+                        ? context.tr('Verify phone')
+                        : context.tr('Verify and create account')),
                   ),
                   TextButton(
                     onPressed: _loading || resendSeconds > 0
                         ? null
                         : () => _sendCode(_destination!),
                     child: Text(resendSeconds > 0
-                        ? 'Resend code in ${resendSeconds}s'
-                        : 'Send code again'),
+                        ? context.tr('Resend code in {0}s', [resendSeconds])
+                        : context.tr('Send code again')),
                   ),
                   OutlinedButton(
                     onPressed: _loading ? null : _backToSignup,
                     child: Text(widget.verifyingExistingAccount
-                        ? 'Change number'
-                        : 'Back to signup'),
+                        ? context.tr('Change number')
+                        : context.tr('Back to signup')),
                   ),
                 ],
               ),
@@ -491,7 +492,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   }
 
   Widget _phoneForm() => Scaffold(
-        appBar: AppBar(title: const Text('Verify mobile number')),
+        appBar: AppBar(title: Text(context.tr('Verify mobile number'))),
         body: ListView(
           padding: const EdgeInsets.all(24),
           children: [
@@ -501,14 +502,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               keyboardType: TextInputType.phone,
               autofillHints: const [AutofillHints.telephoneNumber],
               decoration: InputDecoration(
-                labelText: 'Mobile number with country code',
+                labelText: context.tr('Mobile number with country code'),
                 errorText: _error,
               ),
             ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _loading ? null : _signUp,
-              child: const Text('Send verification code'),
+              child: Text(context.tr('Send verification code')),
             ),
           ],
         ),
@@ -539,8 +540,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   const SizedBox(height: 5),
 
                   // Sign In title
-                  const Text(
-                    'Sign Up',
+                  Text(
+                    context.tr('Sign Up'),
                     style: TextStyle(
                       fontFamily: 'Times New Roman',
                       fontSize: 20,
@@ -660,7 +661,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   if (_error != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      _error!,
+                      context.tr(_error!),
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.red, fontSize: 11),
                     ),
@@ -692,8 +693,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text(
-                              'OK',
+                          : Text(
+                              context.tr('OK'),
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
@@ -708,13 +709,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
-                        'Back to ',
-                        style: TextStyle(
-                          fontSize: 8,
-                          color: Color(0xFF333333),
-                        ),
-                      ),
                       TextButton(
                         onPressed: _loading
                             ? null
@@ -729,8 +723,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: const Text(
-                          'login page',
+                        child: Text(
+                          context.tr('Back to login page'),
                           style: TextStyle(
                             fontSize: 8,
                             color: Colors.blue,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../l10n/app_locale.dart';
 import '../models/catechism_models.dart';
 import 'status_chip.dart';
 
@@ -12,7 +13,7 @@ class CatechismClassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final df = DateFormat.yMMMd();
+    final df = DateFormat.yMMMd(context.dateLocale);
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -41,18 +42,18 @@ class CatechismClassCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(item.name, style: Theme.of(context).textTheme.titleMedium),
-                    Text(levelLabel(item.level), style: Theme.of(context).textTheme.bodySmall),
+                    Text(context.tr(levelLabel(item.level)), style: Theme.of(context).textTheme.bodySmall),
                     const SizedBox(height: 4),
                     Text('${df.format(item.startDate)} – ${df.format(item.endDate)}'),
-                    Text('${item.availableSeats} seats left · ${item.enrolledCount}/${item.capacity} enrolled'),
+                    Text(context.tr('{0} seats left · {1}/{2} enrolled', [item.availableSeats, item.enrolledCount, item.capacity])),
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: 6,
                       children: [
                         CatechismStatusChip(status: item.status),
                         if (item.enrolled)
-                          const Chip(
-                            label: Text('Enrolled', style: TextStyle(fontSize: 12)),
+                          Chip(
+                            label: Text(context.tr('Enrolled'), style: TextStyle(fontSize: 12)),
                             visualDensity: VisualDensity.compact,
                           ),
                       ],

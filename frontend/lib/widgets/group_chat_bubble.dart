@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_locale.dart';
 import '../screens/social_post.dart' show SharedPostMessage;
 
 enum ChatSendStatus { sent, sending, failed }
@@ -105,7 +106,7 @@ class GroupChatBubble extends StatelessWidget {
                       children: [
                         Text(
                           status == ChatSendStatus.failed
-                              ? 'Not sent · tap to retry'
+                              ? context.tr('Not sent · tap to retry')
                               : timeLabel,
                           style: theme.textTheme.labelSmall,
                         ),

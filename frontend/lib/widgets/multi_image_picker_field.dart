@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../services/api_service.dart';
 
 /// Lets the user pick several images, uploads each one, and reports the
@@ -44,7 +45,8 @@ class _MultiImagePickerFieldState extends ConsumerState<MultiImagePickerField> {
         withData: true,
       );
     } catch (e) {
-      setState(() => _error = 'Could not open picker: $e');
+      if (!mounted) return;
+      setState(() => _error = context.tr('Could not open picker: {0}', [e]));
       return;
     }
     if (result == null || result.files.isEmpty) return;
@@ -68,7 +70,7 @@ class _MultiImagePickerFieldState extends ConsumerState<MultiImagePickerField> {
     if (!mounted) return;
     setState(() {
       _uploading = false;
-      if (failed.isNotEmpty) _error = 'Failed to upload: ${failed.join(', ')}';
+      if (failed.isNotEmpty) _error = context.tr('Failed to upload: {0}', [failed.join(', ')]);
     });
     widget.onChanged(List<String>.unmodifiable(_urls));
   }
@@ -136,12 +138,12 @@ class _MultiImagePickerFieldState extends ConsumerState<MultiImagePickerField> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.add_photo_alternate, size: 18),
-          label: Text(_uploading ? 'Uploading...' : 'Add images'),
+          label: Text(_uploading ? context.tr('Uploading...') : context.tr('Add images')),
         ),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(_error!,
+            child: Text(context.tr(_error!),
                 style: const TextStyle(color: Colors.red, fontSize: 12)),
           ),
       ],

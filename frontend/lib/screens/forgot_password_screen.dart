@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../services/api_service.dart';
 import 'reset_password_screen.dart';
 
@@ -53,39 +54,38 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Forgot Password')),
+      appBar: AppBar(title: Text(context.tr('Forgot Password'))),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: ListView(
             children: [
-              const Text(
-                'Enter your account email and we\'ll send you a reset token.',
+              Text(
+                context.tr('Enter your account email and we\'ll send you a reset token.'),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _email,
                 enabled: !_sent,
-                decoration: const InputDecoration(labelText: 'Email'),
+                decoration: InputDecoration(labelText: context.tr('Email')),
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _submit(),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
+                Text(context.tr(_error!), style: const TextStyle(color: Colors.red)),
               ],
               if (_sent) ...[
                 const SizedBox(height: 16),
-                const Text(
-                  'If that email is registered, a reset token has been sent. '
-                  'Enter it on the next screen along with your new password.',
+                Text(
+                  context.tr('If that email is registered, a reset token has been sent. Enter it on the next screen along with your new password.'),
                   style: TextStyle(color: Colors.green),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: _goToReset,
-                  child: const Text('I have a reset token'),
+                  child: Text(context.tr('I have a reset token')),
                 ),
               ] else ...[
                 const SizedBox(height: 24),
@@ -97,11 +97,11 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Send Reset Token'),
+                      : Text(context.tr('Send Reset Token')),
                 ),
                 TextButton(
                   onPressed: _goToReset,
-                  child: const Text('I already have a token'),
+                  child: Text(context.tr('I already have a token')),
                 ),
               ],
             ],

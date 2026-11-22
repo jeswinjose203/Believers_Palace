@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../l10n/app_locale.dart';
 import '../../../core/auth_provider.dart';
 import '../../../models/models.dart';
 import '../models/catechism_models.dart';
@@ -103,11 +104,11 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text('Catechism'),
+        title: Text(context.tr('Catechism')),
         actions: [
           IconButton(
             icon: const Icon(Icons.list_alt_outlined),
-            tooltip: 'My enrollments',
+            tooltip: context.tr('My enrollments'),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const MyEnrollmentsScreen()),
             ),
@@ -134,7 +135,7 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
             child: TextField(
               controller: _search,
               decoration: InputDecoration(
-                hintText: 'Search classes',
+                hintText: context.tr('Search classes'),
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.search),
                   onPressed: () => _load(reset: true),
@@ -150,13 +151,13 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
               children: [
                 DropdownButton<String?>(
                   value: _status,
-                  hint: const Text('Status'),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('All statuses')),
-                    DropdownMenuItem(value: 'open', child: Text('Open')),
-                    DropdownMenuItem(value: 'draft', child: Text('Draft')),
-                    DropdownMenuItem(value: 'closed', child: Text('Closed')),
-                    DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                  hint: Text(context.tr('Status')),
+                  items: [
+                    DropdownMenuItem(value: null, child: Text(context.tr('All statuses'))),
+                    DropdownMenuItem(value: 'open', child: Text(context.tr('Open'))),
+                    DropdownMenuItem(value: 'draft', child: Text(context.tr('Draft'))),
+                    DropdownMenuItem(value: 'closed', child: Text(context.tr('Closed'))),
+                    DropdownMenuItem(value: 'completed', child: Text(context.tr('Completed'))),
                   ],
                   onChanged: (v) {
                     setState(() => _status = v);
@@ -166,12 +167,12 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
                 const SizedBox(width: 8),
                 DropdownButton<String?>(
                   value: _level,
-                  hint: const Text('Level'),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('All levels')),
-                    DropdownMenuItem(value: 'first_communion', child: Text('First Communion')),
-                    DropdownMenuItem(value: 'confirmation', child: Text('Confirmation')),
-                    DropdownMenuItem(value: 'sunday_school', child: Text('Sunday school')),
+                  hint: Text(context.tr('Level')),
+                  items: [
+                    DropdownMenuItem(value: null, child: Text(context.tr('All levels'))),
+                    DropdownMenuItem(value: 'first_communion', child: Text(context.tr('First Communion'))),
+                    DropdownMenuItem(value: 'confirmation', child: Text(context.tr('Confirmation'))),
+                    DropdownMenuItem(value: 'sunday_school', child: Text(context.tr('Sunday school'))),
                   ],
                   onChanged: (v) {
                     setState(() => _level = v);
@@ -191,11 +192,11 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
                           padding: const EdgeInsets.all(24),
                           child: Column(
                             children: [
-                              Text(_error!, textAlign: TextAlign.center),
+                              Text(context.tr(_error!), textAlign: TextAlign.center),
                               const SizedBox(height: 12),
                               FilledButton(
                                 onPressed: () => _load(reset: true),
-                                child: const Text('Retry'),
+                                child: Text(context.tr('Retry')),
                               ),
                             ],
                           ),
@@ -206,9 +207,9 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
                       ? const Center(child: CircularProgressIndicator())
                       : _items.isEmpty
                           ? ListView(
-                              children: const [
+                              children: [
                                 SizedBox(height: 48),
-                                Center(child: Text('No classes yet.')),
+                                Center(child: Text(context.tr('No classes yet.'))),
                               ],
                             )
                           : NotificationListener<ScrollNotification>(

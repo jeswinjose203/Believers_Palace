@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -6,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../l10n/app_locale.dart';
 
 const _repository = 'jeswinjose203/Believers_Palace';
 const _assetName = 'believers-palace.apk';
@@ -100,19 +103,21 @@ class AndroidUpdatePrompter with WidgetsBindingObserver {
       final download = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('App update available'),
+          title: Text(context.tr('App update available')),
           content: Text(
-            'Version ${release.version} is ready. Download the APK, open it, '
-            'and tap Update. Keep this app installed to preserve your data.',
+            context.tr(
+              'Version {0} is ready. Download the APK, open it, and tap Update. Keep this app installed to preserve your data.',
+              [release.version],
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Later'),
+              child: Text(context.tr('Later')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Download update'),
+              child: Text(context.tr('Download update')),
             ),
           ],
         ),
@@ -128,7 +133,7 @@ class AndroidUpdatePrompter with WidgetsBindingObserver {
         if (!opened) {
           if (context.mounted) {
             ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-              const SnackBar(content: Text('Could not open the APK download.')),
+              SnackBar(content: Text(context.tr('Could not open the APK download.'))),
             );
           }
           _nextCheck = now.add(const Duration(minutes: 15));

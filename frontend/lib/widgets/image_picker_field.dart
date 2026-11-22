@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../services/api_service.dart';
 
 /// A reusable form field that lets the user pick an image from their device and
@@ -59,7 +60,8 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
         withData: true, // load bytes so upload works on all platforms
       );
     } catch (e) {
-      setState(() => _error = 'Could not open picker: $e');
+      if (!mounted) return;
+      setState(() => _error = context.tr('Could not open picker: {0}', [e]));
       return;
     }
     if (result == null || result.files.isEmpty) return; // cancelled
@@ -129,14 +131,14 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
                           )
                         : const Icon(Icons.photo_library, size: 18),
                     label: Text(_uploading
-                        ? 'Uploading...'
-                        : (_url == null ? 'Choose image' : 'Change image')),
+                        ? context.tr('Uploading...')
+                        : (_url == null ? context.tr('Choose image') : context.tr('Change image'))),
                   ),
                   if (_url != null && _url!.isNotEmpty)
                     TextButton.icon(
                       onPressed: _uploading ? null : _clear,
                       icon: const Icon(Icons.clear, size: 18),
-                      label: const Text('Remove'),
+                      label: Text(context.tr('Remove')),
                     ),
                 ],
               ),
@@ -147,7 +149,7 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              _error!,
+              context.tr(_error!),
               style: const TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),

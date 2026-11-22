@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
 import '../widgets/multi_image_picker_field.dart';
@@ -32,13 +33,13 @@ class _MarketplaceAdminScreenState extends State<MarketplaceAdminScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manage marketplace'),
+        title: Text(context.tr('Manage marketplace')),
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [
-            Tab(text: 'Pending ads'),
-            Tab(text: 'Categories'),
-            Tab(text: 'Shop'),
+          tabs: [
+            Tab(text: context.tr('Pending ads')),
+            Tab(text: context.tr('Categories')),
+            Tab(text: context.tr('Shop')),
           ],
         ),
       ),
@@ -99,7 +100,7 @@ class _PendingAdsTabState extends ConsumerState<_PendingAdsTab> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_ads.isEmpty) return const Center(child: Text('No pending advertisements.'));
+    if (_ads.isEmpty) return Center(child: Text(context.tr('No pending advertisements.')));
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.separated(
@@ -114,17 +115,17 @@ class _PendingAdsTabState extends ConsumerState<_PendingAdsTab> {
               spacing: 4,
               children: [
                 IconButton(
-                  tooltip: 'Approve',
+                  tooltip: context.tr('Approve'),
                   icon: const Icon(Icons.check, color: Colors.green),
                   onPressed: () => _approve(ad),
                 ),
                 IconButton(
-                  tooltip: 'Reject',
+                  tooltip: context.tr('Reject'),
                   icon: const Icon(Icons.close, color: Colors.orange),
                   onPressed: () => _reject(ad),
                 ),
                 IconButton(
-                  tooltip: 'Remove',
+                  tooltip: context.tr('Remove'),
                   icon: const Icon(Icons.delete_outline),
                   onPressed: () => _remove(ad),
                 ),
@@ -205,9 +206,9 @@ class _CategoriesTabState extends ConsumerState<_CategoriesTab> {
         Padding(
           padding: const EdgeInsets.all(12),
           child: SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'community', label: Text('Community')),
-              ButtonSegment(value: 'shop', label: Text('Shop')),
+            segments: [
+              ButtonSegment(value: 'community', label: Text(context.tr('Community'))),
+              ButtonSegment(value: 'shop', label: Text(context.tr('Shop'))),
             ],
             selected: {_scope},
             onSelectionChanged: (s) {
@@ -224,7 +225,7 @@ class _CategoriesTabState extends ConsumerState<_CategoriesTab> {
                     ..._cats.map(
                       (c) => ListTile(
                         title: Text(c.name),
-                        subtitle: Text(c.active ? 'Active' : 'Inactive'),
+                        subtitle: Text(c.active ? context.tr('Active') : context.tr('Inactive')),
                         trailing: PopupMenuButton<String>(
                           onSelected: (a) {
                             switch (a) {
@@ -239,10 +240,10 @@ class _CategoriesTabState extends ConsumerState<_CategoriesTab> {
                                 break;
                             }
                           },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(value: 'rename', child: Text('Rename')),
-                            PopupMenuItem(value: 'toggle', child: Text('Toggle active')),
-                            PopupMenuItem(value: 'delete', child: Text('Delete')),
+                          itemBuilder: (_) => [
+                            PopupMenuItem(value: 'rename', child: Text(context.tr('Rename'))),
+                            PopupMenuItem(value: 'toggle', child: Text(context.tr('Toggle active'))),
+                            PopupMenuItem(value: 'delete', child: Text(context.tr('Delete'))),
                           ],
                         ),
                       ),
@@ -255,7 +256,7 @@ class _CategoriesTabState extends ConsumerState<_CategoriesTab> {
           child: FilledButton.icon(
             onPressed: _add,
             icon: const Icon(Icons.add),
-            label: const Text('Add category'),
+            label: Text(context.tr('Add category')),
           ),
         ),
       ],
@@ -401,43 +402,43 @@ class _ShopProductEditorState extends ConsumerState<_ShopProductEditor> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.existing == null ? 'New shop product' : 'Edit product')),
+      appBar: AppBar(title: Text(widget.existing == null ? context.tr('New shop product') : context.tr('Edit product'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title')),
+          TextField(controller: _title, decoration: InputDecoration(labelText: context.tr('Title'))),
           TextField(
             controller: _description,
-            decoration: const InputDecoration(labelText: 'Description'),
+            decoration: InputDecoration(labelText: context.tr('Description')),
             maxLines: 3,
           ),
           MultiImagePickerField(
-            label: 'Photos',
+            label: context.tr('Photos'),
             initialUrls: _images,
             onChanged: (u) => setState(() => _images = u),
           ),
           DropdownButtonFormField<String?>(
             value: _categoryId,
-            decoration: const InputDecoration(labelText: 'Category'),
+            decoration: InputDecoration(labelText: context.tr('Category')),
             items: [
-              const DropdownMenuItem(value: null, child: Text('None')),
+              DropdownMenuItem(value: null, child: Text(context.tr('None'))),
               ..._categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))),
             ],
             onChanged: (v) => setState(() => _categoryId = v),
           ),
           TextField(
             controller: _price,
-            decoration: const InputDecoration(labelText: 'Price (USD)'),
+            decoration: InputDecoration(labelText: context.tr('Price (USD)')),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
           SwitchListTile(
-            title: const Text('Active'),
+            title: Text(context.tr('Active')),
             value: _active,
             onChanged: (v) => setState(() => _active = v),
           ),
           FilledButton(
             onPressed: _saving ? null : _save,
-            child: _saving ? const CircularProgressIndicator() : const Text('Save'),
+            child: _saving ? const CircularProgressIndicator() : Text(context.tr('Save')),
           ),
         ],
       ),
@@ -453,8 +454,8 @@ Future<String?> _prompt(BuildContext context, String title, {String initial = ''
       title: Text(title),
       content: TextField(controller: ctrl, autofocus: true),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('OK')),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('Cancel'))),
+        FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(ctx.tr('OK'))),
       ],
     ),
   );

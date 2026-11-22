@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../l10n/app_locale.dart';
 import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
 
@@ -83,14 +84,14 @@ class _SessionFormScreenState extends ConsumerState<SessionFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.existing == null ? 'New lesson' : 'Edit lesson')),
+      appBar: AppBar(title: Text(widget.existing == null ? context.tr('New lesson') : context.tr('Edit lesson'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title *')),
-          TextField(controller: _topic, decoration: const InputDecoration(labelText: 'Topic')),
+          TextField(controller: _title, decoration: InputDecoration(labelText: context.tr('Title *'))),
+          TextField(controller: _topic, decoration: InputDecoration(labelText: context.tr('Topic'))),
           ListTile(
-            title: Text('Date: ${_date.toLocal().toString().split(' ').first}'),
+            title: Text(context.tr('Date: {0}', [_date.toLocal().toString().split(' ').first])),
             onTap: () async {
               final picked = await showDatePicker(
                 context: context,
@@ -103,21 +104,21 @@ class _SessionFormScreenState extends ConsumerState<SessionFormScreen> {
           ),
           TextField(
             controller: _start,
-            decoration: const InputDecoration(labelText: 'Start time (HH:MM:SS)'),
+            decoration: InputDecoration(labelText: context.tr('Start time (HH:MM:SS)')),
           ),
           TextField(
             controller: _end,
-            decoration: const InputDecoration(labelText: 'End time (HH:MM:SS)'),
+            decoration: InputDecoration(labelText: context.tr('End time (HH:MM:SS)')),
           ),
           TextField(
             controller: _notes,
-            decoration: const InputDecoration(labelText: 'Notes'),
+            decoration: InputDecoration(labelText: context.tr('Notes')),
             maxLines: 3,
           ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _saving ? null : _save,
-            child: Text(_saving ? 'Saving…' : 'Save'),
+            child: Text(_saving ? context.tr('Saving…') : context.tr('Save')),
           ),
         ],
       ),

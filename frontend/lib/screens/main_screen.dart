@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../services/calendar_reminder_sync.dart';
 import '../services/chat_notification_service.dart';
@@ -112,33 +113,33 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
     final tabs = <(Widget, BottomNavigationBarItem)>[
       if (useHome)
-        const (
+        (
           HomeScreen(),
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home')
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: context.tr('Home'))
         ),
-      const (
+      (
         SearchScreen(),
-        BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search')
+        BottomNavigationBarItem(icon: Icon(Icons.search), label: context.tr('Search'))
       ),
       (
         CommunitiesScreen(key: ValueKey((user?.id, churchId))),
-        const BottomNavigationBarItem(
-            icon: Icon(Icons.groups), label: 'Communities')
+        BottomNavigationBarItem(
+            icon: Icon(Icons.groups), label: context.tr('Communities'))
       ),
       (
         SocialScreen(key: ValueKey(user?.id)),
-        const BottomNavigationBarItem(
-            icon: Icon(Icons.dynamic_feed_outlined), label: 'Feed'),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.dynamic_feed_outlined), label: context.tr('Feed')),
       ),
       if (isSuperAdmin)
-        const (
+        (
           AdminUsersScreen(),
           BottomNavigationBarItem(
-              icon: Icon(Icons.admin_panel_settings), label: 'Users')
+              icon: Icon(Icons.admin_panel_settings), label: context.tr('Users'))
         ),
-      const (
+      (
         ProfileScreen(),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile')
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: context.tr('Profile'))
       ),
     ];
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../l10n/app_locale.dart';
 import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
 import '../widgets/status_chip.dart';
@@ -36,7 +37,7 @@ class _ManageEnrollmentsScreenState extends ConsumerState<ManageEnrollmentsScree
     try {
       await ref.read(catechismApiProvider).updateEnrollmentStatus(e.id, status);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Marked $status')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('Marked {0}', [context.tr(status)]))));
         setState(_reload);
       }
     } catch (err) {
@@ -49,7 +50,7 @@ class _ManageEnrollmentsScreenState extends ConsumerState<ManageEnrollmentsScree
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Enrollments')),
+      appBar: AppBar(title: Text(context.tr('Enrollments'))),
       body: RefreshIndicator(
         onRefresh: () async => setState(_reload),
         child: FutureBuilder<List<CatechismEnrollment>>(
@@ -62,15 +63,15 @@ class _ManageEnrollmentsScreenState extends ConsumerState<ManageEnrollmentsScree
               return ListView(children: [
                 Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Text('Error: ${snap.error}'),
+                  child: Text(context.tr('Error: {0}', [snap.error])),
                 ),
               ]);
             }
             final items = snap.data ?? [];
             if (items.isEmpty) {
-              return ListView(children: const [
+              return ListView(children: [
                 SizedBox(height: 48),
-                Center(child: Text('No enrollments yet.')),
+                Center(child: Text(context.tr('No enrollments yet.'))),
               ]);
             }
             return ListView.builder(
@@ -85,7 +86,7 @@ class _ManageEnrollmentsScreenState extends ConsumerState<ManageEnrollmentsScree
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(e.studentName, style: Theme.of(context).textTheme.titleMedium),
-                        Text('DOB: ${DateFormat.yMMMd().format(e.dateOfBirth)}'),
+                        Text(context.tr('DOB: {0}', [DateFormat.yMMMd(context.dateLocale).format(e.dateOfBirth)])),
                         if (e.notes != null && e.notes!.isNotEmpty) Text(e.notes!),
                         const SizedBox(height: 8),
                         CatechismStatusChip(status: e.status),
@@ -95,11 +96,11 @@ class _ManageEnrollmentsScreenState extends ConsumerState<ManageEnrollmentsScree
                             children: [
                               TextButton(
                                 onPressed: () => _setStatus(e, 'approved'),
-                                child: const Text('Approve'),
+                                child: Text(context.tr('Approve')),
                               ),
                               TextButton(
                                 onPressed: () => _setStatus(e, 'rejected'),
-                                child: const Text('Reject'),
+                                child: Text(context.tr('Reject')),
                               ),
                             ],
                           ),
@@ -107,7 +108,7 @@ class _ManageEnrollmentsScreenState extends ConsumerState<ManageEnrollmentsScree
                         if (e.status == 'approved')
                           TextButton(
                             onPressed: () => _setStatus(e, 'completed'),
-                            child: const Text('Mark completed'),
+                            child: Text(context.tr('Mark completed')),
                           ),
                       ],
                     ),

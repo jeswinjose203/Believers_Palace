@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
 import 'community_ad_detail_screen.dart';
@@ -56,10 +57,10 @@ class _MyCommunityAdsScreenState extends ConsumerState<MyCommunityAdsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remove listing?'),
+        title: Text(ctx.tr('Remove listing?')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Remove'))),
         ],
       ),
     );
@@ -93,7 +94,7 @@ class _MyCommunityAdsScreenState extends ConsumerState<MyCommunityAdsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My listings')),
+      appBar: AppBar(title: Text(context.tr('My listings'))),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           final created = await Navigator.of(context).push<bool>(
@@ -106,14 +107,14 @@ class _MyCommunityAdsScreenState extends ConsumerState<MyCommunityAdsScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
+              ? Center(child: Text(context.tr(_error!)))
               : RefreshIndicator(
                   onRefresh: _load,
                   child: _ads.isEmpty
                       ? ListView(
-                          children: const [
+                          children: [
                             SizedBox(height: 48),
-                            Center(child: Text('You have not posted any listings yet.')),
+                            Center(child: Text(context.tr('You have not posted any listings yet.'))),
                           ],
                         )
                       : ListView.separated(
@@ -123,7 +124,7 @@ class _MyCommunityAdsScreenState extends ConsumerState<MyCommunityAdsScreen> {
                             final ad = _ads[i];
                             return ListTile(
                               title: Text(ad.title),
-                              subtitle: Text('${_statusLabel(ad.status)} · ${ad.priceLabel}'),
+                              subtitle: Text('${context.tr(_statusLabel(ad.status))} · ${ad.priceLabel}'),
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
@@ -147,10 +148,10 @@ class _MyCommunityAdsScreenState extends ConsumerState<MyCommunityAdsScreen> {
                                 },
                                 itemBuilder: (_) => [
                                   if (ad.status != 'sold' && ad.status != 'removed')
-                                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                    PopupMenuItem(value: 'edit', child: Text(context.tr('Edit'))),
                                   if (ad.status == 'approved')
-                                    const PopupMenuItem(value: 'sold', child: Text('Mark sold')),
-                                  const PopupMenuItem(value: 'delete', child: Text('Remove')),
+                                    PopupMenuItem(value: 'sold', child: Text(context.tr('Mark sold'))),
+                                  PopupMenuItem(value: 'delete', child: Text(context.tr('Remove'))),
                                 ],
                               ),
                             );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../services/api_service.dart';
 
 /// Completes a password reset: the user supplies the token they received plus a
@@ -57,7 +58,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
           .resetPassword(_token.text.trim(), _password.text);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password updated. Please log in.')),
+        SnackBar(content: Text(context.tr('Password updated. Please log in.'))),
       );
       // Pop back to the login screen (root of the auth stack).
       Navigator.of(context).popUntil((route) => route.isFirst);
@@ -71,26 +72,26 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset Password')),
+      appBar: AppBar(title: Text(context.tr('Reset Password'))),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: ListView(
             children: [
               if (widget.email != null && widget.email!.isNotEmpty) ...[
-                Text('Resetting password for ${widget.email}'),
+                Text(context.tr('Resetting password for {0}', [widget.email])),
                 const SizedBox(height: 16),
               ],
               TextField(
                 controller: _token,
-                decoration: const InputDecoration(labelText: 'Reset token'),
+                decoration: InputDecoration(labelText: context.tr('Reset token')),
                 textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _password,
                 decoration:
-                    const InputDecoration(labelText: 'New password (min 8)'),
+                    InputDecoration(labelText: context.tr('New password (min 8)')),
                 obscureText: true,
                 textInputAction: TextInputAction.next,
               ),
@@ -98,14 +99,14 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
               TextField(
                 controller: _confirm,
                 decoration:
-                    const InputDecoration(labelText: 'Confirm new password'),
+                    InputDecoration(labelText: context.tr('Confirm new password')),
                 obscureText: true,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _submit(),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
+                Text(context.tr(_error!), style: const TextStyle(color: Colors.red)),
               ],
               const SizedBox(height: 24),
               ElevatedButton(
@@ -116,7 +117,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Reset Password'),
+                    : Text(context.tr('Reset Password')),
               ),
             ],
           ),

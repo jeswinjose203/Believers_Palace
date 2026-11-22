@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../l10n/app_locale.dart';
 import '../models/catechism_models.dart';
 import 'status_chip.dart';
 
@@ -16,13 +17,13 @@ class EnrollmentTile extends StatelessWidget {
       title: Text(enrollment.studentName),
       subtitle: Text(
         '${enrollment.className ?? enrollment.classId}\n'
-        'DOB: ${DateFormat.yMMMd().format(enrollment.dateOfBirth)}',
+        'DOB: ${DateFormat.yMMMd(context.dateLocale).format(enrollment.dateOfBirth)}',
       ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           CatechismStatusChip(status: enrollment.status),
-          if (onWithdraw != null) TextButton(onPressed: onWithdraw, child: const Text('Withdraw')),
+          if (onWithdraw != null) TextButton(onPressed: onWithdraw, child: Text(context.tr('Withdraw'))),
         ],
       ),
     );

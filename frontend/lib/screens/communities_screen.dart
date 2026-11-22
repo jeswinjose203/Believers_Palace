@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/community_models.dart';
 import '../services/api_service.dart';
@@ -144,9 +145,9 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Communities'),
-          bottom: const TabBar(
-            tabs: [Tab(text: 'My church'), Tab(text: 'Joined')],
+          title: Text(context.tr('Communities')),
+          bottom: TabBar(
+            tabs: [Tab(text: context.tr('My church')), Tab(text: context.tr('Joined'))],
           ),
         ),
         floatingActionButton: user?.churchId == null
@@ -154,12 +155,12 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
             : FloatingActionButton.extended(
                 onPressed: _create,
                 icon: const Icon(Icons.add),
-                label: const Text('Create'),
+                label: Text(context.tr('Create')),
               ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? Center(child: Text('Could not load communities: $_error'))
+                ? Center(child: Text(context.tr('Could not load communities: {0}', [_error])))
                 : TabBarView(
                     children: [
                       _communityList(joinedOnly: false),
@@ -191,7 +192,7 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
                 const SizedBox(height: 180),
-                Center(child: Text(emptyText)),
+                Center(child: Text(context.tr(emptyText))),
               ],
             )
           : ListView.builder(
@@ -207,8 +208,8 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
                           ? null
                           : () => _loadMore(joinedOnly),
                       child: Text(_loadingMore.contains(joinedOnly)
-                          ? 'Loading…'
-                          : 'Load more'),
+                          ? context.tr('Loading…')
+                          : context.tr('Load more')),
                     ),
                   );
                 }
@@ -245,15 +246,15 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
                           children: [
                             Text(DateUtils.isSameDay(
                                     preview.time.toLocal(), DateTime.now())
-                                ? DateFormat.jm().format(preview.time.toLocal())
-                                : DateFormat.MMMd()
+                                ? DateFormat.jm(context.dateLocale).format(preview.time.toLocal())
+                                : DateFormat.MMMd(context.dateLocale)
                                     .format(preview.time.toLocal())),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (preview.muted)
-                                  const Icon(Icons.notifications_off_outlined,
-                                      size: 14, semanticLabel: 'Muted'),
+                                  Icon(Icons.notifications_off_outlined,
+                                      size: 14, semanticLabel: context.tr('Muted')),
                                 if (preview.unread > 0)
                                   Badge(label: Text('${preview.unread}')),
                               ],
@@ -290,7 +291,7 @@ class _CreateCommunityDialogState extends State<_CreateCommunityDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Create community'),
+        title: Text(context.tr('Create community')),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -298,16 +299,16 @@ class _CreateCommunityDialogState extends State<_CreateCommunityDialog> {
               TextField(
                 controller: _name,
                 maxLength: 100,
-                decoration: const InputDecoration(labelText: 'Name'),
+                decoration: InputDecoration(labelText: context.tr('Name')),
               ),
               TextField(
                 controller: _description,
                 maxLength: 2000,
                 maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Description'),
+                decoration: InputDecoration(labelText: context.tr('Description')),
               ),
               ImagePickerField(
-                label: 'Community picture (optional)',
+                label: context.tr('Community picture (optional)'),
                 onChanged: (value) => setState(() => _image = value),
                 onUploadingChanged: (value) =>
                     setState(() => _imageUploading = value),
@@ -318,7 +319,7 @@ class _CreateCommunityDialogState extends State<_CreateCommunityDialog> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: Text(context.tr('Cancel'))),
           FilledButton(
               onPressed: _imageUploading
                   ? null
@@ -330,7 +331,7 @@ class _CreateCommunityDialogState extends State<_CreateCommunityDialog> {
                           image: _image,
                         ),
                       ),
-              child: const Text('Create')),
+              child: Text(context.tr('Create'))),
         ],
       );
 }
@@ -682,7 +683,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
           _loading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Membership request sent.')));
+            SnackBar(content: Text(context.tr('Membership request sent.'))));
         Navigator.of(context).pop(true);
       }
     } catch (e) {
@@ -818,7 +819,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
             ),
           if (_active)
             IconButton(
-                tooltip: 'Leave community',
+                tooltip: context.tr('Leave community'),
                 onPressed: _leave,
                 icon: const Icon(Icons.exit_to_app)),
         ],
@@ -834,15 +835,15 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Could not load messages: $_error'),
+            Text(context.tr('Could not load messages: {0}', [_error])),
             const SizedBox(height: 8),
-            FilledButton(onPressed: _load, child: const Text('Retry')),
+            FilledButton(onPressed: _load, child: Text(context.tr('Retry'))),
           ],
         ),
       );
     }
     if (_error != null && !_active) {
-      return Center(child: Text('Could not load community: $_error'));
+      return Center(child: Text(context.tr('Could not load community: {0}', [_error])));
     }
     if (!_active) return _joinState(status);
 
@@ -856,11 +857,11 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                   color: Theme.of(context).colorScheme.errorContainer,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: const Row(
+                  child: Row(
                     children: [
                       Icon(Icons.cloud_off, size: 16),
                       SizedBox(width: 8),
-                      Text('Reconnecting…'),
+                      Text(context.tr('Reconnecting…')),
                     ],
                   ),
                 )
@@ -886,40 +887,40 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
 
   Widget _joinState(String status) {
     if (status == 'pending') {
-      return const Center(
-          child: Text('Your membership request is awaiting approval.'));
+      return Center(
+          child: Text(context.tr('Your membership request is awaiting approval.')));
     }
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text(widget.community.description.isEmpty
-            ? 'Request to join this community.'
+            ? context.tr('Request to join this community.')
             : widget.community.description),
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: _join,
           icon: const Icon(Icons.group_add),
-          label: const Text('Request to join'),
+          label: Text(context.tr('Request to join')),
         ),
       ]),
     );
   }
 
   Widget _adminPanel() => ExpansionTile(
-        title: Text('Admin · ${_requests.length} pending requests'),
+        title: Text(context.tr('Admin · {0} pending requests', [_requests.length])),
         children: [
           if (_requests.isEmpty)
-            const ListTile(title: Text('No pending requests'))
+            ListTile(title: Text(context.tr('No pending requests')))
           else
             ..._requests.map((request) => ListTile(
                   title: Text(request.userName),
-                  subtitle: const Text('Membership request'),
+                  subtitle: Text(context.tr('Membership request')),
                   trailing: Wrap(children: [
                     IconButton(
-                        tooltip: 'Approve',
+                        tooltip: context.tr('Approve'),
                         onPressed: () => _review(request, true),
                         icon: const Icon(Icons.check, color: Colors.green)),
                     IconButton(
-                        tooltip: 'Decline',
+                        tooltip: context.tr('Decline'),
                         onPressed: () => _review(request, false),
                         icon: const Icon(Icons.close, color: Colors.red)),
                   ]),
@@ -932,7 +933,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                       leading: const Icon(Icons.person_outline),
                       title: Text(member.userName),
                       trailing: IconButton(
-                        tooltip: 'Remove member',
+                        tooltip: context.tr('Remove member'),
                         onPressed: () => _remove(member),
                         icon: const Icon(Icons.person_remove_outlined),
                       ),
@@ -945,10 +946,10 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
           if (_messages.isEmpty && _pending.isEmpty)
             ListView(
               controller: _scroll,
-              children: const [
+              children: [
                 SizedBox(
                   height: 240,
-                  child: Center(child: Text('No messages yet. Say hello!')),
+                  child: Center(child: Text(context.tr('No messages yet. Say hello!'))),
                 ),
               ],
             )
@@ -969,7 +970,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Load older messages'),
+                          : Text(context.tr('Load older messages')),
                     ),
                   );
                 }
@@ -1002,7 +1003,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                         sentAt.year != previousSentAt.year ||
                         sentAt.month != previousSentAt.month ||
                         sentAt.day != previousSentAt.day
-                    ? DateFormat.yMMMd().format(sentAt)
+                    ? DateFormat.yMMMd(context.dateLocale).format(sentAt)
                     : null;
                 final mine = message.userId == ref.read(authProvider).user?.id;
                 final canDelete = _canDelete(message);
@@ -1015,7 +1016,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                   content: message.content,
                   authorName: message.authorName,
                   mine: mine,
-                  timeLabel: DateFormat.jm().format(sentAt),
+                  timeLabel: DateFormat.jm(context.dateLocale).format(sentAt),
                   dateDivider: dateDivider,
                   animate: _fresh.contains(message.id),
                   onDelete: canDelete ? () => _delete(message) : null,
@@ -1031,7 +1032,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
               child: Center(
                 child: ActionChip(
                   avatar: const Icon(Icons.arrow_downward, size: 16),
-                  label: Text('$_unseen new message${_unseen == 1 ? '' : 's'}'),
+                  label: Text(context.tr('{0} new message{1}', [_unseen, _unseen == 1 ? '' : 's'])),
                   onPressed: () {
                     setState(() => _unseen = 0);
                     _scrollToBottom();
@@ -1055,7 +1056,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                   minLines: 1,
                   textInputAction: TextInputAction.send,
                   decoration: InputDecoration(
-                    hintText: 'Message',
+                    hintText: context.tr('Message'),
                     filled: true,
                     fillColor:
                         Theme.of(context).colorScheme.surfaceContainerHighest,
