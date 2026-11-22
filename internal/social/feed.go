@@ -40,15 +40,17 @@ func (p pageCursor) encode() string {
 }
 
 type post struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Username  string    `json:"username"`
-	Body      string    `json:"body"`
-	MediaKey  *string   `json:"mediaKey"`
-	MediaURL  string    `json:"mediaUrl,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
-	Likes     int       `json:"likes"`
-	Liked     bool      `json:"liked"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Username    string    `json:"username"`
+	Body        string    `json:"body"`
+	MediaKey    *string   `json:"mediaKey"`
+	MediaURL    string    `json:"mediaUrl,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	Likes       int64     `json:"likes"`
+	Comments    int64     `json:"comments"`
+	RecentLiker *string   `json:"recentLiker,omitempty"`
+	Liked       bool      `json:"liked"`
 }
 
 func verificationRequired(w http.ResponseWriter) {

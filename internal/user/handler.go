@@ -324,6 +324,8 @@ func (h *Handler) writeServiceError(w http.ResponseWriter, err error) {
 		httpx.ErrorCode(w, http.StatusServiceUnavailable, err.Error(), "phone_verification_unavailable")
 	case errors.Is(err, ErrPhoneExists):
 		httpx.ErrorCode(w, http.StatusConflict, err.Error(), "phone_already_registered")
+	case errors.Is(err, ErrUsernameExists):
+		httpx.ErrorCode(w, http.StatusConflict, "That username is already taken.", "username_taken")
 	case errors.Is(err, ErrEmailExists):
 		httpx.ErrorCode(w, http.StatusConflict, "email already registered", "conflict")
 	case errors.Is(err, ErrNotFound):

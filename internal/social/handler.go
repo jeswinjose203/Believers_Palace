@@ -55,9 +55,12 @@ func (h *Handler) Routes(verifiedEmail func(http.Handler) http.Handler) chi.Rout
 	r.Delete("/posts/{id}/like", h.unlike)
 	r.Post("/media", h.upload)
 	r.Get("/me", h.me)
-	r.Put("/me", h.changeUsername)
+	r.Get("/posts/{id}", h.onePost)
+	r.Get("/posts/{id}/comments", h.comments)
+	r.Get("/posts/{id}/likes", h.likers)
 	r.Group(func(r chi.Router) {
 		r.Use(verifiedEmail)
+		r.Post("/posts/{id}/comments", h.comment)
 		r.Get("/people", h.people)
 		r.Get("/people/{id}/thread", h.findThread)
 		r.Get("/threads", h.inbox)
@@ -125,25 +128,6 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, 200, p)
 }
 
-func (h *Handler) changeUsername(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Username string }
-	if !decode(w, r, &in) {
-		return
-	}
-	name := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(in.Username), "@"))
-	if !usernamePattern.MatchString(name) {
-		bad(w, "Use 3�32 letters, digits or underscores.")
-		return
-	}
-	var p person
-	err := h.db.QueryRow(r.Context(), `UPDATE users SET username=$2 WHERE id=$1 RETURNING id,name,username`, viewer(r), name).Scan(&p.ID, &p.Name, &p.Username)
-	if err != nil {
-		failure(w, err)
-		return
-	}
-	httpx.JSON(w, 200, p)
-}
-
 func (h *Handler) people(w http.ResponseWriter, r *http.Request) {
 	prefix := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(r.URL.Query().Get("q")), "@"))
 	if !usernamePattern.MatchString(prefix) {
@@ -151,7 +135,7 @@ func (h *Handler) people(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.db.Query(r.Context(), `SELECT id,name,username FROM users
-        WHERE id<>$1 AND email_verified AND username LIKE $2 ESCAPE '!' ORDER BY username USING ~<~ LIMIT 20`,
+        WHERE id<>$1 AND email_verified AND lower(username COLLATE "C") LIKE $2 ESCAPE '!' ORDER BY lower(username COLLATE "C") USING ~<~ LIMIT 20`,
 		viewer(r), strings.ReplaceAll(prefix, "_", "!_")+"%")
 	if err != nil {
 		failure(w, err)

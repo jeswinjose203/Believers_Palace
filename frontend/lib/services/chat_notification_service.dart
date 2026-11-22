@@ -8,6 +8,7 @@ import '../core/api_client.dart';
 import 'api_service.dart';
 import 'calendar_notification_service.dart';
 import 'chat_live_service.dart';
+import 'social_api.dart' show chatMessagePreview;
 
 enum ChatKind { community, event }
 
@@ -364,7 +365,7 @@ class ChatNotificationService {
             seq: message.seq,
             senderId: message.userId,
             author: message.authorName,
-            body: message.content,
+            body: chatMessagePreview(message.content),
             sentAt: message.createdAt
           ),
       ];
@@ -377,7 +378,7 @@ class ChatNotificationService {
           seq: message.seq,
           senderId: message.userId,
           author: message.authorName,
-          body: message.content,
+          body: chatMessagePreview(message.content),
           sentAt: message.createdAt
         ),
     ];

@@ -12,6 +12,18 @@ final socialApiProvider =
 typedef SocialRow = Map<String, dynamic>;
 typedef SocialPage = ({List<SocialRow> items, String? cursor, int? before});
 
+const _postPrefix = 'believerspalace://post/';
+final _postReference = RegExp(
+    r'^believerspalace://post/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$');
+
+String? sharedPostId(String message) =>
+    _postReference.firstMatch(message)?.group(1);
+
+String sharedPostReference(String id) => '$_postPrefix$id';
+
+String chatMessagePreview(String message) =>
+    sharedPostId(message) == null ? message : 'Shared a post';
+
 class SocialApi {
   SocialApi(this._client);
 
@@ -31,8 +43,17 @@ class SocialApi {
 
   Future<SocialRow> me() => _client.getRaw('/social/me');
 
-  Future<SocialRow> setUsername(String username) =>
-      _client.put('/social/me', (json) => json, body: {'username': username});
+  Future<SocialRow> getPost(String id) => _client.getRaw('/social/posts/$id');
+
+  Future<SocialPage> engagement(String id,
+          {required bool likes, String? cursor}) =>
+      _page('/posts/$id/${likes ? 'likes' : 'comments'}', {
+        if (cursor != null) 'cursor': cursor,
+      });
+
+  Future<SocialRow> comment(String id, String body, String clientId) =>
+      _client.post('/social/posts/$id/comments', (json) => json,
+          body: {'body': body, 'clientId': clientId});
 
   Future<void> post(String body, String clientId, String? attachment) =>
       _client.postVoid('/social/posts', body: {

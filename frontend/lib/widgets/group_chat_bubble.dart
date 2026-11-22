@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../screens/social_post.dart' show SharedPostMessage;
+
 enum ChatSendStatus { sent, sending, failed }
 
 class GroupChatBubble extends StatelessWidget {
@@ -96,7 +98,7 @@ class GroupChatBubble extends StatelessWidget {
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ),
-                    Text(content),
+                    SharedPostMessage(content, selectable: false),
                     const SizedBox(height: 3),
                     Row(
                       mainAxisSize: MainAxisSize.min,

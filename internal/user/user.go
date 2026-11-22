@@ -26,6 +26,7 @@ type User struct {
 
 // RegisterInput is the payload for user registration.
 type RegisterInput struct {
+	Username        *string `json:"username"`
 	Name            string  `json:"name"`
 	Email           string  `json:"email"`
 	Password        string  `json:"password"`

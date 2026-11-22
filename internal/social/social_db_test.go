@@ -43,7 +43,7 @@ func TestSocialWorkflowsDB(t *testing.T) {
 		}
 		return id
 	}
-	alice, bob, other := account("alice", true), account("bob", false), account("other", false)
+	alice, bob, other := account("alice", true), account("Bob", false), account("other", false)
 	defer db.Exec(context.Background(), `DELETE FROM users WHERE id IN ($1,$2,$3)`, alice, bob, other)
 	storage, err := media.NewStorage(t.TempDir())
 	if err != nil {
@@ -98,19 +98,47 @@ func TestSocialWorkflowsDB(t *testing.T) {
 	if retry := call(alice, "POST", "/posts", postBody, 201)["id"]; retry != first {
 		t.Fatal("Post retry created a duplicate")
 	}
-	call(bob, "PUT", "/posts/"+first.(string)+"/like", "", 200)
+	postPath := "/posts/" + first.(string)
+	call(bob, "PUT", postPath+"/like", "", 200)
+	call(bob, "PUT", postPath+"/like", "", 200)
+	commentBody := `{"body":"Thank you!","clientId":"22222222222222222222222222222222"}`
+	comment := call(bob, "POST", postPath+"/comments", commentBody, 201)
+	retry := call(bob, "POST", postPath+"/comments", commentBody, 201)
+	if comment["id"] != retry["id"] || comment["username"] != "Bob_"+suffix {
+		t.Fatalf("Unexpected comment or retry: %v %v", comment, retry)
+	}
+	if rows := call(alice, "GET", postPath+"/comments", "", 200)["data"].([]any); len(rows) != 1 || rows[0].(map[string]any)["body"] != "Thank you!" {
+		t.Fatalf("Unexpected comments: %v", rows)
+	}
+	if rows := call(alice, "GET", postPath+"/likes", "", 200)["data"].([]any); len(rows) != 1 || rows[0].(map[string]any)["username"] != "Bob_"+suffix {
+		t.Fatalf("Unexpected likers: %v", rows)
+	}
+	if post := call(alice, "GET", postPath, "", 200); post["likes"] != float64(1) || post["comments"] != float64(1) {
+		t.Fatalf("Unexpected engagement totals: %v", post)
+	}
+	req = httptest.NewRequest("PUT", "/me", strings.NewReader(`{"username":"changed"}`))
+	req.Header.Set("X-Debug-User-Id", bob)
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	if res.Code != 405 {
+		t.Fatalf("Username mutation returned %d, want 405", res.Code)
+	}
 	feed := call(bob, "GET", "/feed", "", 200)["data"].([]any)
 	found := false
 	for _, row := range feed {
 		p := row.(map[string]any)
 		if p["id"] == first {
-			found = p["likes"] == float64(1) && p["liked"] == true && p["mediaKey"] == asset.FileName
+			found = p["likes"] == float64(1) && p["liked"] == true && p["comments"] == float64(1) && p["recentLiker"] == "Bob_"+suffix && p["mediaKey"] == asset.FileName
 		}
 	}
 	if !found {
 		t.Fatal("Expected the liked post with its attachment")
 	}
-	call(bob, "DELETE", "/posts/"+first.(string)+"/like", "", 200)
+	call(bob, "DELETE", postPath+"/like", "", 200)
+	call(bob, "DELETE", postPath+"/like", "", 200)
+	if post := call(alice, "GET", postPath, "", 200); post["likes"] != float64(0) {
+		t.Fatalf("Unexpected like total after repeated unlike: %v", post)
+	}
 	if _, err := db.Exec(ctx, `INSERT INTO social_posts(author_id,body,client_id)
 		SELECT $1,'Ranked seed','ranked-'||i FROM generate_series(1,129) i`, alice); err != nil {
 		t.Fatal(err)
@@ -144,6 +172,35 @@ func TestSocialWorkflowsDB(t *testing.T) {
 	if len(call(alice, "GET", "/people?q=bob_"+suffix, "", 200)["data"].([]any)) != 1 {
 		t.Fatal("Username search did not find Bob")
 	}
+	const concurrentComments = 48
+	statuses := make(chan int, concurrentComments)
+	for i := range concurrentComments {
+		go func() {
+			payload := fmt.Sprintf(`{"body":"Concurrent comment","clientId":"%032x"}`, i+100)
+			commentRequest := httptest.NewRequest("POST", postPath+"/comments", strings.NewReader(payload)).WithContext(ctx)
+			commentRequest.Header.Set("X-Debug-User-Id", bob)
+			result := httptest.NewRecorder()
+			router.ServeHTTP(result, commentRequest)
+			statuses <- result.Code
+		}()
+	}
+	for range concurrentComments {
+		if status := <-statuses; status != 201 {
+			t.Fatalf("Concurrent comment returned %d, want 201", status)
+		}
+	}
+	if post := call(bob, "GET", postPath, "", 200); post["comments"] != float64(concurrentComments+1) {
+		t.Fatalf("Concurrent comment count is incorrect: %v", post)
+	}
+	commentsPage := call(bob, "GET", postPath+"/comments", "", 200)
+	if len(commentsPage["data"].([]any)) != 30 {
+		t.Fatalf("Unexpected first comment page size: %v", commentsPage)
+	}
+	moreComments := call(bob, "GET", postPath+"/comments?cursor="+url.QueryEscape(commentsPage["nextCursor"].(string)), "", 200)
+	if len(moreComments["data"].([]any)) != concurrentComments+1-30 {
+		t.Fatalf("Unexpected second comment page size: %v", moreComments)
+	}
+
 	send := func(who, peer, body string, key int) string {
 		t.Helper()
 		data := fmt.Sprintf(`{"peerId":%q,"body":%q,"clientId":%q}`, peer, body, fmt.Sprintf("%032x", key))

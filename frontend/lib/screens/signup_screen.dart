@@ -43,6 +43,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   bool get _expired => _expiresAt?.isAfter(DateTime.now()) == false;
 
+  final _usernameController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -54,6 +55,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     _clock?.cancel();
     _codeController.dispose();
     _nameController.dispose();
+    _usernameController.dispose();
     _mobileController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -76,6 +78,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           password.isEmpty ||
           rePassword.isEmpty) {
         setState(() => _error = 'Please fill all the fields');
+        return;
+      }
+      if (!RegExp(r'^[A-Za-z0-9_]{3,32}$').hasMatch(_usernameController.text)) {
+        setState(() => _error =
+            'Use 3 to 32 letters, digits, or underscores for your username.');
         return;
       }
       final passwordBytes = utf8.encode(password).length;
@@ -264,6 +271,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       }
       await auth.register(
         _nameController.text.trim(),
+        username: _usernameController.text,
         _emailController.text.trim(),
         _passwordController.text,
         phone: _destination!,
@@ -576,6 +584,17 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           decoration: _fieldDecoration('Name'),
                         ),
 
+                        const SizedBox(height: 5),
+
+                        TextField(
+                          controller: _usernameController,
+                          enabled: !_loading,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 10),
+                          decoration: _fieldDecoration('Username'),
+                        ),
                         const SizedBox(height: 5),
 
                         // Mobile number

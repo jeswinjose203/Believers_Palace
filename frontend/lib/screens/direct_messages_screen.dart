@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../core/auth_provider.dart';
 import '../services/chat_live_service.dart';
 import '../services/social_api.dart';
+import 'social_post.dart' show SharedPostMessage;
 import '../widgets/chat_email_verification.dart';
 
 class DirectMessagesScreen extends ConsumerWidget {
@@ -153,44 +154,6 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _editUsername() async {
-    final controller =
-        TextEditingController(text: _account?['username'] as String?);
-    try {
-      final value = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Edit username'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLength: 32,
-            autocorrect: false,
-            decoration: const InputDecoration(prefixText: '@'),
-            onSubmitted: (value) => Navigator.pop(context, value),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      );
-      if (value == null || !mounted) return;
-      final updated = await ref.read(socialApiProvider).setUsername(value);
-      if (mounted) setState(() => _account = updated);
-    } catch (error) {
-      if (mounted) _showError(context, error);
-    } finally {
-      controller.dispose();
-    }
-  }
-
   Future<void> _open(SocialRow row, {required bool fromSearch}) async {
     final peerId = row[fromSearch ? 'id' : 'peerId'] as String;
     await Navigator.of(context).push(MaterialPageRoute(
@@ -246,11 +209,6 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
             title: Text(_account == null
                 ? 'Your username'
                 : '@${_account!['username']}'),
-            trailing: IconButton(
-              tooltip: 'Edit username',
-              onPressed: _account == null ? null : _editUsername,
-              icon: const Icon(Icons.edit_outlined),
-            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -336,7 +294,7 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
           return ListTile(
             leading: const CircleAvatar(child: Icon(Icons.person_outline)),
             title: Text(row['name'] as String),
-            subtitle: Text(row['preview'] as String,
+            subtitle: Text(chatMessagePreview(row['preview'] as String),
                 maxLines: 1, overflow: TextOverflow.ellipsis),
             trailing: PopupMenuButton(
               onSelected: (_) => _delete(row),
@@ -601,7 +559,7 @@ class _ConversationState extends ConsumerState<_Conversation>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SelectableText(message['body'] as String),
+                SharedPostMessage(message['body'] as String),
                 Text(DateFormat.MMMd().add_jm().format(sent),
                     style: Theme.of(context).textTheme.labelSmall),
               ],

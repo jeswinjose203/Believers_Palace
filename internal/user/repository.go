@@ -16,6 +16,8 @@ import (
 // ErrNotFound is returned when a user does not exist.
 var ErrNotFound = errors.New("user not found")
 
+var ErrUsernameExists = errors.New("username already registered")
+
 // ErrEmailExists is returned when an email is already registered.
 var ErrEmailExists = errors.New("email already registered")
 
@@ -59,12 +61,12 @@ func scanUser(row pgx.Row) (*User, error) {
 
 func (r *Repository) createVerified(ctx context.Context, tx pgx.Tx, in RegisterInput, passwordHash string) (*User, error) {
 	const q = `
-		INSERT INTO users (name, email, password_hash, phone, unit, church_id, role, phone_verified)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+		INSERT INTO users (name, email, password_hash, phone, unit, church_id, role, phone_verified, username)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, COALESCE($8, 'member_' || encode(gen_random_bytes(12), 'hex')))
 		RETURNING ` + userColumns
 
 	row := tx.QueryRow(ctx, q,
-		in.Name, strings.ToLower(in.Email), passwordHash, in.Phone, in.Unit, in.ChurchID, auth.RoleUser,
+		in.Name, strings.ToLower(in.Email), passwordHash, in.Phone, in.Unit, in.ChurchID, auth.RoleUser, in.Username,
 	)
 	u, err := scanUser(row)
 	if err != nil {
@@ -72,6 +74,9 @@ func (r *Repository) createVerified(ctx context.Context, tx pgx.Tx, in RegisterI
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			if pgErr.ConstraintName == "users_verified_phone_unique" {
 				return nil, ErrPhoneExists
+			}
+			if pgErr.ConstraintName == "users_username_ci_idx" {
+				return nil, ErrUsernameExists
 			}
 			return nil, ErrEmailExists
 		}

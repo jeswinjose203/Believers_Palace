@@ -2,10 +2,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../config.dart';
+import 'social_post.dart';
 import '../core/auth_provider.dart';
 import '../services/chat_live_service.dart';
 import '../services/social_api.dart';
@@ -73,6 +71,7 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
             if (current['liked'] == liked) {
               current['liked'] = !liked;
               current['likes'] = (current['likes'] as int) + (liked ? -1 : 1);
+              if (liked) current.remove('recentLiker');
             }
           }
         });
@@ -163,9 +162,19 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
                   itemBuilder: (context, index) {
                     if (index < _posts.length) {
                       final post = _posts[index];
-                      return _PostCard(
+                      return SocialPostCard(
                         key: ValueKey(post['id']),
                         post: post,
+                        onComment: () {
+                          if (!mounted) return;
+                          setState(() {
+                            for (final current in _posts
+                                .where((entry) => entry['id'] == post['id'])) {
+                              current['comments'] =
+                                  (current['comments'] as int? ?? 0) + 1;
+                            }
+                          });
+                        },
                         react: _reacting.contains(post['id'])
                             ? null
                             : () => _react(post),
@@ -201,77 +210,6 @@ void showSocialError(BuildContext context, Object error) {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text(error.toString())),
   );
-}
-
-class _PostCard extends StatelessWidget {
-  const _PostCard({super.key, required this.post, required this.react});
-
-  final SocialRow post;
-  final VoidCallback? react;
-
-  @override
-  Widget build(BuildContext context) {
-    final key = post['mediaKey'] as String?;
-    final url = key == null
-        ? null
-        : Uri.parse(post['mediaUrl'] as String? ?? '$apiBaseUrl/media/$key');
-    final video =
-        key?.endsWith('.mp4') == true || key?.endsWith('.webm') == true;
-    final liked = post['liked'] as bool;
-    final likes = post['likes'] as int;
-    final body = post['body'] as String;
-    return Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.person_outline)),
-            title: Text(post['name'] as String),
-            subtitle: Text(
-                '@${post['username']} · ${DateFormat.MMMd().add_jm().format(DateTime.parse(post['createdAt'] as String).toLocal())}'),
-          ),
-          if (body.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: SelectableText(body),
-            ),
-          if (url != null && !video)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 420),
-              child: Image.network(
-                url.toString(),
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Center(
-                  child: Text('Image unavailable'),
-                ),
-              ),
-            ),
-          if (url != null && video)
-            ListTile(
-              leading: const Icon(Icons.play_circle_outline, size: 32),
-              title: const Text('Play video'),
-              onTap: () async {
-                try {
-                  if (!await launchUrl(url) && context.mounted) {
-                    showSocialError(context, 'Could not open video.');
-                  }
-                } catch (error) {
-                  if (context.mounted) showSocialError(context, error);
-                }
-              },
-            ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: react,
-              icon: Icon(liked ? Icons.favorite : Icons.favorite_border),
-              label: Text(likes > 200 ? '200+ likes' : '$likes likes'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ComposeScreen extends ConsumerStatefulWidget {

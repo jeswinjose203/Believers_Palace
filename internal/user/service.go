@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/mail"
+	"regexp"
 	"strings"
 	"time"
 
@@ -54,10 +55,15 @@ func NewService(repo *Repository, tokens *auth.TokenManager, m mailer.Mailer, re
 	}
 }
 
+var signupUsername = regexp.MustCompile(`^[A-Za-z0-9_]{3,32}$`)
+
 // Register validates input, creates a user with the default role, and issues a token.
 func (s *Service) Register(ctx context.Context, in RegisterInput) (*AuthResponse, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Email = strings.TrimSpace(in.Email)
+	if in.Username != nil && !signupUsername.MatchString(*in.Username) {
+		return nil, invalid("Use 3 to 32 letters, digits, or underscores for your username.")
+	}
 
 	if in.Name == "" {
 		return nil, invalid("name is required")

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -135,6 +136,9 @@ func TestDBSignupPhoneVerification(t *testing.T) {
 	email := fmt.Sprintf("signup-%d@example.test", now)
 	phone := fmt.Sprintf("+1555%07d", now%10_000_000)
 	duplicateEmail := "duplicate-" + email
+	username := fmt.Sprintf("Signup_%d", now)
+	otherUsername := fmt.Sprintf("Other_%d", now)
+	otherPhone := fmt.Sprintf("+1556%07d", now%10_000_000)
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -142,14 +146,15 @@ func TestDBSignupPhoneVerification(t *testing.T) {
 	}()
 
 	svc.verifySignupPhone = func(_ context.Context, token, destination string) error {
-		if token != "test-proof" || destination != phone {
+		if token != "test-proof" || (destination != phone && destination != otherPhone) {
 			return errSignupProofInvalid
 		}
 		return nil
 	}
-	in := RegisterInput{Name: "Signup test", Email: email, Password: "test-password", Phone: &phone, FirebaseIDToken: "test-proof"}
+	in := RegisterInput{Name: "Signup test", Email: email, Password: "test-password", Phone: &phone, FirebaseIDToken: "test-proof", Username: &username}
 	duplicate := in
 	duplicate.Email = duplicateEmail
+	duplicate.Username = &otherUsername
 	type result struct {
 		response *AuthResponse
 		err      error
@@ -162,11 +167,19 @@ func TestDBSignupPhoneVerification(t *testing.T) {
 		}(input)
 	}
 	successes := 0
+	var storedUsername string
 	for i := 0; i < cap(results); i++ {
 		got := <-results
 		switch {
 		case got.err == nil:
 			successes++
+			want := username
+			if got.response.User.Email == duplicateEmail {
+				want = otherUsername
+			}
+			if err := pool.QueryRow(ctx, "SELECT username FROM users WHERE id=$1", got.response.User.ID).Scan(&storedUsername); err != nil || storedUsername != want {
+				t.Fatalf("stored username = %q, want %q, err = %v", storedUsername, want, err)
+			}
 			if !got.response.User.PhoneVerified || got.response.RefreshToken == "" {
 				t.Fatal("successful signup did not verify the phone and issue a session")
 			}
@@ -176,5 +189,11 @@ func TestDBSignupPhoneVerification(t *testing.T) {
 	}
 	if successes != 1 {
 		t.Fatalf("successful signups for one phone = %d, want 1", successes)
+	}
+	taken := strings.ToLower(storedUsername)
+	collision := RegisterInput{Name: "Collision test", Email: "collision-" + email, Password: in.Password, Phone: &otherPhone, FirebaseIDToken: in.FirebaseIDToken, Username: &taken}
+	defer pool.Exec(context.Background(), "DELETE FROM users WHERE email=$1", collision.Email)
+	if _, err := svc.Register(ctx, collision); !errors.Is(err, ErrUsernameExists) {
+		t.Fatalf("case-insensitive username collision returned %v", err)
 	}
 }

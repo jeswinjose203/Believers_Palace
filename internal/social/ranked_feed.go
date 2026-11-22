@@ -148,23 +148,14 @@ func (h *Handler) feed(w http.ResponseWriter, r *http.Request) {
 	count := min(feedPageSize, len(cursor.pending))
 	items := []post{}
 	if count > 0 {
-		rows, err := h.db.Query(r.Context(), `SELECT p.id,u.name,u.username,p.body,p.media_key,p.created_at,
-			(SELECT count(*) FROM (SELECT 1 FROM social_likes WHERE post_id=p.id LIMIT 201) sample),
-			EXISTS(SELECT 1 FROM social_likes WHERE post_id=p.id AND user_id=$1)
+		rows, err := h.db.Query(r.Context(), `SELECT `+postColumns+`
 			FROM unnest($2::uuid[]) WITH ORDINALITY AS ordered(id,position)
 			JOIN social_posts p ON p.id=ordered.id JOIN users u ON u.id=p.author_id ORDER BY ordered.position`, viewer(r), cursor.pending[:count])
 		if err != nil {
 			failure(w, err)
 			return
 		}
-		items, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (post, error) {
-			var p post
-			err := row.Scan(&p.ID, &p.Name, &p.Username, &p.Body, &p.MediaKey, &p.CreatedAt, &p.Likes, &p.Liked)
-			if err == nil && p.MediaKey != nil {
-				p.MediaURL = h.media.CDNURL(*p.MediaKey)
-			}
-			return p, err
-		})
+		items, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (post, error) { return h.scanPost(row) })
 		if err != nil {
 			failure(w, err)
 			return
