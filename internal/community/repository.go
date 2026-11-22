@@ -30,9 +30,13 @@ func (r *Repository) Create(ctx context.Context, userID, name, description strin
 	}
 	defer tx.Rollback(ctx)
 	var c Community
-	err = tx.QueryRow(ctx, `INSERT INTO communities (creator_id,name,description,image) VALUES ($1,$2,$3,$4)
+	err = tx.QueryRow(ctx, `INSERT INTO communities (creator_id,name,description,image,church_id)
+        SELECT id,$2,$3,$4,church_id FROM users WHERE id=$1 AND church_id IS NOT NULL
 		RETURNING id,creator_id,name,description,image,created_at`, userID, name, description, image).
 		Scan(&c.ID, &c.CreatorID, &c.Name, &c.Description, &c.Image, &c.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, &ValidationError{"select a church before creating a community"}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("create community: %w", err)
 	}
@@ -53,12 +57,17 @@ func (r *Repository) List(ctx context.Context, userID string, options ...ListOpt
 		COALESCE(m.status,''),COALESCE(m.is_admin,false) FROM communities c
 		LEFT JOIN community_memberships m ON m.community_id=c.id AND m.user_id=$1`
 	args := []any{userID}
+	if len(options) != 0 && options[0].Joined {
+		query += " WHERE m.status='active'"
+	} else {
+		query += " WHERE c.church_id=(SELECT church_id FROM users WHERE id=$1)"
+	}
 	if len(options) != 0 {
 		page := options[0]
-		query += ` WHERE (NOT $2 OR m.status='active')
-			AND ($3::timestamptz IS NULL OR (c.created_at,c.id) < ($3,$4::uuid))
-			ORDER BY c.created_at DESC,c.id DESC LIMIT $5`
-		args = append(args, page.Joined, page.Before, page.ID, page.Limit)
+		query += ` AND (c.created_at,c.id) < (
+            COALESCE($2::timestamptz,'infinity'), COALESCE($3::uuid,'ffffffff-ffff-ffff-ffff-ffffffffffff'))
+			ORDER BY c.created_at DESC,c.id DESC LIMIT $4`
+		args = append(args, page.Before, page.ID, page.Limit)
 	} else {
 		query += " ORDER BY c.created_at DESC,c.id DESC"
 	}
@@ -102,11 +111,21 @@ func (r *Repository) Membership(ctx context.Context, communityID, userID string)
 func (r *Repository) RequestMembership(ctx context.Context, communityID, userID string) (*Membership, error) {
 	var m Membership
 	err := r.pool.QueryRow(ctx, `INSERT INTO community_memberships (community_id,user_id,status)
-		VALUES ($1,$2,'pending') ON CONFLICT (community_id,user_id) DO UPDATE
+		SELECT c.id,u.id,'pending' FROM communities c JOIN users u ON u.id=$2 AND u.church_id=c.church_id
+        WHERE c.id=$1 ON CONFLICT (community_id,user_id) DO UPDATE
 		SET status='pending',updated_at=now() WHERE community_memberships.status='declined'
 		RETURNING id,community_id,user_id,status,is_admin,created_at`, communityID, userID).
 		Scan(&m.ID, &m.CommunityID, &m.UserID, &m.Status, &m.IsAdmin, &m.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
+		var discoverable bool
+		checkErr := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM communities c
+            JOIN users u ON u.id=$2 AND u.church_id=c.church_id WHERE c.id=$1)`, communityID, userID).Scan(&discoverable)
+		if checkErr != nil {
+			return nil, checkErr
+		}
+		if !discoverable {
+			return nil, ErrNotFound
+		}
 		return nil, ErrConflict
 	}
 	if err != nil {

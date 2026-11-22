@@ -31,6 +31,7 @@ import (
 	"believers_palace/internal/marketplace"
 	"believers_palace/internal/media"
 	"believers_palace/internal/personalcalendar"
+	"believers_palace/internal/social"
 	"believers_palace/internal/user"
 )
 
@@ -151,6 +152,8 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Hand
 		switch room.Kind {
 		case "event":
 			return chatSvc.CanReadChat(ctx, id, room.ID)
+		case "direct":
+			return id.UserID == room.ID
 		case "community":
 			return communitySvc.CanReadChat(ctx, id, room.ID)
 		default:
@@ -246,6 +249,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Hand
 			protected.Mount("/catechism-enrollments", catechismHandler.EnrollmentRoutes())
 			protected.Mount("/catechism-sessions", catechismHandler.SessionRoutes())
 			protected.Mount("/events", eventHandler.RoutesWith(chatHandler.EventRoutes(userRepo.RequireVerifiedEmail)))
+			protected.Mount("/social", social.New(pool, mediaSvc).Routes(userRepo.RequireVerifiedEmail))
 			protected.Mount("/communities", communityHandler.Routes(userRepo.RequireVerifiedEmail))
 			protected.Mount("/marketplace", marketplaceHandler.Routes())
 			protected.Mount("/cemetery-service-requests", cemeteryHandler.RequestRoutes())

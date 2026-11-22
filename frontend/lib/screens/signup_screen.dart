@@ -11,7 +11,9 @@ import '../core/auth_provider.dart';
 import '../core/firebase_app_config.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
-  const SignupScreen({super.key});
+  const SignupScreen({super.key, this.verifyingExistingAccount = false});
+
+  final bool verifyingExistingAccount;
 
   @override
   ConsumerState<SignupScreen> createState() => _SignupScreenState();
@@ -67,27 +69,29 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final password = _passwordController.text;
     final rePassword = _rePasswordController.text;
 
-    if (name.isEmpty ||
-        mobile.isEmpty ||
-        email.isEmpty ||
-        password.isEmpty ||
-        rePassword.isEmpty) {
-      setState(() => _error = 'Please fill all the fields');
-      return;
-    }
-    final passwordBytes = utf8.encode(password).length;
-    if (passwordBytes < 8 || passwordBytes > 72) {
-      setState(() => _error = 'Password must be between 8 and 72 bytes.');
-      return;
-    }
-    if (password != rePassword) {
-      setState(() => _error = 'Passwords do not match');
-      return;
-    }
+    if (!widget.verifyingExistingAccount) {
+      if (name.isEmpty ||
+          mobile.isEmpty ||
+          email.isEmpty ||
+          password.isEmpty ||
+          rePassword.isEmpty) {
+        setState(() => _error = 'Please fill all the fields');
+        return;
+      }
+      final passwordBytes = utf8.encode(password).length;
+      if (passwordBytes < 8 || passwordBytes > 72) {
+        setState(() => _error = 'Password must be between 8 and 72 bytes.');
+        return;
+      }
+      if (password != rePassword) {
+        setState(() => _error = 'Passwords do not match');
+        return;
+      }
 
-    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
-      setState(() => _error = 'Enter a valid email address.');
-      return;
+      if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
+        setState(() => _error = 'Enter a valid email address.');
+        return;
+      }
     }
     final phone = mobile.replaceAll(RegExp(r'[ ()-]'), '');
     if (!RegExp(r'^\+[1-9][0-9]{7,14}$').hasMatch(phone)) {
@@ -252,13 +256,19 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         }
       }
       if (!mounted) return;
-      await ref.read(authProvider.notifier).register(
-            _nameController.text.trim(),
-            _emailController.text.trim(),
-            _passwordController.text,
-            phone: _destination!,
-            firebaseIdToken: _firebaseIdToken!,
-          );
+      final auth = ref.read(authProvider.notifier);
+      if (widget.verifyingExistingAccount) {
+        await auth.verifyPhone(_destination!, _firebaseIdToken!);
+        if (mounted) navigator.pop(true);
+        return;
+      }
+      await auth.register(
+        _nameController.text.trim(),
+        _emailController.text.trim(),
+        _passwordController.text,
+        phone: _destination!,
+        firebaseIdToken: _firebaseIdToken!,
+      );
       if (mounted) navigator.popUntil((route) => route.isFirst);
     } catch (e) {
       if (!mounted) return;
@@ -399,7 +409,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     onPressed: _loading || _expired || _attemptsExhausted
                         ? null
                         : _verify,
-                    child: const Text('Verify and create account'),
+                    child: Text(widget.verifyingExistingAccount
+                        ? 'Verify phone'
+                        : 'Verify and create account'),
                   ),
                   TextButton(
                     onPressed: _loading || resendSeconds > 0
@@ -411,7 +423,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   ),
                   OutlinedButton(
                     onPressed: _loading ? null : _backToSignup,
-                    child: const Text('Back to signup'),
+                    child: Text(widget.verifyingExistingAccount
+                        ? 'Change number'
+                        : 'Back to signup'),
                   ),
                 ],
               ),
@@ -429,7 +443,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && _verifying) _backToSignup();
       },
-      child: _verifying ? _verificationScreen() : _signupForm(),
+      child: _verifying
+          ? _verificationScreen()
+          : widget.verifyingExistingAccount
+              ? _phoneForm()
+              : _signupForm(),
     );
   }
 
@@ -463,6 +481,30 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       ),
     );
   }
+
+  Widget _phoneForm() => Scaffold(
+        appBar: AppBar(title: const Text('Verify mobile number')),
+        body: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            TextField(
+              controller: _mobileController,
+              enabled: !_loading,
+              keyboardType: TextInputType.phone,
+              autofillHints: const [AutofillHints.telephoneNumber],
+              decoration: InputDecoration(
+                labelText: 'Mobile number with country code',
+                errorText: _error,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _loading ? null : _signUp,
+              child: const Text('Send verification code'),
+            ),
+          ],
+        ),
+      );
 
   Widget _signupForm() {
     return Scaffold(

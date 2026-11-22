@@ -119,6 +119,7 @@ class _TestAuthNotifier extends AuthNotifier {
         name: 'Owner',
         email: 'owner@example.test',
         emailVerified: emailVerified,
+        churchId: 'church-1',
         role: 'user',
         createdAt: DateTime.utc(2026),
       ),

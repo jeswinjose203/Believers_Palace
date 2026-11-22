@@ -174,6 +174,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = AuthState(user: user, isLoading: false);
   }
 
+  Future<void> verifyPhone(String phone, String token) async {
+    await _api.verifyAccountPhone(phone, token);
+    await refreshUser();
+  }
+
   Future<void> updateProfile(Map<String, dynamic> body) async {
     final user = await _api.updateMe(body);
     state = AuthState(user: user, isLoading: false);

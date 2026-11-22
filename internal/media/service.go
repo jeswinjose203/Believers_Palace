@@ -30,6 +30,8 @@ var allowedExtensions = map[string]string{
 	".png":  "image/png",
 	".webp": "image/webp",
 	".gif":  "image/gif",
+	".mp4":  "video/mp4",
+	".webm": "video/webm",
 }
 
 // UploadResult describes a stored image file.
@@ -87,7 +89,7 @@ func (s *Service) Upload(originalName, declaredMime string, size int64, content 
 
 // StoredFile holds an open reader and content type for a stored image.
 type StoredFile struct {
-	Reader   io.ReadCloser
+	Reader   io.ReadSeekCloser
 	MimeType string
 }
 
@@ -124,7 +126,7 @@ func resolveImageType(name, mime string) (canonicalMime, ext string, ok bool) {
 		return mime, ext, true
 	}
 	if e := lowerExt(name); e != "" {
-		if m, found := allowedExtensions[e]; found {
+		if m, found := allowedExtensions[e]; found && allowedImageTypes[m] != "" {
 			return m, allowedImageTypes[m], true
 		}
 	}

@@ -4,13 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth_provider.dart';
-import '../features/catechism/screens/catechism_list_screen.dart';
-import '../features/catechism/screens/my_enrollments_screen.dart';
 import '../services/calendar_reminder_sync.dart';
 import '../services/chat_notification_service.dart';
 import '../services/chat_push_service.dart';
 import 'admin_users_screen.dart';
 import 'communities_screen.dart';
+import 'social_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'search_screen.dart';
@@ -110,7 +109,6 @@ class _MainScreenState extends ConsumerState<MainScreen>
     // church staff do not have a personal "home" church tab.
     final useHome = user?.role == 'user';
     final churchId = user?.churchId;
-    final hasChurch = churchId != null && churchId.isNotEmpty;
 
     final tabs = <(Widget, BottomNavigationBarItem)>[
       if (useHome)
@@ -122,18 +120,15 @@ class _MainScreenState extends ConsumerState<MainScreen>
         SearchScreen(),
         BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search')
       ),
-      const (
-        CommunitiesScreen(),
-        BottomNavigationBarItem(icon: Icon(Icons.groups), label: 'Communities')
+      (
+        CommunitiesScreen(key: ValueKey((user?.id, churchId))),
+        const BottomNavigationBarItem(
+            icon: Icon(Icons.groups), label: 'Communities')
       ),
       (
-        hasChurch
-            ? CatechismListScreen(churchId: churchId)
-            : const MyEnrollmentsScreen(),
-        BottomNavigationBarItem(
-          icon: const Icon(Icons.menu_book_outlined),
-          label: hasChurch ? 'Catechism' : 'Enrollments',
-        ),
+        SocialScreen(key: ValueKey(user?.id)),
+        const BottomNavigationBarItem(
+            icon: Icon(Icons.dynamic_feed_outlined), label: 'Feed'),
       ),
       if (isSuperAdmin)
         const (

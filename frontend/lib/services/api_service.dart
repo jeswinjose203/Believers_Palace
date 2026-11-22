@@ -18,6 +18,12 @@ class ApiService {
   final ApiClient _client;
  
   ApiService(this._client);
+
+  Future<void> verifyAccountPhone(String phone, String token) =>
+      _client.postVoid('/users/me/verify-phone', body: {
+        'phone': phone,
+        'firebaseIdToken': token,
+      });
  
   void setToken(String? token, {bool rotated = false}) =>
       _client.setToken(token, rotated: rotated);

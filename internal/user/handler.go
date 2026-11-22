@@ -45,6 +45,7 @@ func (h *Handler) UserRoutes() chi.Router {
 	r.With(auth.RequireRole(auth.RoleChurchAdmin, auth.RoleSuperAdmin)).Get("/stats", h.stats)
 	r.Get("/me", h.getMe)
 	r.Put("/me", h.updateMe)
+	r.Post("/me/verify-phone", h.verifyPhone)
 	r.Post("/logout-all", h.logoutAll)
 	// Update role: super_admin only.
 	r.With(auth.RequireRole(auth.RoleSuperAdmin)).Patch("/{userId}/role", h.updateRole)

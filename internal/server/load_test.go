@@ -49,7 +49,7 @@ func TestMixedAPILoad(t *testing.T) {
 		{`INSERT INTO churches (id,name,address) VALUES ($1,'Load test church','Test')`, []any{churchID}},
 		{`INSERT INTO users (id,name,email,password_hash,email_verified,church_id)
 			VALUES ($1,'Load test','mixed-load@example.test','unused',true,$2)`, []any{userID, churchID}},
-		{`INSERT INTO communities (id,creator_id,name) VALUES ($1,$2,'Load test group')`, []any{roomID, userID}},
+		{`INSERT INTO communities (id,creator_id,name,church_id) VALUES ($1,$2,'Load test group',$3)`, []any{roomID, userID, churchID}},
 		{`INSERT INTO community_memberships (community_id,user_id,status,is_admin) VALUES ($1,$2,'active',true)`, []any{roomID, userID}},
 		{`INSERT INTO events (id,church_id,title,start_date) VALUES ($1,$2,'Load test event',now())`, []any{eventID, churchID}},
 	} {
@@ -59,8 +59,13 @@ func TestMixedAPILoad(t *testing.T) {
 	}
 	defer pool.Exec(context.Background(), `DELETE FROM churches WHERE id=$1`, churchID)
 	defer pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, userID)
-	if _, err := pool.Exec(ctx, `INSERT INTO communities (creator_id,name)
-		SELECT $1, 'Load test group ' || i FROM generate_series(1,10000) AS i`, userID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO communities (creator_id,name,church_id)
+		SELECT $1, 'Load test group ' || i, $2 FROM generate_series(1,10000) AS i`, userID, churchID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := pool.Exec(ctx, `INSERT INTO social_posts (author_id,church_id,body,client_id)
+		SELECT $1,$2,'Load test post ' || i,'load-' || i FROM generate_series(1,10000) AS i`, userID, churchID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -100,6 +105,8 @@ func TestMixedAPILoad(t *testing.T) {
 		{"GET", "/api/marketplace/community-ads?limit=20"},
 		{"GET", "/api/marketplace/shop/products?limit=20"},
 		{"GET", "/api/communities?limit=30"},
+		{"GET", "/api/social/feed"},
+		{"GET", "/api/social/threads"},
 		{"GET", "/api/chat/joined-communities"},
 		{"GET", community + "?limit=20"},
 		{"GET", event + "?limit=20"},

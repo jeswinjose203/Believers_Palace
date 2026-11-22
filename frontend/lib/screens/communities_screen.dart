@@ -146,10 +146,10 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
         appBar: AppBar(
           title: const Text('Communities'),
           bottom: const TabBar(
-            tabs: [Tab(text: 'All'), Tab(text: 'Joined')],
+            tabs: [Tab(text: 'My church'), Tab(text: 'Joined')],
           ),
         ),
-        floatingActionButton: user == null
+        floatingActionButton: user?.churchId == null
             ? null
             : FloatingActionButton.extended(
                 onPressed: _create,
@@ -181,7 +181,9 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
     final hasMore = page?.nextCursor != null;
     final emptyText = joinedOnly
         ? 'You haven’t joined any communities yet.'
-        : 'No communities yet.';
+        : ref.watch(authProvider).user?.churchId == null
+            ? 'Select a church to discover its communities.'
+            : 'No communities yet for this church.';
     return RefreshIndicator(
       onRefresh: _load,
       child: items.isEmpty

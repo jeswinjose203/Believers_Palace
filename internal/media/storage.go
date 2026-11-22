@@ -47,7 +47,7 @@ func (s *Storage) Save(key string, src io.Reader) (int64, error) {
 }
 
 // Open opens a stored file for reading by its storage key.
-func (s *Storage) Open(key string) (io.ReadCloser, error) {
+func (s *Storage) Open(key string) (*os.File, error) {
 	path, err := s.resolve(key)
 	if err != nil {
 		return nil, err
