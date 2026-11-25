@@ -156,6 +156,10 @@ class _MainScreenState extends ConsumerState<MainScreen>
         currentIndex: safeIndex,
         onTap: (i) => setState(() => _index = i),
         type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF5B35A0),
+        unselectedItemColor: const Color(0xFF776D82),
+        backgroundColor: const Color(0xFFFAF7FD),
+        selectedIconTheme: const IconThemeData(size: 26),
         items: [for (final tab in tabs) tab.$2],
       ),
     );
