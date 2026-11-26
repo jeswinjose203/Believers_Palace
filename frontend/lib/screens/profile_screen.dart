@@ -103,7 +103,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _Header(
             user: user,
             roleLabel: context.tr(_roleLabel(user.role)),
-            onEditPhoto: () => _edit(user),
+            onEditPhoto: () => _editProfilePicture(user),
             onBell: () => _toast(context.tr('No new notifications')),
           ),
           const SizedBox(height: 16),
@@ -285,6 +285,83 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: Text(dialogContext.tr('Save')),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _editProfilePicture(User user) async {
+    String? profilePic = user.profilePic;
+    var changed = false;
+    var uploading = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    dialogContext.tr('Profile picture'),
+                    style: Theme.of(dialogContext).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 12),
+                  ImagePickerField(
+                    label: dialogContext.tr('Profile picture'),
+                    initialUrl: user.profilePic,
+                    onChanged: (url) => setDialogState(() {
+                      profilePic = url;
+                      changed = true;
+                    }),
+                    onUploadingChanged: (value) =>
+                        setDialogState(() => uploading = value),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: uploading
+                            ? null
+                            : () => Navigator.of(dialogContext).pop(),
+                        child: Text(dialogContext.tr('Cancel')),
+                      ),
+                      TextButton(
+                        onPressed: uploading || !changed
+                            ? null
+                            : () async {
+                                try {
+                                  await ref
+                                      .read(authProvider.notifier)
+                                      .updateProfile({
+                                    // Empty string is accepted by existing API
+                                    // versions and renders as the default avatar.
+                                    'profilePic': profilePic ?? '',
+                                  });
+                                  if (dialogContext.mounted) {
+                                    Navigator.of(dialogContext).pop();
+                                  }
+                                  if (mounted) {
+                                    _toast(context.tr('Profile updated'));
+                                  }
+                                } catch (e) {
+                                  if (mounted) _toast(e.toString());
+                                }
+                              },
+                        child: Text(dialogContext.tr('Save')),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
