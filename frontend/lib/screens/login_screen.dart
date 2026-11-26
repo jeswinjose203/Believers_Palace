@@ -19,7 +19,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   bool _hidePassword = true;
   bool _loading = false;
-  bool _teacher = false;
   String? _error;
 
   @override
@@ -43,7 +42,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       // On success authProvider flips to authenticated and main.dart swaps
       // the home widget to MainScreen.
-      await ref.read(authProvider.notifier).login(email, password, teacher: _teacher);
+      await ref.read(authProvider.notifier).login(email, password);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -284,15 +283,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 18),
 
                   // Login button
-                  SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(context.tr('Catechism teacher sign-in')),
-                      value: _teacher,
-                      onChanged: _loading ? null : (value) => setState(() {
-                        _teacher = value;
-                        _error = null;
-                      }),
-                    ),
                   SizedBox(
                     width: double.infinity,
                     height: 45,

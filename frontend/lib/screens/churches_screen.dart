@@ -243,10 +243,7 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
                                     ? Chip(label: Text(context.tr('Current')))
                                     : FilledButton.tonal(
                                         onPressed: () => _select(c),
-                                        style: FilledButton.styleFrom(
-                                          backgroundColor: const Color(0xFFF0EAF7),
-                                          foregroundColor: const Color(0xFF66518A),
-                                        ),
+                                         
                                         child: Text(context.tr('Select')),
                                       ))
                                 : const Icon(Icons.chevron_right),

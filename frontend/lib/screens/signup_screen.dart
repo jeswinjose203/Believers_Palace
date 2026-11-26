@@ -50,6 +50,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _rePasswordController = TextEditingController();
+  final TextEditingController _countryCodeController =
+      TextEditingController(text: '+91');
 
   @override
   void dispose() {
@@ -58,6 +60,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     _nameController.dispose();
     _usernameController.dispose();
     _mobileController.dispose();
+    _countryCodeController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _rePasswordController.dispose();
@@ -101,7 +104,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         return;
       }
     }
-    final phone = mobile.replaceAll(RegExp(r'[ ()-]'), '');
+    final phoneInput = mobile.replaceAll(RegExp(r'[ ()-]'), '');
+    final countryCode = _countryCodeController.text
+        .trim()
+        .replaceAll(RegExp(r'[ ()-]'), '');
+    final phone = phoneInput.startsWith('+')
+        ? phoneInput
+        : '$countryCode$phoneInput';
     if (!RegExp(r'^\+[1-9][0-9]{7,14}$').hasMatch(phone)) {
       setState(
           () => _error = 'Include the country code, such as +919876543210.');
@@ -599,16 +608,45 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         const SizedBox(height: 5),
 
                         // Mobile number
-                        TextField(
-                          controller: _mobileController,
-                          enabled: !_loading,
-                          keyboardType: TextInputType.phone,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                          ),
-                          decoration:
-                              _fieldDecoration('Mob no. with country code'),
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 58,
+                              child: TextField(
+                                controller: _countryCodeController,
+                                enabled: !_loading,
+                                keyboardType: TextInputType.phone,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9+]'),
+                                  ),
+                                ],
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                ),
+                                decoration: _fieldDecoration('Code'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _mobileController,
+                                enabled: !_loading,
+                                keyboardType: TextInputType.phone,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9+ ()-]'),
+                                  ),
+                                ],
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                ),
+                                decoration: _fieldDecoration('Mob no.'),
+                              ),
+                            ),
+                          ],
                         ),
 
                         const SizedBox(height: 5),
