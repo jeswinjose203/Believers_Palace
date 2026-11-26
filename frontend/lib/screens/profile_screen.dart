@@ -304,16 +304,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    dialogContext.tr('Profile picture'),
-                    style: Theme.of(dialogContext).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 12),
                   ImagePickerField(
-                    label: dialogContext.tr('Profile picture'),
+                    label: '',
                     initialUrl: user.profilePic,
+                    showLabel: false,
+                    centerPreview: true,
+                    outlineChangeButton: false,
+                    previewSize: 128,
                     onChanged: (url) => setDialogState(() {
                       profilePic = url;
                       changed = true;

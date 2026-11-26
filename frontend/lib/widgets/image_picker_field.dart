@@ -14,6 +14,10 @@ class ImagePickerField extends ConsumerStatefulWidget {
   final String? initialUrl;
   final ValueChanged<String?> onChanged;
   final ValueChanged<bool>? onUploadingChanged;
+  final bool showLabel;
+  final bool centerPreview;
+  final bool outlineChangeButton;
+  final double previewSize;
 
   const ImagePickerField({
     super.key,
@@ -21,6 +25,10 @@ class ImagePickerField extends ConsumerStatefulWidget {
     this.initialUrl,
     required this.onChanged,
     this.onUploadingChanged,
+    this.showLabel = true,
+    this.centerPreview = false,
+    this.outlineChangeButton = true,
+    this.previewSize = 56,
   });
 
   @override
@@ -103,48 +111,56 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final actions = Wrap(
+      alignment: widget.centerPreview ? WrapAlignment.center : WrapAlignment.start,
+      spacing: 8,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 4),
-          child: Text(
-            widget.label,
-            style: Theme.of(context).textTheme.labelLarge,
+        if (widget.outlineChangeButton)
+          OutlinedButton.icon(
+            onPressed: _uploading ? null : _pickAndUpload,
+            icon: _changeIcon,
+            label: _changeLabel(context),
+          )
+        else
+          TextButton.icon(
+            onPressed: _uploading ? null : _pickAndUpload,
+            icon: _changeIcon,
+            label: _changeLabel(context),
           ),
-        ),
-        Row(
-          children: [
-            _Preview(url: _url),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Wrap(
-                spacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _uploading ? null : _pickAndUpload,
-                    icon: _uploading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.photo_library, size: 18),
-                    label: Text(_uploading
-                        ? context.tr('Uploading...')
-                        : (_url == null ? context.tr('Choose image') : context.tr('Change image'))),
-                  ),
-                  if (_url != null && _url!.isNotEmpty)
-                    TextButton.icon(
-                      onPressed: _uploading ? null : _clear,
-                      icon: const Icon(Icons.clear, size: 18),
-                      label: Text(context.tr('Remove')),
-                    ),
-                ],
-              ),
+        if (_url != null && _url!.isNotEmpty)
+          TextButton.icon(
+            onPressed: _uploading ? null : _clear,
+            icon: const Icon(Icons.clear, size: 18),
+            label: Text(context.tr('Remove')),
+          ),
+      ],
+    );
+
+    return Column(
+      crossAxisAlignment: widget.centerPreview
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: [
+        if (widget.showLabel)
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 4),
+            child: Text(
+              widget.label,
+              style: Theme.of(context).textTheme.labelLarge,
             ),
-          ],
-        ),
+          ),
+        if (widget.centerPreview) ...[
+          _Preview(url: _url, size: widget.previewSize),
+          const SizedBox(height: 8),
+          actions,
+        ] else
+          Row(
+            children: [
+              _Preview(url: _url, size: widget.previewSize),
+              const SizedBox(width: 12),
+              Expanded(child: actions),
+            ],
+          ),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -156,16 +172,30 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
       ],
     );
   }
+
+  Widget get _changeIcon => _uploading
+      ? const SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        )
+      : const Icon(Icons.photo_library, size: 18);
+
+  Widget _changeLabel(BuildContext context) => Text(_uploading
+      ? context.tr('Uploading...')
+      : (_url == null
+          ? context.tr('Choose image')
+          : context.tr('Change image')));
 }
 
 class _Preview extends StatelessWidget {
   final String? url;
+  final double size;
 
-  const _Preview({required this.url});
+  const _Preview({required this.url, this.size = 56});
 
   @override
   Widget build(BuildContext context) {
-    const size = 56.0;
     if (url == null || url!.isEmpty) {
       return Container(
         width: size,
