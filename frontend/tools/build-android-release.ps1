@@ -23,6 +23,28 @@ $buildArgs = @('build','apk','--release',"--build-name=$Version","--build-number
 if ($DefinesFile) {
     $definesPath = (Resolve-Path -LiteralPath $DefinesFile).Path
     $buildArgs += "--dart-define-from-file=$definesPath"
+} else {
+    $firebasePath = Join-Path $PSScriptRoot '../android/app/google-services.json'
+    if (!(Test-Path -LiteralPath $firebasePath -PathType Leaf)) {
+        throw 'Supply -DefinesFile with Android Firebase settings or place google-services.json in frontend/android/app.'
+    }
+    $firebase = Get-Content -LiteralPath $firebasePath -Raw | ConvertFrom-Json
+    $client = $firebase.client | Where-Object {
+        $_.client_info.android_client_info.package_name -eq 'com.example.believers_palace'
+    } | Select-Object -First 1
+    $firebaseDefines = @{
+        FCM_PROJECT_ID = $firebase.project_info.project_id
+        FCM_SENDER_ID = $firebase.project_info.project_number
+        FCM_API_KEY = ($client.api_key | Select-Object -First 1).current_key
+        FCM_ANDROID_APP_ID = $client.client_info.mobilesdk_app_id
+    }
+    foreach ($name in $firebaseDefines.Keys) {
+        $value = $firebaseDefines[$name]
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            throw "google-services.json is missing $name for com.example.believers_palace."
+        }
+        $buildArgs += "--dart-define=$name=$value"
+    }
 }
 Push-Location (Join-Path $PSScriptRoot '..')
 try {
