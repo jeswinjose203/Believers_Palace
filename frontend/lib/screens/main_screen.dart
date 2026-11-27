@@ -88,9 +88,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
   Future<void> _syncReminders() async {
     if (!ref.read(authProvider).isAuthenticated) return;
-    final result = await syncCalendarReminders(ref);
-    if (!mounted) return;
-    showCalendarReminderPermissionHint(context, result);
+    await syncCalendarReminders(ref);
   }
 
   @override

@@ -111,9 +111,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
  
   Future<void> _syncNotifications() async {
     if (!mounted) return;
-    final result = await syncCalendarReminders(ref);
-    if (!mounted) return;
-    showCalendarReminderPermissionHint(context, result);
+    await syncCalendarReminders(ref);
   }
  
   void _toast(String msg) =>
