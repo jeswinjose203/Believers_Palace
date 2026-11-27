@@ -101,15 +101,21 @@ class _MainScreenState extends ConsumerState<MainScreen>
         ScaffoldMessenger.of(context).clearSnackBars();
       },
     );
+    ref.listen(
+      authProvider.select((state) => state.user?.churchId),
+      (previous, next) {
+        if (previous != next) setState(() => _index = 0);
+      },
+    );
     final user = ref.watch(authProvider).user;
     final isSuperAdmin = user?.role == 'super_admin';
-    // Only regular members get the church-aware home page; super admins and
-    // church staff do not have a personal "home" church tab.
+    // Members start in Search. Their Home tab appears after they select a
+    // church, and then shows only that church's details.
     final useHome = user?.role == 'user';
     final churchId = user?.churchId;
 
     final tabs = <(Widget, BottomNavigationBarItem)>[
-      if (useHome)
+      if (useHome && churchId != null && churchId.isNotEmpty)
         (
           HomeScreen(),
           BottomNavigationBarItem(icon: Icon(Icons.home), label: context.tr('Home'))
