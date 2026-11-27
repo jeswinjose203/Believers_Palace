@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -183,6 +184,11 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Hand
 	}
 	mediaSvc := media.NewService(mediaStorage, cfg.PublicBaseURL, cfg.Storage.MaxImageBytes).WithCDN(cfg.Storage.MediaCDNBaseURL)
 	mediaHandler := media.NewHandler(mediaSvc)
+	catechismMaterialStorage, err := media.NewStorage(filepath.Join(cfg.Storage.MediaDir, "catechism"))
+	if err != nil {
+		return nil, err
+	}
+	catechismHandler.SetMaterialStorage(catechismMaterialStorage, cfg.Storage.MaxUploadBytes)
 
 	personalCalRepo := personalcalendar.NewRepository(pool)
 	personalCalSvc := personalcalendar.NewService(personalCalRepo, bookingRepo, eventRepo, userRepo)

@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/auth_provider.dart';
 import 'l10n/app_locale.dart';
-import 'features/catechism/screens/catechism_workspace_screen.dart';
 import 'providers/calendar_provider.dart';
 import 'services/calendar_notification_service.dart';
 import 'services/android_update_service.dart';
@@ -76,9 +75,7 @@ class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
       home: auth.isLoading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : auth.isAuthenticated
-              ? (auth.teacherMode
-                  ? const CatechismTeacherScreen()
-                  : const MainScreen())
+              ? const MainScreen()
               : const LoginScreen(),
     );
   }

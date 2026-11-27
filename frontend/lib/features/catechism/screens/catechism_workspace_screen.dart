@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../l10n/app_locale.dart';
 import '../../../core/api_client.dart';
@@ -128,6 +130,109 @@ class _CatechismWorkspaceScreenState
         ref.read(catechismApiProvider).workspace(widget.classId, _page);
   }
 
+  Future<void> _addNote() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) =>
+          _NoteComposer(onPublish: (title, description, file) async {
+        final bytes = file.bytes;
+        if (bytes == null) throw StateError('Could not read the selected PDF');
+        await ref.read(catechismApiProvider).uploadNote(widget.classId,
+            bytes: bytes,
+            fileName: file.name,
+            title: title,
+            description: description);
+      }),
+    );
+    if (result == true && mounted) setState(_load);
+  }
+
+  Future<void> _shareVideo() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => _TextEntryDialog(
+        title: context.tr('Share class video'),
+        fields: const [
+          ('title', 'Video title'),
+          ('description', 'Description'),
+          ('url', 'HTTPS video link')
+        ],
+        save: (values) =>
+            ref.read(catechismApiProvider).shareVideo(widget.classId, values),
+      ),
+    );
+    if (result == true && mounted) setState(_load);
+  }
+
+  Future<void> _createTest() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => _TextEntryDialog(
+        title: context.tr('Create test'),
+        fields: const [('name', 'Test name'), ('maximum', 'Maximum marks')],
+        save: (values) => ref.read(catechismApiProvider).createTest(
+            widget.classId,
+            values['name'] as String,
+            int.tryParse(values['maximum'] as String) ?? 0),
+      ),
+    );
+    if (result == true && mounted) setState(_load);
+  }
+
+  Future<void> _downloadNote(_Row material) async {
+    try {
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: context.tr('Save notes'),
+        fileName: material['fileName'] as String? ?? 'class-notes.pdf',
+        type: FileType.custom,
+        allowedExtensions: const ['pdf'],
+      );
+      if (path == null) return;
+      await ref
+          .read(catechismApiProvider)
+          .downloadMaterial(widget.classId, material['id'] as String, path);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.tr('Notes downloaded'))));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
+    }
+  }
+
+  Future<void> _deleteMaterial(_Row material) async {
+    final remove = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Delete class material?')),
+        content: Text(material['title'] as String),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(context.tr('Cancel'))),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(context.tr('Delete'))),
+        ],
+      ),
+    );
+    if (remove != true) return;
+    try {
+      await ref
+          .read(catechismApiProvider)
+          .deleteMaterial(widget.classId, material['id'] as String);
+      if (mounted) setState(_load);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
+    }
+  }
+
   Future<void> _edit(
     String action,
     String title,
@@ -182,6 +287,9 @@ class _CatechismWorkspaceScreenState
     final students = _rows(data, 'students');
     final teachers = _rows(data, 'teachers');
     final publications = _rows(data, 'publications');
+    final requests = _rows(data, 'requests');
+    final materials = _rows(data, 'materials');
+    final tests = _rows(data, 'tests');
     final syllabus = data['syllabus'] as _Row?;
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -210,6 +318,21 @@ class _CatechismWorkspaceScreenState
               ),
             ],
             if (canTeach) ...[
+              OutlinedButton.icon(
+                onPressed: _addNote,
+                icon: const Icon(Icons.upload_file_outlined),
+                label: Text(context.tr('Publish notes')),
+              ),
+              OutlinedButton.icon(
+                onPressed: _shareVideo,
+                icon: const Icon(Icons.video_library_outlined),
+                label: Text(context.tr('Share class video')),
+              ),
+              OutlinedButton.icon(
+                onPressed: _createTest,
+                icon: const Icon(Icons.assignment_outlined),
+                label: Text(context.tr('Create test')),
+              ),
               OutlinedButton(
                 onPressed: () => _edit(
                   'syllabus',
@@ -217,8 +340,9 @@ class _CatechismWorkspaceScreenState
                   const [('title', 'Title'), ('body', 'Syllabus')],
                   initial: syllabus ?? const {},
                 ),
-                child: Text(
-                    syllabus == null ? context.tr('Publish syllabus') : context.tr('Update syllabus')),
+                child: Text(syllabus == null
+                    ? context.tr('Publish syllabus')
+                    : context.tr('Update syllabus')),
               ),
               OutlinedButton(
                 onPressed: () => _edit(
@@ -239,9 +363,43 @@ class _CatechismWorkspaceScreenState
             ListTile(
               title: Text(teacher['name'] as String),
               subtitle: Text(teacher['email'] as String),
-              trailing: Text(
-                  teacher['substitute'] == true ? context.tr('Substitute') : context.tr('Teacher')),
+              trailing: Text(teacher['substitute'] == true
+                  ? context.tr('Substitute')
+                  : context.tr('Teacher')),
             ),
+        ],
+        if (canTeach || canRegister) ...[
+          ListTile(title: Text(context.tr('Admission requests'))),
+          if (requests.isEmpty)
+            ListTile(subtitle: Text(context.tr('No pending requests'))),
+          for (final request in requests)
+            Card(
+                child: ListTile(
+              title: Text(request['name'] as String),
+              subtitle: Text(
+                  '${request['dateOfBirth'] ?? ''}${request['notes'] == null ? '' : '\n${request['notes']}'}'),
+              isThreeLine: request['notes'] != null,
+              trailing: Wrap(alignment: WrapAlignment.end, children: [
+                IconButton(
+                    tooltip: context.tr('Approve'),
+                    icon: const Icon(Icons.check_circle_outline),
+                    onPressed: () async {
+                      await ref
+                          .read(catechismApiProvider)
+                          .decideAdmission(request['id'] as String, 'approved');
+                      if (mounted) setState(_load);
+                    }),
+                IconButton(
+                    tooltip: context.tr('Reject'),
+                    icon: const Icon(Icons.cancel_outlined),
+                    onPressed: () async {
+                      await ref
+                          .read(catechismApiProvider)
+                          .decideAdmission(request['id'] as String, 'rejected');
+                      if (mounted) setState(_load);
+                    }),
+              ]),
+            )),
         ],
         if (canRegister || canTeach || students.isNotEmpty) ...[
           ListTile(title: Text(context.tr('Students'))),
@@ -306,9 +464,84 @@ class _CatechismWorkspaceScreenState
             child: ListTile(
               title: Text(publication['title'] as String),
               leading: Text(
-                publication['kind'] == 'syllabus' ? context.tr('Syllabus') : context.tr('Announcement'),
+                publication['kind'] == 'syllabus'
+                    ? context.tr('Syllabus')
+                    : context.tr('Announcement'),
               ),
               subtitle: Text(publication['body'] as String),
+            ),
+          ),
+        ListTile(
+          title: Text(context.tr('Class materials')),
+          trailing: IconButton(
+            tooltip: context.tr('Refresh'),
+            icon: const Icon(Icons.refresh),
+            onPressed: () => setState(_load),
+          ),
+        ),
+        if (materials.isEmpty)
+          ListTile(subtitle: Text(context.tr('No class materials available'))),
+        for (final material in materials)
+          Card(
+            child: ListTile(
+              leading: Icon(material['kind'] == 'video'
+                  ? Icons.play_circle_outline
+                  : Icons.picture_as_pdf_outlined),
+              title: Text(material['title'] as String),
+              subtitle: Text([
+                if ((material['description'] as String? ?? '').isNotEmpty)
+                  material['description'] as String,
+                if (material['fileName'] != null)
+                  material['fileName'] as String,
+              ].join('\n')),
+              trailing: Wrap(
+                children: [
+                  if (material['kind'] == 'note')
+                    IconButton(
+                      tooltip: context.tr('Download notes'),
+                      icon: const Icon(Icons.download_outlined),
+                      onPressed: () => _downloadNote(material),
+                    )
+                  else
+                    IconButton(
+                      tooltip: context.tr('Watch video'),
+                      icon: const Icon(Icons.play_arrow),
+                      onPressed: () => launchUrl(
+                          Uri.parse(material['externalUrl'] as String),
+                          mode: LaunchMode.externalApplication),
+                    ),
+                  if (canTeach || canRegister)
+                    IconButton(
+                      tooltip: context.tr('Delete'),
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _deleteMaterial(material),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ListTile(title: Text(context.tr('Tests and marks'))),
+        if (tests.isEmpty)
+          ListTile(subtitle: Text(context.tr('No tests published yet'))),
+        for (final test in tests)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.assignment_outlined),
+              title: Text(test['name'] as String),
+              subtitle:
+                  Text(context.tr('{0} marks recorded', [test['marksCount']])),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute(
+                builder: (_) => _TestMarksScreen(
+                  classId: widget.classId,
+                  testName: test['name'] as String,
+                  canEdit: canTeach || canRegister,
+                ),
+              ))
+                  .then((_) {
+                if (mounted) setState(_load);
+              }),
             ),
           ),
         _PageControls(
@@ -323,6 +556,279 @@ class _CatechismWorkspaceScreenState
       ],
     );
   }
+}
+
+class _NoteComposer extends StatefulWidget {
+  const _NoteComposer({required this.onPublish});
+  final Future<void> Function(
+      String title, String description, PlatformFile file) onPublish;
+  @override
+  State<_NoteComposer> createState() => _NoteComposerState();
+}
+
+class _NoteComposerState extends State<_NoteComposer> {
+  final _title = TextEditingController();
+  final _description = TextEditingController();
+  PlatformFile? _file;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf'],
+      withData: true,
+    );
+    if (result != null && mounted) setState(() => _file = result.files.single);
+  }
+
+  Future<void> _save() async {
+    final file = _file;
+    if (_title.text.trim().isEmpty || file == null || file.bytes == null) {
+      setState(() => _error = 'Enter a title and select a PDF file.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onPublish(
+          _title.text.trim(), _description.text.trim(), file);
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = _errorMessage(error);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+        canPop: !_saving,
+        child: AlertDialog(
+          title: Text(context.tr('Publish notes')),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                  controller: _title,
+                  decoration: InputDecoration(labelText: context.tr('Title'))),
+              TextField(
+                  controller: _description,
+                  decoration:
+                      InputDecoration(labelText: context.tr('Description'))),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.picture_as_pdf_outlined),
+                title: Text(_file?.name ?? context.tr('Select PDF notes')),
+                onTap: _saving ? null : _pickFile,
+              ),
+              if (_error != null)
+                Text(_error!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error)),
+            ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: _saving ? null : () => Navigator.pop(context),
+                child: Text(context.tr('Cancel'))),
+            FilledButton(
+                onPressed: _saving ? null : _save,
+                child: Text(_saving
+                    ? context.tr('Uploading...')
+                    : context.tr('Publish'))),
+          ],
+        ),
+      );
+}
+
+class _TextEntryDialog extends StatefulWidget {
+  const _TextEntryDialog(
+      {required this.title, required this.fields, required this.save});
+  final String title;
+  final List<(String, String)> fields;
+  final Future<dynamic> Function(Map<String, dynamic>) save;
+  @override
+  State<_TextEntryDialog> createState() => _TextEntryDialogState();
+}
+
+class _TextEntryDialogState extends State<_TextEntryDialog> {
+  late final Map<String, TextEditingController> _controllers = {
+    for (final (key, _) in widget.fields) key: TextEditingController(),
+  };
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final values = <String, dynamic>{
+      for (final entry in _controllers.entries)
+        entry.key: entry.value.text.trim()
+    };
+    if (values.values.any((value) => (value as String).isEmpty)) {
+      setState(() => _error = 'Complete all fields.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.save(values);
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = _errorMessage(error);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+        canPop: !_saving,
+        child: AlertDialog(
+          title: Text(widget.title),
+          content: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+            for (final (key, label) in widget.fields)
+              TextField(
+                controller: _controllers[key],
+                decoration: InputDecoration(labelText: context.tr(label)),
+                keyboardType: key == 'maximum'
+                    ? TextInputType.number
+                    : TextInputType.text,
+                maxLines: key == 'description' ? 3 : 1,
+              ),
+            if (_error != null)
+              Text(_error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ])),
+          actions: [
+            TextButton(
+                onPressed: _saving ? null : () => Navigator.pop(context),
+                child: Text(context.tr('Cancel'))),
+            FilledButton(
+                onPressed: _saving ? null : _save,
+                child: Text(
+                    _saving ? context.tr('Saving...') : context.tr('Save'))),
+          ],
+        ),
+      );
+}
+
+class _TestMarksScreen extends ConsumerStatefulWidget {
+  const _TestMarksScreen(
+      {required this.classId, required this.testName, required this.canEdit});
+  final String classId;
+  final String testName;
+  final bool canEdit;
+  @override
+  ConsumerState<_TestMarksScreen> createState() => _TestMarksScreenState();
+}
+
+class _TestMarksScreenState extends ConsumerState<_TestMarksScreen> {
+  late Future<_Row> _future;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() => _future =
+      ref.read(catechismApiProvider).testMarks(widget.classId, widget.testName);
+
+  Future<void> _editMark(_Row mark) async {
+    final controller =
+        TextEditingController(text: mark['score']?.toString() ?? '');
+    final score = await showDialog<int>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: Text('${widget.testName} · ${mark['studentName']}'),
+              content: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: context.tr('Score'))),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(context.tr('Cancel'))),
+                FilledButton(
+                    onPressed: () =>
+                        Navigator.pop(context, int.tryParse(controller.text)),
+                    child: Text(context.tr('Save'))),
+              ],
+            ));
+    controller.dispose();
+    if (score == null) return;
+    try {
+      await ref.read(catechismApiProvider).updateTestMark(widget.classId,
+          widget.testName, mark['enrollmentId'] as String, score);
+      if (mounted) setState(_load);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(widget.testName)),
+        body: FutureBuilder<_Row>(
+            future: _future,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(child: Text(_errorMessage(snapshot.error)));
+              }
+              final marks = _rows(snapshot.data!, 'marks');
+              final test = snapshot.data!['test'] as _Row;
+              return RefreshIndicator(
+                  onRefresh: () async => setState(_load),
+                  child: ListView(children: [
+                    ListTile(
+                        title: Text(context.tr('Maximum marks')),
+                        trailing: Text('${test['maximum']}')),
+                    for (final mark in marks)
+                      ListTile(
+                        leading: const Icon(Icons.person_outline),
+                        title: Text(mark['studentName'] as String),
+                        subtitle: Text(mark['score'] == null
+                            ? context.tr('No mark entered')
+                            : '${mark['score']} / ${mark['maximum']}'),
+                        trailing: widget.canEdit
+                            ? IconButton(
+                                icon: const Icon(Icons.edit_outlined),
+                                onPressed: () => _editMark(mark))
+                            : null,
+                      ),
+                  ]));
+            }),
+      );
 }
 
 class _PageControls extends StatelessWidget {
@@ -409,7 +915,8 @@ class _StudentHistoryState extends ConsumerState<_StudentHistoryScreen> {
                 ),
               ListTile(title: Text(context.tr('Attendance'))),
               if (attendance.isEmpty)
-                ListTile(subtitle: Text(context.tr('No attendance on this page'))),
+                ListTile(
+                    subtitle: Text(context.tr('No attendance on this page'))),
               for (final entry in attendance.take(_pageSize))
                 ListTile(
                   title: Text(entry['lesson_date'] as String),
@@ -454,7 +961,8 @@ class _WorkspaceData extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(_errorMessage(snapshot.error)),
-                  TextButton(onPressed: retry, child: Text(context.tr('Retry'))),
+                  TextButton(
+                      onPressed: retry, child: Text(context.tr('Retry'))),
                 ],
               ),
             );
@@ -592,7 +1100,8 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                   ),
                 ),
               if (widget.action == 'teachers') ...[
-                Text(context.tr('For an existing account, enter the email only.')),
+                Text(context
+                    .tr('For an existing account, enter the email only.')),
                 SwitchListTile(
                   title: Text(context.tr('Substitute teacher')),
                   value: _substitute,
@@ -605,9 +1114,12 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                 DropdownButton<String>(
                   value: _status,
                   items: [
-                    DropdownMenuItem(value: 'present', child: Text(context.tr('Present'))),
-                    DropdownMenuItem(value: 'absent', child: Text(context.tr('Absent'))),
-                    DropdownMenuItem(value: 'excused', child: Text(context.tr('Excused'))),
+                    DropdownMenuItem(
+                        value: 'present', child: Text(context.tr('Present'))),
+                    DropdownMenuItem(
+                        value: 'absent', child: Text(context.tr('Absent'))),
+                    DropdownMenuItem(
+                        value: 'excused', child: Text(context.tr('Excused'))),
                   ],
                   onChanged: _saving
                       ? null
