@@ -193,6 +193,20 @@ const malayalam = <String, String>{
   'Directions': 'വഴി കാണുക',
   'Don’t have an account?': 'അക്കൗണ്ട് ഇല്ലേ?',
   'Download update': 'പുതിയ പതിപ്പ് ഡൗൺലോഡ് ചെയ്യുക',
+  'Check for updates': 'പുതിയ പതിപ്പുകൾ പരിശോധിക്കുക',
+  'Checking for updates…': 'പുതിയ പതിപ്പുകൾ പരിശോധിക്കുന്നു…',
+  'Your app is up to date.': 'ആപ്പിന്റെ ഏറ്റവും പുതിയ പതിപ്പാണ് ഉപയോഗിക്കുന്നത്.',
+  'Downloading update…': 'പുതിയ പതിപ്പ് ഡൗൺലോഡ് ചെയ്യുന്നു…',
+  'An update check or download is already in progress.':
+      'പുതിയ പതിപ്പിന്റെ പരിശോധനയോ ഡൗൺലോഡോ നടന്നുകൊണ്ടിരിക്കുന്നു.',
+  'In-app updates are available on signed Android releases.':
+      'ഒപ്പിട്ട ആൻഡ്രോയിഡ് പതിപ്പുകളിൽ ആപ്പിൽ നിന്ന് തന്നെ പുതുക്കാം.',
+  'Could not check for updates. Try again later.':
+      'പുതിയ പതിപ്പുകൾ പരിശോധിക്കാനായില്ല. പിന്നീട് വീണ്ടും ശ്രമിക്കുക.',
+  'Could not download or open the update. Try again.':
+      'പുതിയ പതിപ്പ് ഡൗൺലോഡ് ചെയ്യാനോ തുറക്കാനോ കഴിഞ്ഞില്ല. വീണ്ടും ശ്രമിക്കുക.',
+  'Allow installs from Believers Palace in Android settings, then check again.':
+      'ആൻഡ്രോയിഡ് ക്രമീകരണങ്ങളിൽ Believers Palace-ൽ നിന്നുള്ള ഇൻസ്റ്റാളേഷൻ അനുവദിച്ച് വീണ്ടും പരിശോധിക്കുക.',
   'Draft': 'കരട്',
   'Due': 'അവസാന തീയതി',
   'Edit Announcement': 'അറിയിപ്പ് തിരുത്തുക',
@@ -652,8 +666,8 @@ const malayalam = <String, String>{
   'Verify your phone number to post.':
       'പോസ്റ്റ് ചെയ്യാൻ നിങ്ങളുടെ ഫോൺ നമ്പർ സ്ഥിരീകരിക്കുക.',
   'Verify': 'സ്ഥിരീകരിക്കുക',
-  'Version {0} is ready. Download the APK, open it, and tap Update. Keep this app installed to preserve your data.':
-      '{0} പതിപ്പ് ലഭ്യമാണ്. APK ഡൗൺലോഡ് ചെയ്ത് തുറക്കുക. തുടർന്ന് ‘അപ്‌ഡേറ്റ്’ അമർത്തുക. നിങ്ങളുടെ വിവരങ്ങൾ നിലനിർത്താൻ ആപ്പ് നീക്കം ചെയ്യാതിരിക്കുക.',
+  'Version {0} is ready. Download it here, then confirm the update in Android.':
+      '{0} പതിപ്പ് ലഭ്യമാണ്. ഇവിടെ ഡൗൺലോഡ് ചെയ്ത് ആൻഡ്രോയിഡിൽ അപ്‌ഡേറ്റ് സ്ഥിരീകരിക്കുക.',
   'View All': 'എല്ലാം കാണുക',
   'View attendance and marks': 'ഹാജറും മാർക്കുകളും കാണുക',
   'View church  →': 'ദേവാലയം കാണുക  →',

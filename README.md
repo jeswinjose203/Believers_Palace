@@ -613,9 +613,13 @@ path and checksum. Keep passwords and the keystore outside version control.
 Keep the package ID and signing key consistent from release to release.
 
 The app checks for a newer APK on launch and foreground resume, with a cooldown.
-The update prompt opens the verified repository's APK in the browser. Users
-open the downloaded file and confirm Update in the Android installer. An
-installed debug build signed with a different certificate must be replaced
+Users can also tap **Profile → Settings → App Update** to check immediately.
+The app downloads the APK from the GitHub release and opens the Android
+installer for confirmation. On the first attempt, Android may ask users to
+allow installs from Believers Palace. After enabling that permission, return
+to **App Update** and try again.
+
+An installed debug build signed with a different certificate must be replaced
 before it can receive future signed releases. Set up the public HTTPS backend
 and register the release signing fingerprints with Firebase before distributing
 a build that uses phone verification.

@@ -22,8 +22,7 @@ class BelieversPalaceApp extends ConsumerStatefulWidget {
 }
 
 class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
-  final _navigator = GlobalKey<NavigatorState>();
-  late final _updates = AndroidUpdatePrompter(_navigator);
+  late final _updates = ref.read(androidUpdateProvider);
 
   @override
   void initState() {
@@ -35,12 +34,6 @@ class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
       await ref.read(authProvider.notifier).init();
       await CalendarNotificationService.instance.init();
     });
-  }
-
-  @override
-  void dispose() {
-    _updates.dispose();
-    super.dispose();
   }
 
   void _onAuthSessionChange(AuthState? prev, AuthState next) {
@@ -62,7 +55,7 @@ class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
     ref.listen<AuthState>(authProvider, _onAuthSessionChange);
 
     return MaterialApp(
-      navigatorKey: _navigator,
+      navigatorKey: _updates.navigator,
       locale: ref.watch(appLocaleProvider),
       supportedLocales: supportedAppLocales,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
