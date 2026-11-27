@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/firebase_app_config.dart';
 import 'api_service.dart';
+import 'calendar_notification_service.dart';
 
 final chatPushProvider = Provider<ChatPushService>((ref) {
   final push = ChatPushService(ref.watch(apiServiceProvider));
@@ -22,6 +23,7 @@ class ChatPushService {
   final ApiService _api;
   static const _tokenKey = 'chat_push.device_token';
   StreamSubscription<String>? _refresh;
+  StreamSubscription<RemoteMessage>? _foreground;
   String? _userId;
   bool _starting = false;
   bool _registered = false;
@@ -61,16 +63,33 @@ class ChatPushService {
         'chat_messages',
         'Chat messages',
         importance: Importance.high,
+        playSound: true,
       ));
       await _refresh?.cancel();
+      await _foreground?.cancel();
+      if (_userId != userId) return;
       _refresh = messaging.onRegistered.listen((token) {
         unawaited(_register(userId, token));
+      });
+      _foreground = FirebaseMessaging.onMessage.listen((message) {
+        if (_userId == userId && message.data['kind'] == 'direct') {
+          unawaited(_showDirectNotification());
+        }
       });
       await messaging.register();
     } catch (error) {
       debugPrint('Chat push registration is unavailable: ${error.runtimeType}');
     } finally {
       _starting = false;
+    }
+  }
+
+  Future<void> _showDirectNotification() async {
+    try {
+      await CalendarNotificationService.instance
+          .showChatMessage('Believers Palace', 'New direct message');
+    } catch (error) {
+      debugPrint('Could not display a direct message notification: $error');
     }
   }
 
@@ -114,5 +133,7 @@ class ChatPushService {
     _registered = false;
     unawaited(_refresh?.cancel());
     _refresh = null;
+    unawaited(_foreground?.cancel());
+    _foreground = null;
   }
 }

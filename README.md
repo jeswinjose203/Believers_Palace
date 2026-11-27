@@ -265,7 +265,14 @@ identity. Keep credential files outside the repository and build context.
 Register the Android and iOS apps with the same Firebase project. Follow the
 frontend README for build settings and Apple push setup. The server queues
 one delivery per eligible device and checks current membership, mute settings
-and device ownership before sending. Push alerts contain a generic preview.
+and device ownership before sending. Direct message pushes go to the other
+participant's devices. Push alerts use generic text.
+
+For the DigitalOcean deployment, set `FCM_PROJECT_ID` in the server's
+`~/believers-palace/.env` and place the Firebase service account JSON at
+`~/believers-palace/firebase-service-account.json`. Set the file owner to
+UID `10001` (the API container user) and the mode to `400`. The deploy script
+mounts the file read-only when present.
 
 ### Capacity and rollout
 

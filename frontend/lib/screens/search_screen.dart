@@ -200,7 +200,6 @@ class _ChurchCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         SizedBox(height: 150, width: double.infinity, child: Stack(fit: StackFit.expand, children: [
           if (photo != null && photo.isNotEmpty) Image.network(photo, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _churchPlaceholder()) else _churchPlaceholder(),
-          if (featured) Positioned(right: 12, top: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: const Color(0xFFFCE6F5), borderRadius: BorderRadius.circular(20)), child: Text(context.tr('Great match'), style: const TextStyle(color: _plum, fontSize: 11, fontWeight: FontWeight.w700)))),
           if ((church.address ?? '').isNotEmpty) Positioned(left: 10, bottom: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5), decoration: BoxDecoration(color: Colors.black.withValues(alpha: .58), borderRadius: BorderRadius.circular(14)), child: Text(church.address!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 10)))),
         ])),
         Padding(padding: const EdgeInsets.fromLTRB(14, 10, 14, 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

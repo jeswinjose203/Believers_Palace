@@ -495,18 +495,20 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
           padding: const EdgeInsets.all(8),
           child: Row(
             children: [
-              SegmentedButton<CalendarViewMode>(
-                segments: [
-                  ButtonSegment(value: CalendarViewMode.month, label: Text(context.tr('Month'))),
-                  ButtonSegment(value: CalendarViewMode.week, label: Text(context.tr('Week'))),
-                  ButtonSegment(value: CalendarViewMode.day, label: Text(context.tr('Day'))),
-                ],
-                selected: {ui.viewMode},
-                onSelectionChanged: (s) async {
-                  await ref.read(calendarProvider.notifier).setViewMode(s.first);
-                },
+              Expanded(
+                child: SegmentedButton<CalendarViewMode>(
+                  segments: [
+                    ButtonSegment(value: CalendarViewMode.month, label: Text(context.tr('Month'))),
+                    ButtonSegment(value: CalendarViewMode.week, label: Text(context.tr('Week'))),
+                    ButtonSegment(value: CalendarViewMode.day, label: Text(context.tr('Day'))),
+                  ],
+                  selected: {ui.viewMode},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (s) async {
+                    await ref.read(calendarProvider.notifier).setViewMode(s.first);
+                  },
+                ),
               ),
-              const Spacer(),
               IconButton(icon: const Icon(Icons.add), onPressed: _addEvent),
             ],
           ),
@@ -516,8 +518,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             locale: context.dateLocale,
             availableCalendarFormats: {
               CalendarFormat.month: context.tr('Month'),
-              CalendarFormat.twoWeeks: context.tr('Two weeks'),
-              CalendarFormat.week: context.tr('Week'),
             },
             firstDay: DateTime.utc(2020),
             lastDay: DateTime.utc(2035, 12, 31),

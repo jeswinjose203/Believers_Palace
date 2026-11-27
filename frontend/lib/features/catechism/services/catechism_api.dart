@@ -18,8 +18,12 @@ class CatechismApi {
       _client.get('/catechism-teacher/classes', (json) => json,
           query: {'page': page, 'limit': 20});
 
-  Future<Map<String, dynamic>> requestTeacherApproval() =>
-      _client.post('/catechism-teacher/classes/requests', (json) => json);
+  Future<Map<String, dynamic>> requestTeacherApproval(String classId) =>
+      _client.post('/catechism-teacher/classes/requests', (json) => json,
+          body: {'classId': classId});
+
+  Future<void> leaveTeacherClass(String classId) =>
+      _client.delete('/catechism-teacher/classes/$classId');
 
   Future<Map<String, dynamic>> teacherRequests(String churchId) => _client.get(
       '/churches/$churchId/catechism-classes/teacher-requests', (json) => json);

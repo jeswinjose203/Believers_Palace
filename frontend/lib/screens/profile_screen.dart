@@ -219,31 +219,58 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _edit(User user) async {
     final name = TextEditingController(text: user.name);
-    final unit = TextEditingController(text: user.unit ?? '');
+    final mobile = TextEditingController(text: user.phone ?? '');
+    final email = TextEditingController(text: user.email);
     String? profilePic = user.profilePic;
 
     await showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         title: Text(dialogContext.tr('Edit Profile')),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               TextField(
                 controller: name,
                 decoration: InputDecoration(labelText: dialogContext.tr('Name')),
               ),
+              const SizedBox(height: 18),
               TextField(
-                controller: unit,
-                decoration: InputDecoration(labelText: dialogContext.tr('Unit')),
+                controller: mobile,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: dialogContext.tr('Mobile'),
+                ),
               ),
+              const SizedBox(height: 18),
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  dialogContext.tr('Changing mobile requires verification.'),
+                  style: Theme.of(dialogContext).textTheme.bodySmall,
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: email,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(labelText: dialogContext.tr('Email')),
+              ),
+              const SizedBox(height: 22),
               ImagePickerField(
                 label: dialogContext.tr('Profile picture'),
                 initialUrl: user.profilePic,
                 onChanged: (url) => profilePic = url,
               ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [
@@ -256,7 +283,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               try {
                 await ref.read(authProvider.notifier).updateProfile({
                   'name': name.text,
-                  'unit': unit.text.isEmpty ? null : unit.text,
+                  'phone': mobile.text.trim().isEmpty ? null : mobile.text.trim(),
+                  'email': email.text.trim(),
                   'profilePic':
                       (profilePic == null || profilePic!.isEmpty)
                           ? null

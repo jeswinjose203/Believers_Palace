@@ -439,7 +439,8 @@ class _ConversationState extends ConsumerState<_Conversation>
   }
 
   Future<void> _send() async {
-    final body = _text.text.trim();
+    final draft = _text.text;
+    final body = draft.trim();
     if (_sending || body.isEmpty) return;
     final attempt = _retry ??= (body: body, id: newChatMessageId());
     final pending =
@@ -455,7 +456,7 @@ class _ConversationState extends ConsumerState<_Conversation>
       if (!mounted) return;
       _threadId = id;
       _retry = null;
-      _text.clear();
+      if (_text.text == draft) _text.clear();
       await _load();
     } catch (error) {
       if (mounted) _showError(context, error);
@@ -516,7 +517,6 @@ class _ConversationState extends ConsumerState<_Conversation>
                     Expanded(
                       child: TextField(
                         controller: _text,
-                        enabled: !_sending,
                         maxLength: 4000,
                         maxLines: 5,
                         minLines: 1,

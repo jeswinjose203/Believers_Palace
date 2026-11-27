@@ -38,32 +38,12 @@ func (h *Handler) TeacherRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.teacherClasses)
 	r.Post("/requests", h.requestTeacher)
+	r.Delete("/{classId}", h.leaveTeacherClass)
 	return r
 }
 
 func (h *Handler) teacherClasses(w http.ResponseWriter, r *http.Request) {
 	id := auth.MustFromContext(r.Context())
-	var assigned bool
-	if err := h.svc.repo.pool.QueryRow(r.Context(), `SELECT EXISTS(
-		SELECT 1 FROM catechism_teachers t JOIN catechism_classes c ON c.id=t.class_id
-		WHERE t.user_id=$1 AND c.church_id=NULLIF($2,'')::uuid
-	) OR EXISTS(
-		SELECT 1 FROM catechism_classes c WHERE c.teacher_user_id=$1 AND c.church_id=NULLIF($2,'')::uuid
-	)`, id.UserID, id.ChurchID).Scan(&assigned); err != nil {
-		h.writeError(w, err)
-		return
-	}
-	if !assigned {
-		var requestStatus string
-		if err := h.svc.repo.pool.QueryRow(r.Context(), `SELECT COALESCE((
-			SELECT status FROM catechism_teacher_requests WHERE user_id=$1 AND church_id=NULLIF($2,'')::uuid
-			ORDER BY created_at DESC LIMIT 1),'none')`, id.UserID, id.ChurchID).Scan(&requestStatus); err != nil {
-			h.writeError(w, err)
-			return
-		}
-		httpx.JSON(w, http.StatusOK, map[string]any{"classes": []any{}, "requestStatus": requestStatus})
-		return
-	}
 	p := httpx.ParsePageParams(r)
 	h.workspaceJSON(w, r, `WITH assigned AS (
 		SELECT class_id FROM catechism_teachers WHERE user_id=$1
@@ -73,10 +53,62 @@ func (h *Handler) teacherClasses(w http.ResponseWriter, r *http.Request) {
 		FROM assigned a JOIN catechism_classes c ON c.id=a.class_id
 		JOIN churches ch ON ch.id=c.church_id
 		LEFT JOIN catechism_teachers t ON t.class_id=c.id AND t.user_id=$1
+		WHERE c.church_id=NULLIF($4,'')::uuid
 		ORDER BY ch.name, c.name, c.id LIMIT $2 OFFSET $3
+	), available AS (
+		SELECT c.id,c.name,c.level,c.status,
+			CASE WHEN EXISTS(SELECT 1 FROM catechism_teachers t WHERE t.class_id=c.id AND t.user_id=$1)
+				OR c.teacher_user_id=$1 THEN 'approved'
+				ELSE COALESCE((SELECT q.status FROM catechism_teacher_requests q
+					WHERE q.user_id=$1 AND q.class_id=c.id AND q.status IN ('pending','rejected')
+					ORDER BY q.created_at DESC LIMIT 1),'none')
+			END AS "requestStatus"
+		FROM catechism_classes c WHERE c.church_id=NULLIF($4,'')::uuid
+		ORDER BY c.name,c.id
 	)
-	SELECT jsonb_build_object('requestStatus','approved','classes', COALESCE(jsonb_agg(to_jsonb(classes)
-		ORDER BY church,name,id), '[]')) FROM classes`, id.UserID, p.Limit+1, p.Offset)
+	SELECT jsonb_build_object(
+		'classes',COALESCE((SELECT jsonb_agg(to_jsonb(classes) ORDER BY church,name,id) FROM classes),'[]'),
+		'availableClasses',COALESCE((SELECT jsonb_agg(to_jsonb(available) ORDER BY name,id) FROM available),'[]')
+	)`, id.UserID, p.Limit+1, p.Offset, id.ChurchID)
+}
+
+func (h *Handler) leaveTeacherClass(w http.ResponseWriter, r *http.Request) {
+	id := auth.MustFromContext(r.Context())
+	classID := chi.URLParam(r, "classId")
+	if id.Role != auth.RoleUser || id.UserID == "" || id.ChurchID == "" {
+		h.writeError(w, ErrForbidden)
+		return
+	}
+	tx, err := h.svc.repo.pool.Begin(r.Context())
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+	tag, err := tx.Exec(r.Context(), `DELETE FROM catechism_teachers t USING catechism_classes c
+		WHERE t.class_id=c.id AND t.class_id=$1 AND t.user_id=$2 AND c.church_id=$3`,
+		classID, id.UserID, id.ChurchID)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	removed := tag.RowsAffected() > 0
+	tag, err = tx.Exec(r.Context(), `UPDATE catechism_classes SET teacher_user_id=NULL,teacher_name=NULL
+		WHERE id=$1 AND church_id=$2 AND teacher_user_id=$3`, classID, id.ChurchID, id.UserID)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	removed = removed || tag.RowsAffected() > 0
+	if !removed {
+		h.writeError(w, ErrNotFound)
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]bool{"left": true})
 }
 func (h *Handler) workspaceJSON(w http.ResponseWriter, r *http.Request, query string, args ...any) {
 	w.Header().Set("Cache-Control", "no-store")

@@ -13,6 +13,11 @@ export APP_ENV=production
 export HTTP_BIND_ADDRESS=127.0.0.1 DB_BIND_ADDRESS=127.0.0.1
 compose=(docker compose --project-name believers_palace --env-file "$env_file"
     -f "$source_dir/docker-compose.yml" -f "$source_dir/deploy/docker-compose.production.yml")
+firebase_credentials="$deploy_dir/firebase-service-account.json"
+if [[ -f "$firebase_credentials" ]]; then
+    export FCM_CREDENTIALS_FILE="$firebase_credentials"
+    compose+=(-f "$source_dir/deploy/docker-compose.push.yml")
+fi
 
 cd "$source_dir"
 "${compose[@]}" build api
