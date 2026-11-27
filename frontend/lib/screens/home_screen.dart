@@ -104,7 +104,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             children: [
                               Text(context.tr('DISCOVER'), style: const TextStyle(fontSize: 9, letterSpacing: 1.6, color: Color(0xFF9A8A9D), fontWeight: FontWeight.w700)),
                               const SizedBox(height: 5),
-                              Text(context.tr('Churches for you'), style: const TextStyle(color: _ink, fontSize: 20, fontWeight: FontWeight.w700)),
+                              Text(context.tr('Churches for you'), style: const TextStyle(color: _plum, fontSize: 20, fontWeight: FontWeight.w700)),
                             ],
                           ),
                         ),
@@ -194,7 +194,7 @@ class _ChurchCard extends StatelessWidget {
           Positioned(left: 8, bottom: 8, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4), decoration: BoxDecoration(color: Colors.black.withValues(alpha: .53), borderRadius: BorderRadius.circular(12)), child: Text('◉  4.8 mi', style: const TextStyle(color: Colors.white, fontSize: 7)))),
         ])),
         Padding(padding: const EdgeInsets.fromLTRB(9, 7, 9, 8), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [Expanded(child: Text(church.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: featured ? _plum : _ink, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: featured ? 'serif' : null))), const Icon(Icons.favorite_border, color: Color(0xFF9A879E), size: 15)]),
+          Text(church.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: _plum, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: featured ? 'serif' : null)),
           Text(church.address ?? context.tr('Community Church'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF9C929F), fontSize: 7)),
           const SizedBox(height: 6),
           const Divider(height: 1, color: Color(0xFFF0EDF1)),
