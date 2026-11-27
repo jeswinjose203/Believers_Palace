@@ -60,7 +60,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
     final foregroundStarted = DateTime.now();
     _chatTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       final user = ref.read(authProvider).user;
-      if (user == null || !user.emailVerified) return;
+      if (user == null) return;
       _chatNotifications.poll(user.id, (title, body) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -76,8 +76,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
   void _startChatPush() {
     final user = ref.read(authProvider).user;
-    if (user?.emailVerified == true) {
-      unawaited(ref.read(chatPushProvider).start(user!.id));
+    if (user != null) {
+      unawaited(ref.read(chatPushProvider).start(user.id));
     }
   }
 
@@ -94,8 +94,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
   @override
   Widget build(BuildContext context) {
     ref.listen(
-      authProvider
-          .select((state) => (state.user?.id, state.user?.emailVerified)),
+      authProvider.select((state) => state.user?.id),
       (_, next) {
         _chatNotifications.pause();
         _startChatPush();

@@ -24,23 +24,6 @@ func captureLog(fn func()) string {
 	return buf.String()
 }
 
-func TestLogMailerSendEmailVerification(t *testing.T) {
-	m := NewLogMailer("http://localhost:8080")
-
-	out := captureLog(func() {
-		if err := m.SendEmailVerification(context.Background(), "jane@example.com", "012345"); err != nil {
-			t.Fatalf("SendEmailVerification returned error: %v", err)
-		}
-	})
-
-	if !strings.Contains(out, "jane@example.com") {
-		t.Errorf("log output missing recipient; got: %q", out)
-	}
-	if !strings.Contains(out, "code=012345") {
-		t.Errorf("log output missing code; got: %q", out)
-	}
-}
-
 func TestLogMailerSendPasswordReset(t *testing.T) {
 	m := NewLogMailer("http://localhost:8080")
 

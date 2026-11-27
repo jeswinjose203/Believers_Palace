@@ -11,7 +11,6 @@ import 'certificates_screen.dart';
 import 'churches_screen.dart';
 import 'my_bookings_screen.dart';
 import 'settings_screen.dart';
-import 'verify_email_screen.dart';
 
 const kProfilePurple = Color(0xFF5B2A91);
 const kProfilePurpleLight = Color(0xFF7B3FB5);
@@ -114,22 +113,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 icon: Icons.mail_outline,
                 label: context.tr('Email'),
                 value: user.email,
-                trailing: user.emailVerified
-                    ? Padding(
-                        padding: EdgeInsets.only(left: 8),
-                        child: Tooltip(
-                          message: context.tr('Email verified'),
-                          child: Icon(Icons.verified, color: Colors.green),
-                        ),
-                      )
-                    : null,
-                onTap: user.emailVerified
-                    ? null
-                    : () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const VerifyEmailScreen(),
-                          ),
-                        ),
               ),
               _InfoRow(
                 icon: Icons.phone_outlined,
@@ -191,11 +174,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const CertificatesScreen()),
                 ),
-              ),
-              _MenuRow(
-                icon: Icons.help_outline,
-                title: context.tr('Help & Support'),
-                onTap: () => _comingSoon('Help & Support'),
               ),
               _MenuRow(
                 icon: Icons.info_outline,

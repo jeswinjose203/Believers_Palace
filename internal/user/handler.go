@@ -31,9 +31,6 @@ func (h *Handler) AuthRoutes() chi.Router {
 	r.Post("/logout", h.logout)
 	r.Post("/forgot-password", h.forgotPassword)
 	r.Post("/reset-password", h.resetPassword)
-	r.Post("/verify-email", h.verifyEmail)
-	r.Get("/verify-email", h.verifyEmailPage)
-	r.Post("/resend-verification", h.resendVerification)
 	return r
 }
 
@@ -169,68 +166,6 @@ func (h *Handler) resetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "password updated"})
-}
-
-func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
-	var in VerifyEmailInput
-	if err := httpx.DecodeJSON(r, &in); err != nil {
-		httpx.ErrorCode(w, http.StatusBadRequest, "invalid JSON body", "bad_request")
-		return
-	}
-	err := h.svc.VerifyEmail(r.Context(), in)
-	if errors.Is(err, ErrTokenInvalid) {
-		httpx.ErrorCode(w, http.StatusBadRequest, "invalid or expired verification code", "bad_request")
-		return
-	}
-	if err != nil {
-		h.writeServiceError(w, err)
-		return
-	}
-	httpx.JSON(w, http.StatusOK, map[string]string{"message": "email verified"})
-}
-
-// verifyEmailPage handles the GET link embedded in older verification emails and
-// returns a minimal HTML confirmation page (so it works from any email client).
-func (h *Handler) verifyEmailPage(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
-	err := h.svc.VerifyEmail(r.Context(), VerifyEmailInput{Token: token})
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(verifyHTML(false)))
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(verifyHTML(true)))
-}
-
-func verifyHTML(ok bool) string {
-	title, msg := "Email verified", "Your email address has been verified. You can return to the app."
-	if !ok {
-		title, msg = "Verification failed", "This verification link is invalid or has expired. Request a new one from the app."
-	}
-	return `<!doctype html><html><head><meta charset="utf-8">` +
-		`<meta name="viewport" content="width=device-width, initial-scale=1">` +
-		`<title>` + title + `</title></head>` +
-		`<body style="font-family:sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;text-align:center">` +
-		`<h1>` + title + `</h1><p>` + msg + `</p></body></html>`
-}
-
-func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {
-	var in ResendVerificationInput
-	if err := httpx.DecodeJSON(r, &in); err != nil {
-		httpx.ErrorCode(w, http.StatusBadRequest, "invalid JSON body", "bad_request")
-		return
-	}
-	// Always succeed to avoid account enumeration.
-	if err := h.svc.ResendVerification(r.Context(), in); err != nil {
-		h.writeServiceError(w, err)
-		return
-	}
-	httpx.JSON(w, http.StatusOK, map[string]string{
-		"message": "check your inbox for a recent verification code",
-	})
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

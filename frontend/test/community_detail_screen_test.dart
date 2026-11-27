@@ -199,7 +199,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('unverified community admins see a verification prompt',
+  testWidgets('community admins can open chat without email verification',
       (tester) async {
     final api = _CommunityApiService();
     await tester.pumpWidget(
@@ -228,8 +228,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Test community'), findsOneWidget);
-    expect(find.text('Verify your email to access chat.'), findsOneWidget);
-    expect(api._initialLatestRequested, isFalse);
+    expect(api._initialLatestRequested, isTrue);
     expect(tester.takeException(), isNull);
   });
 

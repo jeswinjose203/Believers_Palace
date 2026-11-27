@@ -1,19 +1,10 @@
 package auth
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 )
-
-// HashEmailVerificationCode keys the digest because six-digit codes have a
-// small enough search space to recover from an unkeyed hash.
-func (m *TokenManager) HashEmailVerificationCode(email, code string) string {
-	mac := hmac.New(sha256.New, m.secret)
-	mac.Write([]byte("email-verification\x00" + email + "\x00" + code))
-	return hex.EncodeToString(mac.Sum(nil))
-}
 
 // GenerateOpaqueToken returns a cryptographically random, URL-safe token (the
 // raw value given to the client) together with its SHA-256 hash (the value

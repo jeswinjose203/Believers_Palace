@@ -69,8 +69,9 @@ class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
       title: 'Believers Palace',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
+      fontFamily: 'Poppins',
+      colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+      useMaterial3: true,
       ),
       home: auth.isLoading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))

@@ -208,7 +208,6 @@ const malayalam = <String, String>{
   'Edit product': 'ഉൽപ്പന്ന വിവരങ്ങൾ തിരുത്തുക',
   'Edit task': 'ചെയ്യേണ്ട കാര്യം തിരുത്തുക',
   'Edit': 'തിരുത്തുക',
-  'Email verified': 'ഇമെയിൽ സ്ഥിരീകരിച്ചു',
   'Email': 'ഇമെയിൽ',
   'Enable chat notifications': 'ചാറ്റ് അറിയിപ്പുകൾ പ്രവർത്തനക്ഷമമാക്കുക',
   'End date (optional)': 'അവസാന തീയതി (നിർബന്ധമില്ല)',
@@ -647,17 +646,11 @@ const malayalam = <String, String>{
   'Verification code': 'സ്ഥിരീകരണ കോഡ്',
   'Verification is unavailable for this country code.':
       'ഈ രാജ്യകോഡിലുള്ള നമ്പറുകൾ സ്ഥിരീകരിക്കാൻ കഴിയില്ല.',
-  'Verify Email': 'ഇമെയിൽ സ്ഥിരീകരിക്കുക',
   'Verify and create account': 'സ്ഥിരീകരിച്ച് അക്കൗണ്ട് സൃഷ്ടിക്കുക',
-  'Verify email': 'ഇമെയിൽ സ്ഥിരീകരിക്കുക',
   'Verify mobile number': 'മൊബൈൽ നമ്പർ സ്ഥിരീകരിക്കുക',
   'Verify phone': 'ഫോൺ നമ്പർ സ്ഥിരീകരിക്കുക',
-  'Verify your account to post': 'പോസ്റ്റ് ചെയ്യാൻ അക്കൗണ്ട് സ്ഥിരീകരിക്കുക',
-  'Verify your email to access chat.':
-      'ചാറ്റ് ഉപയോഗിക്കാൻ ഇമെയിൽ സ്ഥിരീകരിക്കുക.',
-  'Verify your email to comment.': 'അഭിപ്രായം ചേർക്കാൻ ഇമെയിൽ സ്ഥിരീകരിക്കുക.',
-  'Verify your email to share posts in chats.':
-      'ചാറ്റുകളിൽ പോസ്റ്റുകൾ പങ്കിടാൻ ഇമെയിൽ സ്ഥിരീകരിക്കുക.',
+  'Verify your phone number to post.':
+      'പോസ്റ്റ് ചെയ്യാൻ നിങ്ങളുടെ ഫോൺ നമ്പർ സ്ഥിരീകരിക്കുക.',
   'Verify': 'സ്ഥിരീകരിക്കുക',
   'Version {0} is ready. Download the APK, open it, and tap Update. Keep this app installed to preserve your data.':
       '{0} പതിപ്പ് ലഭ്യമാണ്. APK ഡൗൺലോഡ് ചെയ്ത് തുറക്കുക. തുടർന്ന് ‘അപ്‌ഡേറ്റ്’ അമർത്തുക. നിങ്ങളുടെ വിവരങ്ങൾ നിലനിർത്താൻ ആപ്പ് നീക്കം ചെയ്യാതിരിക്കുക.',

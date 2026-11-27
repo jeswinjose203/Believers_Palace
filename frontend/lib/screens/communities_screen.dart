@@ -11,7 +11,6 @@ import '../models/community_models.dart';
 import '../services/api_service.dart';
 import '../services/chat_live_service.dart';
 import '../services/chat_notification_service.dart';
-import '../widgets/chat_email_verification.dart';
 import '../widgets/chat_notification_button.dart';
 import '../widgets/group_chat_bubble.dart';
 import '../widgets/image_picker_field.dart';
@@ -215,10 +214,10 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
                 }
                 final community = items[index];
                 final user = ref.read(authProvider).user;
-                final preview = joinedOnly && user?.emailVerified == true
+                final preview = joinedOnly && user != null
                     ? ref
                         .read(chatNotificationServiceProvider)
-                        .communityPreview(user?.id, community.id)
+                        .communityPreview(user.id, community.id)
                     : null;
                 final label = community.isAdmin
                     ? 'Admin'
@@ -449,8 +448,6 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
 
   ApiService get _api => ref.read(apiServiceProvider);
 
-  bool get _emailVerified => ref.read(authProvider).user?.emailVerified == true;
-
   void _stopWatchingMessages() {
     unawaited(_liveSubscription?.cancel());
     _liveSubscription = null;
@@ -458,10 +455,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
   }
 
   void _watchMessages() {
-    if (!_active ||
-        !_emailVerified ||
-        !_appResumed ||
-        _liveSubscription != null) {
+    if (!_active || !_appResumed || _liveSubscription != null) {
       return;
     }
     _liveSubscription = ref
@@ -490,7 +484,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
 
   Future<void> _load() async {
     try {
-      if (_active && _emailVerified) {
+      if (_active) {
         final page = await _api.listCommunityMessages(widget.community.id);
         if (!mounted) return;
         setState(() {
@@ -536,7 +530,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
 
   void _scheduleNext() {
     _timer?.cancel();
-    if (!mounted || !_active || !_appResumed || !_emailVerified) return;
+    if (!mounted || !_active || !_appResumed) return;
     if (_catchUp && _failures == 0) {
       _catchUp = false;
       _timer = Timer(Duration.zero, _poll);
@@ -581,8 +575,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
         _polling ||
         _loading ||
         !mounted ||
-        !_appResumed ||
-        !_emailVerified) {
+        !_appResumed) {
       return;
     }
     _polling = true;
@@ -772,19 +765,6 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
 
   @override
   Widget build(BuildContext context) {
-    final verified = ref.watch(
-      authProvider.select((state) => state.user?.emailVerified == true),
-    );
-    ref.listen(
-      authProvider.select((state) => state.user?.emailVerified == true),
-      (_, verified) {
-        if (verified && _active) {
-          _load();
-        } else if (!verified) {
-          _stopWatchingMessages();
-        }
-      },
-    );
     final status = widget.community.status;
     final subtitle = _active
         ? widget.community.isAdmin
@@ -812,7 +792,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
           ],
         ),
         actions: [
-          if (_active && verified)
+          if (_active)
             ChatNotificationButton(
               kind: ChatKind.community,
               id: widget.community.id,
@@ -824,11 +804,11 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                 icon: const Icon(Icons.exit_to_app)),
         ],
       ),
-      body: _body(status, verified),
+      body: _body(status),
     );
   }
 
-  Widget _body(String status, bool verified) {
+  Widget _body(String status) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null && _messages.isEmpty && _active) {
       return Center(
@@ -877,10 +857,8 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
             ),
           ),
         if (widget.community.isAdmin) _adminPanel(),
-        Expanded(
-          child: verified ? _chat() : const ChatEmailVerification(),
-        ),
-        if (verified) _composer(),
+        Expanded(child: _chat()),
+        _composer(),
       ],
     );
   }

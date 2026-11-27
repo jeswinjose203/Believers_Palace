@@ -41,7 +41,7 @@ func (h *Handler) WithUploadConcurrency(limit int) *Handler {
 	return h
 }
 
-func (h *Handler) Routes(verifiedEmail func(http.Handler) http.Handler) chi.Router {
+func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -58,16 +58,13 @@ func (h *Handler) Routes(verifiedEmail func(http.Handler) http.Handler) chi.Rout
 	r.Get("/posts/{id}", h.onePost)
 	r.Get("/posts/{id}/comments", h.comments)
 	r.Get("/posts/{id}/likes", h.likers)
-	r.Group(func(r chi.Router) {
-		r.Use(verifiedEmail)
-		r.Post("/posts/{id}/comments", h.comment)
-		r.Get("/people", h.people)
-		r.Get("/people/{id}/thread", h.findThread)
-		r.Get("/threads", h.inbox)
-		r.Post("/messages", h.send)
-		r.Get("/threads/{id}/messages", h.messages)
-		r.Delete("/threads/{id}", h.hide)
-	})
+	r.Post("/posts/{id}/comments", h.comment)
+	r.Get("/people", h.people)
+	r.Get("/people/{id}/thread", h.findThread)
+	r.Get("/threads", h.inbox)
+	r.Post("/messages", h.send)
+	r.Get("/threads/{id}/messages", h.messages)
+	r.Delete("/threads/{id}", h.hide)
 	return r
 }
 
@@ -135,7 +132,7 @@ func (h *Handler) people(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.db.Query(r.Context(), `SELECT id,name,username FROM users
-        WHERE id<>$1 AND email_verified AND lower(username COLLATE "C") LIKE $2 ESCAPE '!' ORDER BY lower(username COLLATE "C") USING ~<~ LIMIT 20`,
+        WHERE id<>$1 AND lower(username COLLATE "C") LIKE $2 ESCAPE '!' ORDER BY lower(username COLLATE "C") USING ~<~ LIMIT 20`,
 		viewer(r), strings.ReplaceAll(prefix, "_", "!_")+"%")
 	if err != nil {
 		failure(w, err)
