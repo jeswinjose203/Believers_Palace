@@ -2,8 +2,8 @@ package media
 
 import (
 	"errors"
-	"io"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -33,6 +33,7 @@ func (h *Handler) Routes(authMiddleware func(http.Handler) http.Handler) chi.Rou
 
 	// Public download.
 	r.Get("/{key}", h.download)
+	r.Head("/{key}", h.download)
 
 	// Authenticated upload.
 	r.Group(func(protected chi.Router) {
@@ -88,8 +89,7 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", f.MimeType)
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, f.Reader)
+	http.ServeContent(w, r, key, time.Time{}, f.Reader)
 }
 
 func (h *Handler) writeError(w http.ResponseWriter, err error) {

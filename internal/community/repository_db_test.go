@@ -2,6 +2,7 @@ package community
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -29,13 +30,24 @@ func newCommunityTestPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
+func seedCommunityChurch(t *testing.T, pool *pgxpool.Pool) string {
+	t.Helper()
+	var id string
+	if err := pool.QueryRow(context.Background(), `INSERT INTO churches (name) VALUES ('Community test church') RETURNING id`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM churches WHERE id=$1`, id) })
+	return id
+}
+
 func seedCommunity(t *testing.T, pool *pgxpool.Pool) (string, string) {
 	t.Helper()
 	ctx := context.Background()
+	churchID := seedCommunityChurch(t, pool)
 	var userID string
-	if err := pool.QueryRow(ctx, `INSERT INTO users (name,email,password_hash)
-		VALUES ('community seq user',$1,'test') RETURNING id`,
-		fmt.Sprintf("community-seq-%d@example.test", time.Now().UnixNano())).
+	if err := pool.QueryRow(ctx, `INSERT INTO users (name,email,password_hash,church_id)
+		VALUES ('community seq user',$1,'test',$2) RETURNING id`,
+		fmt.Sprintf("community-seq-%d@example.test", time.Now().UnixNano()), churchID).
 		Scan(&userID); err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
@@ -52,13 +64,14 @@ func seedCommunity(t *testing.T, pool *pgxpool.Pool) (string, string) {
 
 func TestDBCommunityImagePersists(t *testing.T) {
 	pool := newCommunityTestPool(t)
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 
 	ctx := context.Background()
+	churchID := seedCommunityChurch(t, pool)
 	var userID string
-	if err := pool.QueryRow(ctx, `INSERT INTO users (name,email,password_hash)
-		VALUES ('community image user',$1,'test') RETURNING id`,
-		fmt.Sprintf("community-image-%d@example.test", time.Now().UnixNano())).
+	if err := pool.QueryRow(ctx, `INSERT INTO users (name,email,password_hash,church_id)
+		VALUES ('community image user',$1,'test',$2) RETURNING id`,
+		fmt.Sprintf("community-image-%d@example.test", time.Now().UnixNano()), churchID).
 		Scan(&userID); err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
@@ -85,14 +98,20 @@ func TestDBCommunityImagePersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list communities: %v", err)
 	}
-	if len(communities) != 1 || communities[0].Image == nil || *communities[0].Image != image {
-		t.Fatalf("listed communities = %+v, want community image %q", communities, image)
+	for _, item := range communities {
+		if item.ID == created.ID {
+			if item.Image == nil || *item.Image != image {
+				t.Fatalf("listed community image = %v, want %q", item.Image, image)
+			}
+			return
+		}
 	}
+	t.Fatal("created community is missing from the list")
 }
 
 func TestDBConcurrentCommunityMessagesHaveGaplessCursor(t *testing.T) {
 	pool := newCommunityTestPool(t)
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 	repo := NewRepository(pool)
 	communityID, userID := seedCommunity(t, pool)
 
@@ -152,5 +171,75 @@ func TestDBConcurrentCommunityMessagesHaveGaplessCursor(t *testing.T) {
 	}
 	if seenMessages != count {
 		t.Fatalf("cursor returned %d messages; want %d", seenMessages, count)
+	}
+}
+
+func TestDBConcurrentAdminDeparturesKeepAnAdmin(t *testing.T) {
+	pool := newCommunityTestPool(t)
+	t.Cleanup(pool.Close)
+	communityID, first := seedCommunity(t, pool)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	var second string
+	if err := pool.QueryRow(ctx, `INSERT INTO users (name,email,password_hash)
+		VALUES ('Second admin',gen_random_uuid()::text || '@example.test','test') RETURNING id`).
+		Scan(&second); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id=$1`, second)
+	})
+	if _, err := pool.Exec(ctx, `INSERT INTO community_memberships (community_id,user_id,status,is_admin)
+		VALUES ($1,$2,'active',true)`, communityID, second); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewRepository(pool)
+	outcomes := make(chan error, 2)
+	go func() { outcomes <- repo.Leave(ctx, communityID, first) }()
+	go func() { outcomes <- repo.Leave(ctx, communityID, second) }()
+	left, stayed := 0, 0
+	for range 2 {
+		switch err := <-outcomes; {
+		case err == nil:
+			left++
+		case errors.Is(err, ErrLastAdmin):
+			stayed++
+		default:
+			t.Errorf("unexpected departure error: %v", err)
+		}
+	}
+	if left != 1 || stayed != 1 {
+		t.Fatalf("departures = %d, retained admins = %d", left, stayed)
+	}
+}
+
+func TestDBCommunityDiscoveryFollowsSelectedChurch(t *testing.T) {
+	pool := newCommunityTestPool(t)
+	t.Cleanup(pool.Close)
+	ctx := context.Background()
+	first, member := seedCommunity(t, pool)
+	second, other := seedCommunity(t, pool)
+	repo := NewRepository(pool)
+	check := func(joined bool, want string) {
+		t.Helper()
+		items, err := repo.List(ctx, member, ListOptions{Joined: joined, Limit: 20})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 1 || items[0].ID != want {
+			t.Fatalf("joined=%t got %v, want only %s", joined, items, want)
+		}
+	}
+	check(false, first)
+	if _, err := repo.RequestMembership(ctx, second, member); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected cross-church request to fail, got %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE users SET church_id=(SELECT church_id FROM users WHERE id=$2) WHERE id=$1`, member, other); err != nil {
+		t.Fatal(err)
+	}
+	check(false, second)
+	check(true, first)
+	if _, err := repo.RequestMembership(ctx, second, member); err != nil {
+		t.Fatal(err)
 	}
 }

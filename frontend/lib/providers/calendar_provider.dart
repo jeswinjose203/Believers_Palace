@@ -51,6 +51,19 @@ class CalendarNotifier extends StateNotifier<CalendarUiState> {
  
   final ApiService _api;
  
+  /// Clears in-memory calendar state (e.g. on logout or account switch).
+  void reset() {
+    final now = DateTime.now();
+    state = CalendarUiState(
+      viewMode: CalendarViewMode.month,
+      focusedDay: now,
+      selectedDay: now,
+      schedule: const [],
+      preferences: null,
+      loading: false,
+    );
+  }
+
   Future<void> bootstrap() async {
     state = state.copyWith(loading: true);
     try {
@@ -102,10 +115,7 @@ class CalendarNotifier extends StateNotifier<CalendarUiState> {
  
   Future<void> selectDay(DateTime day) async {
     state = state.copyWith(selectedDay: day, focusedDay: day);
-    if (state.viewMode == CalendarViewMode.week ||
-        state.viewMode == CalendarViewMode.day) {
-      await refreshSchedule();
-    }
+    await refreshSchedule();
   }
 }
  

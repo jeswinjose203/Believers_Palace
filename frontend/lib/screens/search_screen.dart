@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
@@ -101,7 +102,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       try {
         full = await ref.read(apiServiceProvider).getChurch(existing.id);
       } catch (e) {
-        _toast('Could not load church details: $e');
+        if (mounted) _toast(context.tr('Could not load church details: {0}', [e]));
         return;
       }
     }
@@ -118,17 +119,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete ${c.name}?'),
-        content: const Text(
-            'This permanently removes the church and is not reversible.'),
+        title: Text(context.tr('Delete {0}?', [c.name])),
+        content: Text(
+            context.tr('This permanently removes the church and is not reversible.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            child: Text(context.tr('Delete')),
           ),
         ],
       ),
@@ -136,7 +137,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (confirmed != true) return;
     try {
       await ref.read(apiServiceProvider).deleteChurch(c.id);
-      _toast('Church deleted');
+      if (mounted) _toast(context.tr('Church deleted'));
       _refresh();
     } catch (e) {
       _toast(e.toString());
@@ -147,12 +148,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Future<void> _setMyChurch(Church c) async {
     final user = ref.read(authProvider).user;
     if (user?.churchId == c.id) {
-      _toast('${c.name} is already your church');
+      _toast(context.tr('{0} is already your church', [c.name]));
       return;
     }
     try {
       await ref.read(authProvider.notifier).updateProfile({'churchId': c.id});
-      _toast('${c.name} set as your church');
+      if (mounted) _toast(context.tr('{0} set as your church', [c.name]));
     } catch (e) {
       _toast(e.toString());
     }
@@ -174,7 +175,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ? FloatingActionButton.extended(
               onPressed: () => _createOrEdit(),
               icon: const Icon(Icons.add),
-              label: const Text('Add Church'),
+              label: Text(context.tr('Add Church')),
             )
           : null,
       body: Column(
@@ -185,13 +186,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Find your church',
+                Text(
+                  context.tr('Find your church'),
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
-                const Text(
-                  'A community to connect, pray and gather.',
+                Text(
+                  context.tr('A community to connect, pray and gather.'),
                   style: TextStyle(color: Colors.black54, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
@@ -201,7 +202,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   textInputAction: TextInputAction.search,
                   onSubmitted: (_) => _refresh(),
                   decoration: InputDecoration(
-                    hintText: 'Search by church name or place',
+                    hintText: context.tr('Search by church name or place'),
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _search.text.isEmpty
                         ? null
@@ -235,11 +236,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('Error: ${snap.error}',
+                          Text(context.tr('Error: {0}', [snap.error]),
                               textAlign: TextAlign.center),
                           const SizedBox(height: 8),
                           FilledButton(
-                              onPressed: _refresh, child: const Text('Retry')),
+                              onPressed: _refresh, child: Text(context.tr('Retry'))),
                         ],
                       ),
                     ),
@@ -248,7 +249,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 final churches = snap.data?.data ?? [];
                 final total = snap.data?.pagination.total ?? churches.length;
                 if (churches.isEmpty) {
-                  return const Center(child: Text('No churches found.'));
+                  return Center(child: Text(context.tr('No churches found.')));
                 }
                 return RefreshIndicator(
                   onRefresh: _refresh,
@@ -260,7 +261,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: Text(
-                            total == 1 ? '1 church' : '$total churches',
+                            total == 1 ? context.tr('1 church') : context.tr('{0} churches', [total]),
                             style: const TextStyle(
                                 fontSize: 16, fontWeight: FontWeight.w700),
                           ),
@@ -409,14 +410,14 @@ class _ChurchCard extends StatelessWidget {
                           if (v == 'delete') onDelete();
                         },
                         itemBuilder: (_) => [
-                          const PopupMenuItem(
+                          PopupMenuItem(
                             value: 'edit',
-                            child: Text('Edit'),
+                            child: Text(context.tr('Edit')),
                           ),
                           if (canDelete)
-                            const PopupMenuItem(
+                            PopupMenuItem(
                               value: 'delete',
-                              child: Text('Delete'),
+                              child: Text(context.tr('Delete')),
                             ),
                         ],
                       ),
@@ -454,7 +455,7 @@ class _ChurchCard extends StatelessWidget {
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10)),
                         ),
-                        child: Text(isMine ? 'Your church' : 'Set my church'),
+                        child: Text(isMine ? context.tr('Your church') : context.tr('Set my church')),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -469,7 +470,7 @@ class _ChurchCard extends StatelessWidget {
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10)),
                         ),
-                        child: const Text('View church  →'),
+                        child: Text(context.tr('View church  →')),
                       ),
                     ),
                   ],

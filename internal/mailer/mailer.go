@@ -10,11 +10,6 @@ import (
 	"net/url"
 )
 
-// emailVerificationLink builds the URL a user visits to verify their email.
-func emailVerificationLink(baseURL, token string) string {
-	return baseURL + "/api/auth/verify-email?token=" + url.QueryEscape(token)
-}
-
 // passwordResetLink builds the URL a user visits to reset their password.
 func passwordResetLink(baseURL, token string) string {
 	return baseURL + "/api/auth/reset-password?token=" + url.QueryEscape(token)
@@ -24,8 +19,8 @@ func passwordResetLink(baseURL, token string) string {
 type Mailer interface {
 	// SendPasswordReset delivers a password reset link/token to the given email.
 	SendPasswordReset(ctx context.Context, email, resetToken string) error
-	// SendEmailVerification delivers an email verification token to the given email.
-	SendEmailVerification(ctx context.Context, email, verifyToken string) error
+	// SendEmailVerification delivers a verification code to the given email.
+	SendEmailVerification(ctx context.Context, email, code string) error
 }
 
 // LogMailer is a development Mailer that writes messages to the standard logger
@@ -47,9 +42,8 @@ func (m *LogMailer) SendPasswordReset(_ context.Context, email, resetToken strin
 	return nil
 }
 
-// SendEmailVerification logs the email verification token and link.
-func (m *LogMailer) SendEmailVerification(_ context.Context, email, verifyToken string) error {
-	log.Printf("[mailer] email verification for %s: token=%s link=%s",
-		email, verifyToken, emailVerificationLink(m.baseURL, verifyToken))
+// SendEmailVerification logs the email verification code.
+func (m *LogMailer) SendEmailVerification(_ context.Context, email, code string) error {
+	log.Printf("[mailer] email verification for %s: code=%s", email, code)
 	return nil
 }

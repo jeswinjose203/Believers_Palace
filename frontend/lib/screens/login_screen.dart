@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import 'forgot_password_screen.dart';
 import 'signup_screen.dart';
@@ -72,6 +73,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 children: [
+                  const Align(
+                    alignment: Alignment.centerRight,
+                    child: LanguagePickerButton(),
+                  ),
+
                   // Logo moved higher
                   const SizedBox(height: 10),
 
@@ -87,8 +93,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 12),
 
                   // Welcome text
-                  const Text(
-                    'Welcome to Believers Palace',
+                  Text(
+                    context.tr('Welcome to Believers Palace'),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: 'Times New Roman',
@@ -131,8 +137,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             color: Colors.white,
                             fontSize: 12,
                           ),
-                          decoration: const InputDecoration(
-                            hintText: 'email',
+                          decoration: InputDecoration(
+                            hintText: context.tr('email'),
                             hintStyle: TextStyle(
                               color: Color(0xFFDAB8D7),
                               fontSize: 10,
@@ -167,7 +173,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             fontSize: 12,
                           ),
                           decoration: InputDecoration(
-                            hintText: 'password',
+                            hintText: context.tr('password'),
                             hintStyle: const TextStyle(
                               color: Color(0xFFDAB8D7),
                               fontSize: 10,
@@ -217,8 +223,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               minimumSize: const Size(0, 25),
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            child: const Text(
-                              'Forgot password?',
+                            child: Text(
+                              context.tr('Forgot password?'),
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 9,
@@ -233,7 +239,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   if (_error != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      _error!,
+                      context.tr(_error!),
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.red, fontSize: 11),
                     ),
@@ -245,8 +251,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
-                        'Don’t have an account?',
+                      Text(
+                        context.tr('Don’t have an account?'),
                         style: TextStyle(
                           fontSize: 9,
                           color: Color(0xFF333333),
@@ -262,8 +268,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: const Text(
-                          'Sign up',
+                        child: Text(
+                          context.tr('Sign up'),
                           style: TextStyle(
                             fontSize: 9,
                             color: Colors.blue,
@@ -299,8 +305,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text(
-                              'Login',
+                          : Text(
+                              context.tr('Login'),
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
@@ -312,8 +318,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 14),
 
                   // Bottom tagline
-                  const Text(
-                    'Bringing people and places of faith together.',
+                  Text(
+                    context.tr('Bringing people and places of faith together.'),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 9,

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../services/api_service.dart';
 
-/// Lets a user verify their email by pasting the token from the verification
-/// email (for cases where the clickable link can't be opened). Also offers to
-/// resend the verification email.
+/// Lets the user request and enter an email verification code.
 class VerifyEmailScreen extends ConsumerStatefulWidget {
   const VerifyEmailScreen({super.key});
 
@@ -15,20 +15,22 @@ class VerifyEmailScreen extends ConsumerStatefulWidget {
 }
 
 class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
-  final _token = TextEditingController();
+  final _code = TextEditingController();
   bool _loading = false;
   bool _resending = false;
   String? _error;
 
   @override
   void dispose() {
-    _token.dispose();
+    _code.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    if (_token.text.trim().isEmpty) {
-      setState(() => _error = 'Verification token is required.');
+    final email = ref.read(authProvider).user?.email;
+    if (_loading || _resending || email == null) return;
+    if (_code.text.length != 6) {
+      setState(() => _error = 'Enter the six-digit code.');
       return;
     }
     setState(() {
@@ -36,28 +38,31 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
       _error = null;
     });
     try {
-      await ref.read(apiServiceProvider).verifyEmail(_token.text.trim());
-      // Refresh the user so emailVerified flips and the banner clears.
-      await ref.read(authProvider.notifier).refreshUser();
+      final auth = ref.read(authProvider.notifier);
+      await ref.read(apiServiceProvider).verifyEmail(email, _code.text);
+      await auth.refreshUser();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email verified')),
+        SnackBar(content: Text(context.tr('Email verified'))),
       );
       Navigator.of(context).pop();
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _resend() async {
-    setState(() => _resending = true);
+    setState(() {
+      _resending = true;
+      _error = null;
+    });
     try {
       await ref.read(authProvider.notifier).resendVerification();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Verification email sent')),
+          SnackBar(content: Text(context.tr('Check your inbox for a recent code.'))),
         );
       }
     } catch (e) {
@@ -76,7 +81,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     final email = ref.watch(authProvider).user?.email;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Verify Email')),
+      appBar: AppBar(title: Text(context.tr('Verify Email'))),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -84,38 +89,45 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
             children: [
               Text(
                 email == null
-                    ? 'Enter the verification token from your email.'
-                    : 'We sent a verification link to $email. '
-                        'Open it, or paste the token below.',
+                    ? context.tr('Enter the six-digit code from your email.')
+                    : context.tr('Request a code for {0} and enter it below.', [email]),
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: _token,
-                decoration:
-                    const InputDecoration(labelText: 'Verification token'),
+                controller: _code,
+                enabled: !_loading,
+                keyboardType: TextInputType.number,
+                autofillHints: const [AutofillHints.oneTimeCode],
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
+                decoration: InputDecoration(labelText: context.tr('Six-digit code')),
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _submit(),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
+                Text(context.tr(_error!), style: const TextStyle(color: Colors.red)),
               ],
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _loading ? null : _submit,
+                onPressed:
+                    _loading || _resending || email == null ? null : _submit,
                 child: _loading
                     ? const SizedBox(
                         height: 20,
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Verify'),
+                    : Text(context.tr('Verify')),
               ),
               TextButton(
-                onPressed: _resending ? null : _resend,
+                onPressed:
+                    _loading || _resending || email == null ? null : _resend,
                 child: _resending
-                    ? const Text('Sending...')
-                    : const Text('Resend verification email'),
+                    ? Text(context.tr('Sending...'))
+                    : Text(context.tr('Send verification code')),
               ),
             ],
           ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 
@@ -49,7 +50,7 @@ class _ChurchBookingsScreenState extends ConsumerState<ChurchBookingsScreen> {
     final notes = await showDialog<String?>(
       context: context,
       builder: (context) => _NotesDialog(
-        title: status == 'approved' ? 'Approve booking' : 'Reject booking',
+        title: status == 'approved' ? context.tr('Approve booking') : context.tr('Reject booking'),
       ),
     );
     // A null result means the dialog was dismissed; proceed only on confirm.
@@ -60,7 +61,7 @@ class _ChurchBookingsScreenState extends ConsumerState<ChurchBookingsScreen> {
             status,
             (notes == null || notes.isEmpty) ? null : notes,
           );
-      _show('Booking $status');
+      if (mounted) _show(context.tr('Booking {0}', [context.tr(status)]));
       _refresh();
     } catch (e) {
       _show(e.toString());
@@ -96,11 +97,11 @@ class _ChurchBookingsScreenState extends ConsumerState<ChurchBookingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        u.name.isEmpty ? 'Unknown user' : u.name,
+                        u.name.isEmpty ? ctx.tr('Unknown user') : u.name,
                         style: const TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w700),
                       ),
-                      const Text('Booking requester',
+                      Text(ctx.tr('Booking requester'),
                           style: TextStyle(
                               fontSize: 12, color: Colors.black54)),
                     ],
@@ -134,7 +135,7 @@ class _ChurchBookingsScreenState extends ConsumerState<ChurchBookingsScreen> {
     if (await canLaunchUrl(parsed)) {
       await launchUrl(parsed);
     } else {
-      _show('Could not open $uri');
+      if (mounted) _show(context.tr('Could not open {0}', [uri]));
     }
   }
 
@@ -142,25 +143,25 @@ class _ChurchBookingsScreenState extends ConsumerState<ChurchBookingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.churchName} · Bookings'),
+        title: Text(context.tr('{0} · Bookings', [widget.churchName])),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: DropdownButtonFormField<String?>(
               value: _statusFilter,
-              decoration: const InputDecoration(
-                labelText: 'Filter by status',
+              decoration: InputDecoration(
+                labelText: context.tr('Filter by status'),
                 isDense: true,
                 filled: true,
                 fillColor: Colors.white,
               ),
-              items: const [
-                DropdownMenuItem<String?>(value: null, child: Text('All')),
-                DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                DropdownMenuItem(value: 'approved', child: Text('Approved')),
-                DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
-                DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
+              items: [
+                DropdownMenuItem<String?>(value: null, child: Text(context.tr('All'))),
+                DropdownMenuItem(value: 'pending', child: Text(context.tr('Pending'))),
+                DropdownMenuItem(value: 'approved', child: Text(context.tr('Approved'))),
+                DropdownMenuItem(value: 'rejected', child: Text(context.tr('Rejected'))),
+                DropdownMenuItem(value: 'cancelled', child: Text(context.tr('Cancelled'))),
               ],
               onChanged: (v) {
                 setState(() => _statusFilter = v);
@@ -177,13 +178,13 @@ class _ChurchBookingsScreenState extends ConsumerState<ChurchBookingsScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(child: Text(context.tr('Error: {0}', [snapshot.error])));
           }
           final bookings = snapshot.data?.data ?? [];
           if (bookings.isEmpty) {
-            return const Center(child: Text('No bookings.'));
+            return Center(child: Text(context.tr('No bookings.')));
           }
-          final fmt = DateFormat.yMd().add_jm();
+          final fmt = DateFormat.yMd(context.dateLocale).add_jm();
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView.builder(
@@ -226,7 +227,7 @@ class _ChurchBookingsScreenState extends ConsumerState<ChurchBookingsScreen> {
                                       CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      requester?.name ?? 'Unknown user',
+                                      requester?.name ?? context.tr('Unknown user'),
                                       style: const TextStyle(
                                           fontWeight: FontWeight.w700),
                                     ),
@@ -262,7 +263,7 @@ class _ChurchBookingsScreenState extends ConsumerState<ChurchBookingsScreen> {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Text('Purpose: ${b.purpose ?? "-"}',
+                        Text(context.tr('Purpose: {0}', [b.purpose ?? "-"]),
                             style: const TextStyle(fontSize: 13)),
                         const SizedBox(height: 8),
                         Row(
@@ -273,14 +274,14 @@ class _ChurchBookingsScreenState extends ConsumerState<ChurchBookingsScreen> {
                               TextButton.icon(
                                 icon: const Icon(Icons.check_circle_outline,
                                     color: Colors.green),
-                                label: const Text('Accept',
+                                label: Text(context.tr('Accept'),
                                     style: TextStyle(color: Colors.green)),
                                 onPressed: () => _setStatus(b, 'approved'),
                               ),
                               TextButton.icon(
                                 icon: const Icon(Icons.cancel_outlined,
                                     color: Colors.red),
-                                label: const Text('Decline',
+                                label: Text(context.tr('Decline'),
                                     style: TextStyle(color: Colors.red)),
                                 onPressed: () => _setStatus(b, 'rejected'),
                               ),
@@ -358,16 +359,16 @@ class _NotesDialog extends StatelessWidget {
       title: Text(title),
       content: TextField(
         controller: _controller,
-        decoration: const InputDecoration(labelText: 'Admin notes (optional)'),
+        decoration: InputDecoration(labelText: context.tr('Admin notes (optional)')),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(_cancelSentinel),
-          child: const Text('Cancel'),
+          child: Text(context.tr('Cancel')),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(_controller.text),
-          child: const Text('Confirm'),
+          child: Text(context.tr('Confirm')),
         ),
       ],
     );

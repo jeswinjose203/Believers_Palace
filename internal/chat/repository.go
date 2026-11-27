@@ -22,12 +22,12 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-const columns = `id, event_id, seq, user_id, author_name, author_pic, content, created_at`
+const columns = `id, event_id, seq, user_id, author_name, author_pic, content, created_at, client_id`
 
 func scan(row pgx.Row) (*Message, error) {
 	var m Message
 	if err := row.Scan(
-		&m.ID, &m.EventID, &m.Seq, &m.UserID, &m.AuthorName, &m.AuthorPic, &m.Content, &m.CreatedAt,
+		&m.ID, &m.EventID, &m.Seq, &m.UserID, &m.AuthorName, &m.AuthorPic, &m.Content, &m.CreatedAt, &m.ClientID,
 	); err != nil {
 		return nil, err
 	}
@@ -36,41 +36,24 @@ func scan(row pgx.Row) (*Message, error) {
 
 // Create inserts a new message with a per-event, commit-ordered `seq`.
 //
-// A per-event transaction-scoped advisory lock serializes the
-// "read max(seq) -> insert seq+1 -> commit" step for a single event. Because
-// the lock is held until commit, each new row becomes visible to other
-// transactions in exactly `seq` order. This guarantees the `after` cursor used
-// by polling can never skip a message, even when many users post at once.
-// Posts to *different* events use different lock keys and do not contend.
-func (r *Repository) Create(ctx context.Context, eventID string, userID *string, authorName string, authorPic *string, content string) (*Message, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin tx: %w", err)
+// Updating the event row serializes sends and preserves the high-water mark
+// even when messages are deleted.
+func (r *Repository) Create(ctx context.Context, eventID string, userID *string, authorName string, authorPic *string, content string, clientID ...string) (*Message, error) {
+	var key string
+	if len(clientID) > 0 {
+		key = clientID[0]
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck // no-op after a successful commit
-
-	// Per-event lock: hashtextextended keys the lock by the event UUID so only
-	// concurrent posts to the *same* event serialize. Released on commit/rollback.
-	if _, err := tx.Exec(ctx,
-		`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, eventID,
-	); err != nil {
-		return nil, fmt.Errorf("acquire event lock: %w", err)
-	}
-
 	const q = `
-		INSERT INTO event_messages (event_id, seq, user_id, author_name, author_pic, content)
-		VALUES (
-			$1,
-			COALESCE((SELECT max(seq) FROM event_messages WHERE event_id = $1), 0) + 1,
-			$2, $3, $4, $5
+		WITH next AS (
+			UPDATE events SET chat_seq = chat_seq + 1 WHERE id = $1 RETURNING chat_seq
 		)
+		INSERT INTO event_messages (event_id, seq, user_id, author_name, author_pic, content, client_id)
+		SELECT $1, chat_seq, $2, $3, $4, $5, NULLIF($6, '') FROM next
+		ON CONFLICT (event_id, user_id, client_id) DO UPDATE SET client_id = EXCLUDED.client_id
 		RETURNING ` + columns
-	m, err := scan(tx.QueryRow(ctx, q, eventID, userID, authorName, authorPic, content))
+	m, err := scan(r.pool.QueryRow(ctx, q, eventID, userID, authorName, authorPic, content, key))
 	if err != nil {
 		return nil, fmt.Errorf("create message: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit message: %w", err)
 	}
 	return m, nil
 }

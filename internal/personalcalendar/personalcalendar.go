@@ -48,6 +48,7 @@ type Preferences struct {
     DateFormat     string            `json:"dateFormat"`
     WeekStartsOn   string            `json:"weekStartsOn"`
     HolidayCountry string            `json:"holidayCountry"`
+    Timezone       string            `json:"timezone"`
     CategoryColors map[string]string `json:"categoryColors"`
 }
  
@@ -57,6 +58,7 @@ type PreferencesPatch struct {
     DateFormat     *string            `json:"dateFormat"`
     WeekStartsOn   *string            `json:"weekStartsOn"`
     HolidayCountry *string            `json:"holidayCountry"`
+    Timezone       *string            `json:"timezone"`
     CategoryColors *map[string]string `json:"categoryColors"`
 }
  
@@ -230,7 +232,7 @@ type ScheduleItem struct {
  
     // goal_checkin_due
     GoalID         string `json:"goalId,omitempty"`
-    CheckedInToday *bool  `json:"checkedInToday,omitempty"`
+    CheckedInOnDay *bool  `json:"checkedInOnDay,omitempty"`
 }
  
 // Holiday is a public holiday entry.

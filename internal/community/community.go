@@ -31,6 +31,7 @@ type Message struct {
 	AuthorName  string    `json:"authorName"`
 	AuthorPic   *string   `json:"authorPic"`
 	Content     string    `json:"content"`
+	ClientID    *string   `json:"clientId,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
@@ -41,7 +42,8 @@ type CreateRequest struct {
 }
 
 type MessageRequest struct {
-	Content string `json:"content"`
+	ClientID string `json:"clientId,omitempty"`
+	Content  string `json:"content"`
 }
 
 type CursorQuery struct {

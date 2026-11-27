@@ -30,9 +30,13 @@ func (r *Repository) Create(ctx context.Context, userID, name, description strin
 	}
 	defer tx.Rollback(ctx)
 	var c Community
-	err = tx.QueryRow(ctx, `INSERT INTO communities (creator_id,name,description,image) VALUES ($1,$2,$3,$4)
+	err = tx.QueryRow(ctx, `INSERT INTO communities (creator_id,name,description,image,church_id)
+        SELECT id,$2,$3,$4,church_id FROM users WHERE id=$1 AND church_id IS NOT NULL
 		RETURNING id,creator_id,name,description,image,created_at`, userID, name, description, image).
 		Scan(&c.ID, &c.CreatorID, &c.Name, &c.Description, &c.Image, &c.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, &ValidationError{"select a church before creating a community"}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("create community: %w", err)
 	}
@@ -48,11 +52,26 @@ func (r *Repository) Create(ctx context.Context, userID, name, description strin
 	return &c, nil
 }
 
-func (r *Repository) List(ctx context.Context, userID string) ([]Community, error) {
-	rows, err := r.pool.Query(ctx, `SELECT c.id,c.creator_id,c.name,c.description,c.image,c.created_at,
+func (r *Repository) List(ctx context.Context, userID string, options ...ListOptions) ([]Community, error) {
+	query := `SELECT c.id,c.creator_id,c.name,c.description,c.image,c.created_at,
 		COALESCE(m.status,''),COALESCE(m.is_admin,false) FROM communities c
-		LEFT JOIN community_memberships m ON m.community_id=c.id AND m.user_id=$1
-		ORDER BY c.created_at DESC`, userID)
+		LEFT JOIN community_memberships m ON m.community_id=c.id AND m.user_id=$1`
+	args := []any{userID}
+	if len(options) != 0 && options[0].Joined {
+		query += " WHERE m.status='active'"
+	} else {
+		query += " WHERE c.church_id=(SELECT church_id FROM users WHERE id=$1)"
+	}
+	if len(options) != 0 {
+		page := options[0]
+		query += ` AND (c.created_at,c.id) < (
+            COALESCE($2::timestamptz,'infinity'), COALESCE($3::uuid,'ffffffff-ffff-ffff-ffff-ffffffffffff'))
+			ORDER BY c.created_at DESC,c.id DESC LIMIT $4`
+		args = append(args, page.Before, page.ID, page.Limit)
+	} else {
+		query += " ORDER BY c.created_at DESC,c.id DESC"
+	}
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list communities: %w", err)
 	}
@@ -80,9 +99,11 @@ func (r *Repository) Get(ctx context.Context, id string) (*Community, error) {
 }
 
 func (r *Repository) Membership(ctx context.Context, communityID, userID string) (status string, admin bool, err error) {
-	err = r.pool.QueryRow(ctx, `SELECT status,is_admin FROM community_memberships WHERE community_id=$1 AND user_id=$2`, communityID, userID).Scan(&status, &admin)
+	err = r.pool.QueryRow(ctx, `SELECT COALESCE(m.status,''),COALESCE(m.is_admin,false)
+		FROM communities c LEFT JOIN community_memberships m ON m.community_id=c.id AND m.user_id=$2
+		WHERE c.id=$1`, communityID, userID).Scan(&status, &admin)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil
+		return "", false, ErrNotFound
 	}
 	return
 }
@@ -90,11 +111,21 @@ func (r *Repository) Membership(ctx context.Context, communityID, userID string)
 func (r *Repository) RequestMembership(ctx context.Context, communityID, userID string) (*Membership, error) {
 	var m Membership
 	err := r.pool.QueryRow(ctx, `INSERT INTO community_memberships (community_id,user_id,status)
-		VALUES ($1,$2,'pending') ON CONFLICT (community_id,user_id) DO UPDATE
+		SELECT c.id,u.id,'pending' FROM communities c JOIN users u ON u.id=$2 AND u.church_id=c.church_id
+        WHERE c.id=$1 ON CONFLICT (community_id,user_id) DO UPDATE
 		SET status='pending',updated_at=now() WHERE community_memberships.status='declined'
 		RETURNING id,community_id,user_id,status,is_admin,created_at`, communityID, userID).
 		Scan(&m.ID, &m.CommunityID, &m.UserID, &m.Status, &m.IsAdmin, &m.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
+		var discoverable bool
+		checkErr := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM communities c
+            JOIN users u ON u.id=$2 AND u.church_id=c.church_id WHERE c.id=$1)`, communityID, userID).Scan(&discoverable)
+		if checkErr != nil {
+			return nil, checkErr
+		}
+		if !discoverable {
+			return nil, ErrNotFound
+		}
 		return nil, ErrConflict
 	}
 	if err != nil {
@@ -155,11 +186,16 @@ func (r *Repository) RemoveMember(ctx context.Context, communityID, userID strin
 }
 
 func (r *Repository) Leave(ctx context.Context, communityID, userID string) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	// A departure can lock both the departing membership and a successor.
+	// Serialize departures without taking the community row lock used by chat writes.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('community-leave:' || $1, 0))`, communityID); err != nil {
+		return fmt.Errorf("serialize community departures: %w", err)
+	}
 	var status string
 	var admin bool
 	err = tx.QueryRow(ctx, `SELECT status,is_admin FROM community_memberships WHERE community_id=$1 AND user_id=$2 FOR UPDATE`, communityID, userID).Scan(&status, &admin)
@@ -198,7 +234,11 @@ func (r *Repository) Leave(ctx context.Context, communityID, userID string) erro
 	return tx.Commit(ctx)
 }
 
-func (r *Repository) CreateMessage(ctx context.Context, communityID, userID, name string, pic *string, content string) (*Message, error) {
+func (r *Repository) CreateMessage(ctx context.Context, communityID, userID, name string, pic *string, content string, clientID ...string) (*Message, error) {
+	var key string
+	if len(clientID) > 0 {
+		key = clientID[0]
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -213,14 +253,15 @@ func (r *Repository) CreateMessage(ctx context.Context, communityID, userID, nam
 	if err != nil {
 		return nil, fmt.Errorf("verify community membership: %w", err)
 	}
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, communityID); err != nil {
-		return nil, err
-	}
 	var m Message
-	err = tx.QueryRow(ctx, `INSERT INTO community_messages (community_id,seq,user_id,author_name,author_pic,content)
-		VALUES ($1,COALESCE((SELECT max(seq) FROM community_messages WHERE community_id=$1),0)+1,$2,$3,$4,$5)
-		RETURNING id,community_id,seq,user_id,author_name,author_pic,content,created_at`, communityID, userID, name, pic, content).
-		Scan(&m.ID, &m.CommunityID, &m.Seq, &m.UserID, &m.AuthorName, &m.AuthorPic, &m.Content, &m.CreatedAt)
+	err = tx.QueryRow(ctx, `WITH next AS (
+			UPDATE communities SET chat_seq=chat_seq+1 WHERE id=$1 RETURNING chat_seq
+		)
+		INSERT INTO community_messages (community_id,seq,user_id,author_name,author_pic,content,client_id)
+		SELECT $1,chat_seq,$2,$3,$4,$5,NULLIF($6,'') FROM next
+		ON CONFLICT (community_id,user_id,client_id) DO UPDATE SET client_id=EXCLUDED.client_id
+		RETURNING `+messageColumns, communityID, userID, name, pic, content, key).
+		Scan(&m.ID, &m.CommunityID, &m.Seq, &m.UserID, &m.AuthorName, &m.AuthorPic, &m.Content, &m.CreatedAt, &m.ClientID)
 	if err != nil {
 		return nil, fmt.Errorf("create community message: %w", err)
 	}
@@ -230,11 +271,11 @@ func (r *Repository) CreateMessage(ctx context.Context, communityID, userID, nam
 	return &m, nil
 }
 
-const messageColumns = `id,community_id,seq,user_id,author_name,author_pic,content,created_at`
+const messageColumns = `id,community_id,seq,user_id,author_name,author_pic,content,created_at,client_id`
 
 func scanMessage(row pgx.Row) (*Message, error) {
 	var m Message
-	err := row.Scan(&m.ID, &m.CommunityID, &m.Seq, &m.UserID, &m.AuthorName, &m.AuthorPic, &m.Content, &m.CreatedAt)
+	err := row.Scan(&m.ID, &m.CommunityID, &m.Seq, &m.UserID, &m.AuthorName, &m.AuthorPic, &m.Content, &m.CreatedAt, &m.ClientID)
 	return &m, err
 }
 func (r *Repository) ListMessages(ctx context.Context, cid string, q CursorQuery) ([]Message, bool, error) {

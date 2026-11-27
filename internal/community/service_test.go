@@ -26,7 +26,7 @@ func (s *memoryStore) Create(_ context.Context, user, name, description string, 
 	s.members[c.ID][user] = &Membership{ID: "creator", CommunityID: c.ID, UserID: user, Status: "active", IsAdmin: true}
 	return c, nil
 }
-func (s *memoryStore) List(context.Context, string) ([]Community, error) {
+func (s *memoryStore) List(context.Context, string, ...ListOptions) ([]Community, error) {
 	out := make([]Community, 0, len(s.communities))
 	for _, c := range s.communities {
 		out = append(out, *c)
@@ -41,6 +41,9 @@ func (s *memoryStore) Get(_ context.Context, id string) (*Community, error) {
 	return c, nil
 }
 func (s *memoryStore) Membership(_ context.Context, cid, uid string) (string, bool, error) {
+	if s.communities[cid] == nil {
+		return "", false, ErrNotFound
+	}
 	m := s.members[cid][uid]
 	if m == nil {
 		return "", false, nil
@@ -97,7 +100,7 @@ func (s *memoryStore) Leave(_ context.Context, cid, uid string) error {
 	delete(s.members[cid], uid)
 	return nil
 }
-func (s *memoryStore) CreateMessage(_ context.Context, cid, uid, name string, pic *string, text string) (*Message, error) {
+func (s *memoryStore) CreateMessage(_ context.Context, cid, uid, name string, pic *string, text string, _ ...string) (*Message, error) {
 	m := &Message{ID: "m1", CommunityID: cid, UserID: &uid, AuthorName: name, Content: text}
 	s.messages[m.ID] = m
 	return m, nil

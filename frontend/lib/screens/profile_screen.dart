@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/image_picker_field.dart';
+import 'calendar_screen.dart';
+import 'certificates_screen.dart';
 import 'churches_screen.dart';
 import 'my_bookings_screen.dart';
 import 'settings_screen.dart';
+import 'verify_email_screen.dart';
 
 const kProfilePurple = Color(0xFF5B2A91);
 const kProfilePurpleLight = Color(0xFF7B3FB5);
@@ -43,7 +47,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void _toast(String msg) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
-  void _comingSoon(String what) => _toast('$what is not available yet');
+  void _comingSoon(String what) => _toast(context.tr('{0} is not available yet', [context.tr(what)]));
 
   void _changeChurch() {
     Navigator.of(context).push(
@@ -58,16 +62,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('You will need to sign in again.'),
+        title: Text(context.tr('Log out?')),
+        content: Text(context.tr('You will need to sign in again.')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Log out'),
+            child: Text(context.tr('Log out')),
           ),
         ],
       ),
@@ -87,6 +91,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     final isMember = user.role == 'user';
     final isSuperAdmin = user.role == 'super_admin';
+    final hasPhone = user.phone?.isNotEmpty ?? false;
     final churchValue = user.churchId == null
         ? (isMember ? 'Select a church' : '-')
         : (_churchName ?? 'Loading...');
@@ -98,26 +103,53 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         children: [
           _Header(
             user: user,
-            roleLabel: _roleLabel(user.role),
-            onEditPhoto: () => _edit(user),
-            onBell: () => _toast('No new notifications'),
+            roleLabel: context.tr(_roleLabel(user.role)),
+            onEditPhoto: () => _editProfilePicture(user),
+            onBell: () => _toast(context.tr('No new notifications')),
           ),
           const SizedBox(height: 16),
           _Card(
             children: [
               _InfoRow(
                 icon: Icons.mail_outline,
-                label: 'Email',
+                label: context.tr('Email'),
                 value: user.email,
+                trailing: user.emailVerified
+                    ? Padding(
+                        padding: EdgeInsets.only(left: 8),
+                        child: Tooltip(
+                          message: context.tr('Email verified'),
+                          child: Icon(Icons.verified, color: Colors.green),
+                        ),
+                      )
+                    : null,
+                onTap: user.emailVerified
+                    ? null
+                    : () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const VerifyEmailScreen(),
+                          ),
+                        ),
               ),
               _InfoRow(
                 icon: Icons.phone_outlined,
-                label: 'Mobile',
-                value: (user.phone ?? '').isEmpty ? '-' : user.phone!,
+                label: !hasPhone || user.phoneVerified
+                    ? context.tr('Mobile')
+                    : context.tr('Mobile (unverified)'),
+                value: hasPhone ? user.phone! : '-',
+                trailing: hasPhone && user.phoneVerified
+                    ? Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Tooltip(
+                          message: context.tr('Mobile verified'),
+                          child: const Icon(Icons.verified, color: Colors.green),
+                        ),
+                      )
+                    : null,
               ),
               _InfoRow(
                 icon: Icons.church_outlined,
-                label: 'Church',
+                label: context.tr('Church'),
                 value: churchValue,
                 onTap: isMember ? _changeChurch : null,
               ),
@@ -128,50 +160,58 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             children: [
               _MenuRow(
                 icon: Icons.person_outline,
-                title: 'Edit Profile',
+                title: context.tr('Edit Profile'),
                 onTap: () => _edit(user),
               ),
               _MenuRow(
                 icon: Icons.settings_outlined,
-                title: 'Settings',
+                title: context.tr('Settings'),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                ),
+              ),
+              _MenuRow(
+                icon: Icons.calendar_month,
+                title: context.tr('Calendar'),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CalendarScreen()),
                 ),
               ),
               if (!isSuperAdmin)
                 _MenuRow(
                   icon: Icons.bookmark_border,
-                  title: 'My Activities',
-                  subtitle: 'Hall bookings',
+                  title: context.tr('My Bookings'),
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const MyBookingsScreen()),
+                    MaterialPageRoute(builder: (_) => const MyBookingsScreen()),
                   ),
                 ),
               _MenuRow(
-                icon: Icons.favorite_border,
-                title: 'My Family',
-                onTap: () => _comingSoon('My Family'),
+                icon: Icons.school,
+                title: context.tr('Certificates'),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CertificatesScreen()),
+                ),
               ),
               _MenuRow(
                 icon: Icons.help_outline,
-                title: 'Help & Support',
+                title: context.tr('Help & Support'),
                 onTap: () => _comingSoon('Help & Support'),
               ),
               _MenuRow(
                 icon: Icons.info_outline,
-                title: 'About',
+                title: context.tr('About'),
                 onTap: () => showAboutDialog(
                   context: context,
                   applicationName: 'Believers Palace',
                   applicationVersion: kAppVersion,
-                  applicationLegalese:
-                      'Bringing people and places of faith together.',
+                  applicationLegalese: context.tr(
+                    'Bringing people and places of faith together.',
+                  ),
                 ),
               ),
               _MenuRow(
                 icon: Icons.logout,
-                title: 'Logout',
+                title: context.tr('Logout'),
                 color: Colors.red,
                 showChevron: false,
                 onTap: _logout,
@@ -201,32 +241,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _edit(User user) async {
     final name = TextEditingController(text: user.name);
-    final phone = TextEditingController(text: user.phone ?? '');
     final unit = TextEditingController(text: user.unit ?? '');
     String? profilePic = user.profilePic;
 
     await showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit Profile'),
+        title: Text(dialogContext.tr('Edit Profile')),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: name,
-                decoration: const InputDecoration(labelText: 'Name'),
-              ),
-              TextField(
-                controller: phone,
-                decoration: const InputDecoration(labelText: 'Phone'),
+                decoration: InputDecoration(labelText: dialogContext.tr('Name')),
               ),
               TextField(
                 controller: unit,
-                decoration: const InputDecoration(labelText: 'Unit'),
+                decoration: InputDecoration(labelText: dialogContext.tr('Unit')),
               ),
               ImagePickerField(
-                label: 'Profile picture',
+                label: dialogContext.tr('Profile picture'),
                 initialUrl: user.profilePic,
                 onChanged: (url) => profilePic = url,
               ),
@@ -236,14 +271,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
+            child: Text(dialogContext.tr('Cancel')),
           ),
           TextButton(
             onPressed: () async {
               try {
                 await ref.read(authProvider.notifier).updateProfile({
                   'name': name.text,
-                  'phone': phone.text.isEmpty ? null : phone.text,
                   'unit': unit.text.isEmpty ? null : unit.text,
                   'profilePic':
                       (profilePic == null || profilePic!.isEmpty)
@@ -251,14 +285,89 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           : profilePic,
                 });
                 if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-                if (mounted) _toast('Profile updated');
+                if (mounted) _toast(context.tr('Profile updated'));
               } catch (e) {
                 if (mounted) _toast(e.toString());
               }
             },
-            child: const Text('Save'),
+            child: Text(dialogContext.tr('Save')),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _editProfilePicture(User user) async {
+    String? profilePic = user.profilePic;
+    var changed = false;
+    var uploading = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ImagePickerField(
+                    label: '',
+                    initialUrl: user.profilePic,
+                    showLabel: false,
+                    centerPreview: true,
+                    outlineChangeButton: false,
+                    previewSize: 128,
+                    onChanged: (url) => setDialogState(() {
+                      profilePic = url;
+                      changed = true;
+                    }),
+                    onUploadingChanged: (value) =>
+                        setDialogState(() => uploading = value),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: uploading
+                            ? null
+                            : () => Navigator.of(dialogContext).pop(),
+                        child: Text(dialogContext.tr('Cancel')),
+                      ),
+                      TextButton(
+                        onPressed: uploading || !changed
+                            ? null
+                            : () async {
+                                try {
+                                  await ref
+                                      .read(authProvider.notifier)
+                                      .updateProfile({
+                                    // Empty string is accepted by existing API
+                                    // versions and renders as the default avatar.
+                                    'profilePic': profilePic ?? '',
+                                  });
+                                  if (dialogContext.mounted) {
+                                    Navigator.of(dialogContext).pop();
+                                  }
+                                  if (mounted) {
+                                    _toast(context.tr('Profile updated'));
+                                  }
+                                } catch (e) {
+                                  if (mounted) _toast(e.toString());
+                                }
+                              },
+                        child: Text(dialogContext.tr('Save')),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -299,9 +408,9 @@ class _Header extends StatelessWidget {
           Row(
             children: [
               const SizedBox(width: 48),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Profile',
+                  context.tr('Profile'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
@@ -312,7 +421,7 @@ class _Header extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.notifications_none, color: Colors.white),
-                tooltip: 'Notifications',
+                tooltip: context.tr('Notifications'),
                 onPressed: onBell,
               ),
             ],
@@ -412,12 +521,14 @@ class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
   final VoidCallback? onTap;
+  final Widget? trailing;
 
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
     this.onTap,
+    this.trailing,
   });
 
   @override
@@ -445,6 +556,7 @@ class _InfoRow extends StatelessWidget {
             ),
             if (onTap != null)
               const Icon(Icons.chevron_right, color: Colors.black54),
+            if (trailing != null) trailing!,
           ],
         ),
       ),
@@ -455,7 +567,6 @@ class _InfoRow extends StatelessWidget {
 class _MenuRow extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String? subtitle;
   final VoidCallback onTap;
   final Color? color;
   final bool showChevron;
@@ -464,7 +575,6 @@ class _MenuRow extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
-    this.subtitle,
     this.color,
     this.showChevron = true,
   });
@@ -491,10 +601,6 @@ class _MenuRow extends StatelessWidget {
                       color: color,
                     ),
                   ),
-                  if (subtitle != null)
-                    Text(subtitle!,
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.black54)),
                 ],
               ),
             ),

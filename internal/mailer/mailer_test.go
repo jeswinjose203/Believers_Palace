@@ -28,7 +28,7 @@ func TestLogMailerSendEmailVerification(t *testing.T) {
 	m := NewLogMailer("http://localhost:8080")
 
 	out := captureLog(func() {
-		if err := m.SendEmailVerification(context.Background(), "jane@example.com", "verify-tok-123"); err != nil {
+		if err := m.SendEmailVerification(context.Background(), "jane@example.com", "012345"); err != nil {
 			t.Fatalf("SendEmailVerification returned error: %v", err)
 		}
 	})
@@ -36,12 +36,8 @@ func TestLogMailerSendEmailVerification(t *testing.T) {
 	if !strings.Contains(out, "jane@example.com") {
 		t.Errorf("log output missing recipient; got: %q", out)
 	}
-	if !strings.Contains(out, "verify-tok-123") {
-		t.Errorf("log output missing token; got: %q", out)
-	}
-	want := "http://localhost:8080/api/auth/verify-email?token=verify-tok-123"
-	if !strings.Contains(out, want) {
-		t.Errorf("log output missing verification link %q; got: %q", want, out)
+	if !strings.Contains(out, "code=012345") {
+		t.Errorf("log output missing code; got: %q", out)
 	}
 }
 
@@ -66,16 +62,10 @@ func TestLogMailerSendPasswordReset(t *testing.T) {
 	}
 }
 
-// TestLinkBuildersEscapeTokens ensures tokens with URL-special characters are
-// safely encoded into the emailed links.
-func TestLinkBuildersEscapeTokens(t *testing.T) {
+func TestPasswordResetLinkEscapesToken(t *testing.T) {
 	const base = "https://api.example.com"
 	token := "a b/c?d&e"
 
-	if got, want := emailVerificationLink(base, token),
-		"https://api.example.com/api/auth/verify-email?token=a+b%2Fc%3Fd%26e"; got != want {
-		t.Errorf("emailVerificationLink = %q, want %q", got, want)
-	}
 	if got, want := passwordResetLink(base, token),
 		"https://api.example.com/api/auth/reset-password?token=a+b%2Fc%3Fd%26e"; got != want {
 		t.Errorf("passwordResetLink = %q, want %q", got, want)

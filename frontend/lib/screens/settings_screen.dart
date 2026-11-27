@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
  
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/calendar_models.dart';
 import '../services/api_service.dart';
@@ -18,16 +19,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _toast(String msg) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
  
-  void _comingSoon(String what) => _toast('$what is not available yet');
+  void _comingSoon(String what) => _toast(context.tr('{0} is not available yet', [context.tr(what)]));
  
   Future<void> _calendarPreferences() async {
     CalendarPreferences? prefs;
     try {
       prefs = await ref.read(apiServiceProvider).getCalendarPreferences();
     } catch (e) {
-      _toast('$e');
+      if (mounted) _toast('$e');
       return;
     }
+    if (!mounted) return;
     var week = prefs.weekStartsOn;
     var df = prefs.dateFormat;
     var country = prefs.holidayCountry;
@@ -35,22 +37,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('Calendar preferences'),
+          title: Text(ctx.tr('Calendar preferences')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
                 value: week,
-                decoration: const InputDecoration(labelText: 'Week starts on'),
-                items: const [
-                  DropdownMenuItem(value: 'monday', child: Text('Monday')),
-                  DropdownMenuItem(value: 'sunday', child: Text('Sunday')),
+                decoration: InputDecoration(labelText: ctx.tr('Week starts on')),
+                items: [
+                  DropdownMenuItem(value: 'monday', child: Text(ctx.tr('Monday'))),
+                  DropdownMenuItem(value: 'sunday', child: Text(ctx.tr('Sunday'))),
                 ],
                 onChanged: (v) => setSt(() => week = v ?? week),
               ),
               DropdownButtonFormField<String>(
                 value: df,
-                decoration: const InputDecoration(labelText: 'Date format'),
+                decoration: InputDecoration(labelText: ctx.tr('Date format')),
                 items: const [
                   DropdownMenuItem(value: 'dmy', child: Text('DD/MM/YYYY')),
                   DropdownMenuItem(value: 'mdy', child: Text('MM/DD/YYYY')),
@@ -59,15 +61,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 onChanged: (v) => setSt(() => df = v ?? df),
               ),
               TextField(
-                decoration: const InputDecoration(labelText: 'Holiday country (ISO)'),
+                decoration: InputDecoration(labelText: ctx.tr('Holiday country (ISO)')),
                 controller: TextEditingController(text: country),
                 onChanged: (v) => country = v.toUpperCase(),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
           ],
         ),
       ),
@@ -79,7 +81,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         'dateFormat': df,
         'holidayCountry': country,
       });
-      _toast('Calendar preferences saved');
+      if (mounted) _toast(context.tr('Calendar preferences saved'));
     } catch (e) {
       _toast('$e');
     }
@@ -98,16 +100,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Change password'),
-        content: Text('We will email a password reset link to $email.'),
+        title: Text(context.tr('Change password')),
+        content: Text(context.tr('We will email a password reset link to {0}.', [email])),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Send link'),
+            child: Text(context.tr('Send link')),
           ),
         ],
       ),
@@ -115,9 +117,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (ok != true) return;
     try {
       await ref.read(apiServiceProvider).forgotPassword(email);
-      _toast('Password reset email sent to $email');
+      if (mounted) _toast(context.tr('Password reset email sent to {0}', [email]));
     } catch (e) {
-      _toast(e.toString());
+      if (mounted) _toast(e.toString());
     }
   }
  
@@ -125,19 +127,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Log out everywhere?'),
-        content: const Text(
-          'This signs you out of all devices by revoking every active '
-          'session. You will need to log in again.',
+        title: Text(context.tr('Log out everywhere?')),
+        content: Text(
+          context.tr('This signs you out of all devices by revoking every active session. You will need to log in again.'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Log out everywhere'),
+            child: Text(context.tr('Log out everywhere')),
           ),
         ],
       ),
@@ -152,33 +153,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
  
-  // ---- Preferences --------------------------------------------------------
- 
-  Future<void> _language() async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Language'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Row(
-              children: [
-                Expanded(child: Text('English')),
-                Icon(Icons.check, color: kProfileIcon),
-              ],
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(24, 8, 24, 12),
-            child: Text('More languages are coming soon.',
-                style: TextStyle(color: Colors.black54, fontSize: 12)),
-          ),
-        ],
-      ),
-    );
-  }
- 
   // ---- Other --------------------------------------------------------------
  
   void _clearCache() {
@@ -186,7 +160,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     cache.clear();
     cache.clearLiveImages();
     setState(() {});
-    _toast('Cache cleared');
+    _toast(context.tr('Cache cleared'));
   }
  
   void _legal(String title) {
@@ -194,14 +168,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
-        content: const Text(
-          'This document has not been published yet. Please contact your '
-          'church office for details.',
+        content: Text(
+          context.tr('This document has not been published yet. Please contact your church office for details.'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
+            child: Text(context.tr('Close')),
           ),
         ],
       ),
@@ -239,9 +212,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         color: Colors.white),
                     onPressed: () => Navigator.of(context).maybePop(),
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Settings',
+                      context.tr('Settings'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
@@ -265,17 +238,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: ListView(
                 padding: const EdgeInsets.only(bottom: 32),
                 children: [
-                  _section('Account'),
+                  _section(context.tr('Account')),
                   SettingsCard(children: [
                     SettingsRow(
                       icon: Icons.vpn_key_outlined,
-                      title: 'Change Password',
+                      title: context.tr('Change Password'),
                       onTap: _changePassword,
                     ),
                     SettingsRow(
                       icon: Icons.verified_user_outlined,
-                      title: 'Two-Factor Authentication',
-                      subtitle: 'Add an extra layer of security',
+                      title: context.tr('Two-Factor Authentication'),
+                      subtitle: context.tr('Add an extra layer of security'),
                       trailing: Switch(
                         value: false,
                         // Not supported by the backend yet: keep it off.
@@ -285,72 +258,72 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     SettingsRow(
                       icon: Icons.devices_outlined,
-                      title: 'Log out of all devices',
+                      title: context.tr('Log out of all devices'),
                       onTap: _logoutEverywhere,
                     ),
                   ]),
-                  _section('Preferences'),
+                  _section(context.tr('Preferences')),
                   SettingsCard(children: [
                     SettingsRow(
                       icon: Icons.language,
-                      title: 'Language',
-                      value: 'English',
-                      onTap: _language,
+                      title: context.tr('Language'),
+                      value: languageName(Localizations.localeOf(context)),
+                      onTap: () => showLanguagePicker(context, ref),
                     ),
                     SettingsRow(
                       icon: Icons.notifications_none,
-                      title: 'Notifications',
+                      title: context.tr('Notifications'),
                       onTap: () => _comingSoon('Notification settings'),
                     ),
                     SettingsRow(
                       icon: Icons.dark_mode_outlined,
-                      title: 'Theme',
-                      value: 'Light',
-                      onTap: () => _toast('Only the light theme is available'),
+                      title: context.tr('Theme'),
+                      value: context.tr('Light'),
+                      onTap: () => _toast(context.tr('Only the light theme is available')),
                     ),
                     SettingsRow(
                       icon: Icons.calendar_month_outlined,
-                      title: 'Calendar',
-                      subtitle: 'Week start, date format, holidays',
+                      title: context.tr('Calendar'),
+                      subtitle: context.tr('Week start, date format, holidays'),
                       onTap: _calendarPreferences,
                     ),
                   ]),
-                  _section('Privacy & Security'),
+                  _section(context.tr('Privacy & Security')),
                   SettingsCard(children: [
                     SettingsRow(
                       icon: Icons.lock_outline,
-                      title: 'Privacy',
+                      title: context.tr('Privacy'),
                       onTap: () => _comingSoon('Privacy settings'),
                     ),
                     SettingsRow(
                       icon: Icons.shield_outlined,
-                      title: 'App Permissions',
+                      title: context.tr('App Permissions'),
                       onTap: () => _comingSoon('App permissions'),
                     ),
                   ]),
-                  _section('Other'),
+                  _section(context.tr('Other')),
                   SettingsCard(children: [
                     SettingsRow(
                       icon: Icons.download_outlined,
-                      title: 'App Update',
+                      title: context.tr('App Update'),
                       value: 'v$kAppVersion',
-                      onTap: () => _toast('You are on version $kAppVersion'),
+                      onTap: () => _toast(context.tr('You are on version {0}', [kAppVersion])),
                     ),
                     SettingsRow(
                       icon: Icons.delete_outline,
-                      title: 'Clear Cache',
+                      title: context.tr('Clear Cache'),
                       value: '${_cacheMb.toStringAsFixed(1)} MB',
                       onTap: _clearCache,
                     ),
                     SettingsRow(
                       icon: Icons.info_outline,
-                      title: 'Terms & Conditions',
-                      onTap: () => _legal('Terms & Conditions'),
+                      title: context.tr('Terms & Conditions'),
+                      onTap: () => _legal(context.tr('Terms & Conditions')),
                     ),
                     SettingsRow(
                       icon: Icons.verified_user_outlined,
-                      title: 'Privacy Policy',
-                      onTap: () => _legal('Privacy Policy'),
+                      title: context.tr('Privacy Policy'),
+                      onTap: () => _legal(context.tr('Privacy Policy')),
                     ),
                   ]),
                 ],

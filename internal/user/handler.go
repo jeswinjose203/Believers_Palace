@@ -26,6 +26,7 @@ func (h *Handler) AuthRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Post("/register", h.register)
 	r.Post("/login", h.login)
+	r.Post("/teacher-login", h.teacherLogin)
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
 	r.Post("/forgot-password", h.forgotPassword)
@@ -45,6 +46,7 @@ func (h *Handler) UserRoutes() chi.Router {
 	r.With(auth.RequireRole(auth.RoleChurchAdmin, auth.RoleSuperAdmin)).Get("/stats", h.stats)
 	r.Get("/me", h.getMe)
 	r.Put("/me", h.updateMe)
+	r.Post("/me/verify-phone", h.verifyPhone)
 	r.Post("/logout-all", h.logoutAll)
 	// Update role: super_admin only.
 	r.With(auth.RequireRole(auth.RoleSuperAdmin)).Patch("/{userId}/role", h.updateRole)
@@ -63,17 +65,26 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		h.writeServiceError(w, err)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	httpx.JSON(w, http.StatusCreated, resp)
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
+	h.loginWithMode(w, r, false)
+}
+
+func (h *Handler) teacherLogin(w http.ResponseWriter, r *http.Request) {
+	h.loginWithMode(w, r, true)
+}
+
+func (h *Handler) loginWithMode(w http.ResponseWriter, r *http.Request, teacher bool) {
 	var in LoginInput
 	if err := httpx.DecodeJSON(r, &in); err != nil {
 		httpx.ErrorCode(w, http.StatusBadRequest, "invalid JSON body", "bad_request")
 		return
 	}
 
-	resp, err := h.svc.Login(r.Context(), in)
+	resp, err := h.svc.login(r.Context(), in, teacher)
 	if errors.Is(err, ErrInvalidCredentials) {
 		httpx.ErrorCode(w, http.StatusUnauthorized, "invalid email or password", "unauthorized")
 		return
@@ -168,7 +179,7 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 	err := h.svc.VerifyEmail(r.Context(), in)
 	if errors.Is(err, ErrTokenInvalid) {
-		httpx.ErrorCode(w, http.StatusBadRequest, "invalid or expired verification token", "bad_request")
+		httpx.ErrorCode(w, http.StatusBadRequest, "invalid or expired verification code", "bad_request")
 		return
 	}
 	if err != nil {
@@ -178,7 +189,7 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "email verified"})
 }
 
-// verifyEmailPage handles the GET link embedded in verification emails and
+// verifyEmailPage handles the GET link embedded in older verification emails and
 // returns a minimal HTML confirmation page (so it works from any email client).
 func (h *Handler) verifyEmailPage(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
@@ -218,7 +229,7 @@ func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]string{
-		"message": "if the email is registered and unverified, a verification link has been sent",
+		"message": "check your inbox for a recent verification code",
 	})
 }
 
@@ -316,6 +327,14 @@ func (h *Handler) writeServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.As(err, &ve):
 		httpx.ErrorCode(w, http.StatusBadRequest, ve.Message, "bad_request")
+	case errors.Is(err, errSignupProofInvalid):
+		httpx.ErrorCode(w, http.StatusBadRequest, err.Error(), "phone_proof_invalid")
+	case errors.Is(err, errSignupProofUnavailable):
+		httpx.ErrorCode(w, http.StatusServiceUnavailable, err.Error(), "phone_verification_unavailable")
+	case errors.Is(err, ErrPhoneExists):
+		httpx.ErrorCode(w, http.StatusConflict, err.Error(), "phone_already_registered")
+	case errors.Is(err, ErrUsernameExists):
+		httpx.ErrorCode(w, http.StatusConflict, "That username is already taken.", "username_taken")
 	case errors.Is(err, ErrEmailExists):
 		httpx.ErrorCode(w, http.StatusConflict, "email already registered", "conflict")
 	case errors.Is(err, ErrNotFound):

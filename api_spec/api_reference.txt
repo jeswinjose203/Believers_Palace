@@ -30,7 +30,7 @@ Authentication:
     deprecated alias of accessToken.
   - Default access-token lifetime (ACCESS_TOKEN_TTL): 15m. Use /auth/refresh to
     obtain a new pair; the old refresh token is rotated (revoked).
-  - New accounts receive an email verification token on registration
+  - New accounts receive a six-digit email verification code on registration
     (soft verification: the account is usable immediately; "emailVerified"
     becomes true after POST /auth/verify-email).
 
@@ -108,7 +108,7 @@ Date/time formats:
 ================================================================================
 
 --------------------------------------------------------------------------------
-1.1  Register a new user
+1.1  Verify a mobile number and register a new user
 --------------------------------------------------------------------------------
 Method : POST
 URL    : /api/auth/register
@@ -116,12 +116,17 @@ Auth   : None (public)
 Headers:
   Content-Type: application/json
 
-Request body:
+First, complete Firebase Phone Authentication for the submitted number and use
+the resulting Firebase ID token. The API verifies the signature, project, phone
+sign-in provider, exact mobile number and authentication within ten minutes.
+
+Registration request body:
   {
     "name":     "Jane Doe",         // required, non-empty
     "email":    "jane@example.com", // required, valid email, unique
-    "password": "supersecret",      // required, minimum 8 characters
-    "phone":    "+1-555-0100",      // optional, nullable
+    "password": "supersecret",      // required, 8 to 72 UTF-8 bytes
+    "phone":    "+919876543210",    // required, must match Firebase token
+    "firebaseIdToken": "<Firebase ID token>",
     "unit":     "Youth Ministry",   // optional, nullable
     "churchId": "uuid-or-null"      // optional, nullable
   }
@@ -140,7 +145,8 @@ Success: 201 Created
       "id": "uuid",
       "name": "Jane Doe",
       "email": "jane@example.com",
-      "phone": "+1-555-0100",
+      "phone": "+919876543210",
+      "phoneVerified": true,
       "unit": "Youth Ministry",
       "profilePic": null,
       "role": "user",
@@ -151,8 +157,11 @@ Success: 201 Created
   }
 
 Errors:
-  400 bad_request  - missing name, invalid email, or password < 8 chars
-  409 conflict     - email already registered
+  400 bad_request                   - invalid signup fields
+  400 phone_proof_invalid           - invalid, expired, or mismatched Firebase proof
+  409 conflict                      - email already registered
+  409 phone_already_registered      - verified mobile number already registered
+  503 phone_verification_unavailable - Firebase verification unavailable
 
 --------------------------------------------------------------------------------
 1.2  Log in
@@ -274,16 +283,17 @@ Headers:
   Content-Type: application/json
 
 Request body:
-  { "token": "<verification-token>" }    // required
+  { "email": "jane@example.com", "token": "012345" }
 
 Description:
-  Consumes the single-use verification token and sets the user's emailVerified
-  flag to true.
+  Consumes the single-use verification code and sets the user's emailVerified
+  flag to true. A code expires after 10 minutes or five failed attempts.
+  Previously issued opaque tokens can still be submitted without an email.
 
 Success: 200 OK  -> { "message": "email verified" }
 
 Errors:
-  400 bad_request   - token missing/invalid/expired
+  400 bad_request   - code missing/invalid/expired
 
 --------------------------------------------------------------------------------
 1.8  Resend email verification
@@ -298,11 +308,10 @@ Request body:
   { "email": "jane@example.com" }    // required
 
 Description:
-  Always returns 200 (no account enumeration). If the email is registered and
-  not yet verified, a new verification token is issued and sent. In development
-  the token is written to the API log.
+  If the email is registered and unverified, a code is sent subject to a
+  one-minute cooldown. The development mailer writes the code to the API log.
 
-Success: 200 OK  -> { "message": "if the email is registered and unverified, a verification link has been sent" }
+Success: 200 OK  -> { "message": "check your inbox for a recent verification code" }
 
 ================================================================================
 2. USERS
@@ -367,14 +376,13 @@ Headers:
 Request body (all fields optional; omit a field to leave it unchanged):
   {
     "name":       "New Name",
-    "phone":      "+1-555-0101",
     "unit":       "Choir",
     "profilePic": "https://cdn.example.com/pic.jpg"
   }
 
 Description:
-  Partial update of the current user's own profile. "name" may not be set to
-  an empty string.
+  Updates the current user profile. Supply a nonempty name when changing it.
+  Mobile numbers are read-only in the profile.
 
 Success: 200 OK -> updated user object
 Errors : 400 bad_request (empty name), 404 not_found
@@ -1247,6 +1255,7 @@ Errors: 403 forbidden, 404 not_found
 Errors: 403 forbidden, 404 not_found
 
 11.6 Community messages
+Requires a verified email address and community membership.
   GET    /api/communities/{communityId}/messages?latest=1&limit=50
   GET    /api/communities/{communityId}/messages?before={seq}&limit=50
   GET    /api/communities/{communityId}/messages?after={seq}&limit=50
@@ -1257,7 +1266,8 @@ Errors: 403 forbidden, 404 not_found
        -> 201 Created -> message object
   DELETE /api/communities/{communityId}/messages/{messageId}
        -> 204 No Content (message author or community admin)
-Errors: 400 bad_request, 403 not_member/forbidden, 404 not_found
+Errors: 400 bad_request, 403 email_verification_required/not_member/forbidden,
+        404 not_found
 
 ================================================================================
 END OF API REFERENCE

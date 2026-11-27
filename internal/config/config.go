@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -12,20 +13,25 @@ import (
 
 // Config holds all application configuration loaded from the environment.
 type Config struct {
-	AppEnv   string
-	HTTPPort string
+	AppEnv             string
+	HTTPPort           string
+	HTTPMaxInFlight    int
+	ChatMaxConnections int
 	// PublicBaseURL is the externally reachable base URL of the API, used to
 	// build links in emails (e.g. https://api.example.com). No trailing slash.
-	PublicBaseURL string
-	DB            DBConfig
-	JWT           JWTConfig
-	Storage       StorageConfig
-	Mail          MailConfig
+	PublicBaseURL         string
+	DB                    DBConfig
+	JWT                   JWTConfig
+	Storage               StorageConfig
+	Mail                  MailConfig
+	FirebaseAuthProjectID string
+	PushProjectID         string
 
 	// SkipJWTValidation, when true, disables JWT authentication and injects a
 	// synthetic identity. Intended ONLY for local API testing (e.g. Postman).
 	// It is refused in production.
 	SkipJWTValidation bool
+	TrustProxyHeaders bool
 
 	// CORSAllowedOrigins is the list of origins permitted by CORS. In
 	// development it defaults to ["*"]; in production it must be set explicitly.
@@ -66,6 +72,8 @@ type DBConfig struct {
 	Password string
 	Name     string
 	SSLMode  string
+	MinConns int32
+	MaxConns int32
 }
 
 // JWTConfig holds JWT signing settings.
@@ -87,7 +95,9 @@ type StorageConfig struct {
 	// MaxUploadBytes is the maximum allowed size for an uploaded file.
 	MaxUploadBytes int64
 	// MediaDir is the base directory where uploaded images are stored.
-	MediaDir string
+	MediaDir                string
+	MediaCDNBaseURL         string
+	SocialUploadConcurrency int
 	// MaxImageBytes is the maximum allowed size for an uploaded image.
 	MaxImageBytes int64
 }
@@ -107,9 +117,12 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		AppEnv:        getEnv("APP_ENV", "development"),
-		HTTPPort:      getEnv("HTTP_PORT", "8080"),
-		PublicBaseURL: strings.TrimRight(getEnv("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
+		AppEnv:             getEnv("APP_ENV", "development"),
+		HTTPPort:           getEnv("HTTP_PORT", "8080"),
+		HTTPMaxInFlight:    int(getEnvInt64("HTTP_MAX_IN_FLIGHT", 128)),
+		ChatMaxConnections: int(getEnvInt64("CHAT_MAX_CONNECTIONS", 4096)),
+		PushProjectID:      getEnv("FCM_PROJECT_ID", ""),
+		PublicBaseURL:      strings.TrimRight(getEnv("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5432"),
@@ -117,6 +130,8 @@ func Load() (*Config, error) {
 			Password: getEnv("DB_PASSWORD", "postgres"),
 			Name:     getEnv("DB_NAME", "believers_palace"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+			MinConns: int32(getEnvInt64("DB_MIN_CONNS", 2)),
+			MaxConns: int32(getEnvInt64("DB_MAX_CONNS", 10)),
 		},
 		JWT: JWTConfig{
 			Secret:     getEnv("JWT_SECRET", ""),
@@ -126,11 +141,14 @@ func Load() (*Config, error) {
 			Issuer:     getEnv("JWT_ISSUER", "believers_palace"),
 		},
 		Storage: StorageConfig{
-			Dir:            getEnv("STORAGE_DIR", "./storage/certificates"),
-			MaxUploadBytes: getEnvInt64("MAX_UPLOAD_BYTES", 10*1024*1024), // 10 MiB
-			MediaDir:       getEnv("MEDIA_DIR", "./storage/media"),
-			MaxImageBytes:  getEnvInt64("MAX_IMAGE_BYTES", 5*1024*1024), // 5 MiB
+			Dir:                     getEnv("STORAGE_DIR", "./storage/certificates"),
+			MaxUploadBytes:          getEnvInt64("MAX_UPLOAD_BYTES", 10*1024*1024), // 10 MiB
+			MediaDir:                getEnv("MEDIA_DIR", "./storage/media"),
+			MediaCDNBaseURL:         getEnv("MEDIA_CDN_BASE_URL", ""),
+			SocialUploadConcurrency: int(getEnvInt64("SOCIAL_UPLOAD_CONCURRENCY", 8)),
+			MaxImageBytes:           getEnvInt64("MAX_IMAGE_BYTES", 5*1024*1024), // 5 MiB
 		},
+		FirebaseAuthProjectID: getEnv("FIREBASE_AUTH_PROJECT_ID", ""),
 		Mail: MailConfig{
 			Provider: getEnv("MAIL_PROVIDER", "log"),
 			SMTPHost: getEnv("SMTP_HOST", ""),
@@ -140,6 +158,7 @@ func Load() (*Config, error) {
 			From:     getEnv("MAIL_FROM", ""),
 		},
 		SkipJWTValidation:  getEnvBool("SKIP_JWT_VALIDATION", false),
+		TrustProxyHeaders:  getEnvBool("TRUST_PROXY_HEADERS", false),
 		CORSAllowedOrigins: getEnvList("CORS_ALLOWED_ORIGINS", nil),
 		RateLimit: RateLimitConfig{
 			Enabled: getEnvBool("RATE_LIMIT_ENABLED", true),
@@ -148,6 +167,21 @@ func Load() (*Config, error) {
 		},
 	}
 
+	if cfg.DB.MaxConns < 1 || cfg.DB.MinConns < 0 || cfg.DB.MinConns > cfg.DB.MaxConns {
+		return nil, fmt.Errorf("DB_MAX_CONNS must be positive and DB_MIN_CONNS must be between zero and DB_MAX_CONNS")
+	}
+	if cfg.HTTPMaxInFlight < 1 || cfg.ChatMaxConnections < 1 {
+		return nil, fmt.Errorf("HTTP_MAX_IN_FLIGHT and CHAT_MAX_CONNECTIONS must be positive")
+	}
+	if cfg.Storage.SocialUploadConcurrency < 1 {
+		return nil, fmt.Errorf("SOCIAL_UPLOAD_CONCURRENCY must be positive")
+	}
+	if cfg.Storage.MediaCDNBaseURL != "" {
+		base, err := url.Parse(cfg.Storage.MediaCDNBaseURL)
+		if err != nil || base.Scheme != "https" || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
+			return nil, fmt.Errorf("MEDIA_CDN_BASE_URL must be an HTTPS origin or path prefix")
+		}
+	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}

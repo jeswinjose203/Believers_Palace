@@ -2,10 +2,14 @@ package user
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
+	"fmt"
 	"log"
 	"log/slog"
+	"math/big"
 	"net/mail"
+	"regexp"
 	"strings"
 	"time"
 
@@ -27,13 +31,13 @@ func invalid(msg string) error { return &ValidationError{Message: msg} }
 
 // Service holds user business logic.
 type Service struct {
-	repo       *Repository
-	tokens     *auth.TokenManager
-	mailer     mailer.Mailer
-	refreshTTL time.Duration
-	resetTTL   time.Duration
-	verifyTTL  time.Duration
-	logTokens  bool
+	repo              *Repository
+	tokens            *auth.TokenManager
+	mailer            mailer.Mailer
+	refreshTTL        time.Duration
+	resetTTL          time.Duration
+	logTokens         bool
+	verifySignupPhone func(context.Context, string, string) error
 }
 
 func (s *Service) SetLogTokens(v bool) {
@@ -48,14 +52,18 @@ func NewService(repo *Repository, tokens *auth.TokenManager, m mailer.Mailer, re
 		mailer:     m,
 		refreshTTL: refreshTTL,
 		resetTTL:   resetTTL,
-		verifyTTL:  24 * time.Hour,
 	}
 }
+
+var signupUsername = regexp.MustCompile(`^[A-Za-z0-9_]{3,32}$`)
 
 // Register validates input, creates a user with the default role, and issues a token.
 func (s *Service) Register(ctx context.Context, in RegisterInput) (*AuthResponse, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Email = strings.TrimSpace(in.Email)
+	if in.Username != nil && !signupUsername.MatchString(*in.Username) {
+		return nil, invalid("Use 3 to 32 letters, digits, or underscores for your username.")
+	}
 
 	if in.Name == "" {
 		return nil, invalid("name is required")
@@ -63,51 +71,77 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*AuthResponse
 	if !validEmail(in.Email) {
 		return nil, invalid("a valid email is required")
 	}
-	if len(in.Password) < 8 {
-		return nil, invalid("password must be at least 8 characters")
+	if len(in.Password) < 8 || len(in.Password) > 72 {
+		return nil, invalid("Password must be between 8 and 72 bytes.")
+	}
+	if in.Phone == nil {
+		return nil, invalid("A mobile number is required.")
+	}
+	phone, err := normalizeSignupPhone(*in.Phone)
+	if err != nil {
+		return nil, err
+	}
+	in.Phone = &phone
+	if in.FirebaseIDToken == "" {
+		return nil, invalid("Mobile verification is required.")
+	}
+	if s.verifySignupPhone == nil {
+		return nil, errSignupProofUnavailable
+	}
+	if err := s.verifySignupPhone(ctx, in.FirebaseIDToken, phone); err != nil {
+		return nil, err
 	}
 
-	hash, err := auth.HashPassword(in.Password)
+	response, err := s.completeVerifiedSignup(ctx, in)
 	if err != nil {
 		return nil, err
 	}
 
-	u, err := s.repo.Create(ctx, in, hash, auth.RoleUser)
-	if err != nil {
-		return nil, err
-	}
-
-	// Send an email verification token (soft verification: the account is
+	// Send an email verification code (soft verification: the account is
 	// usable immediately, emailVerified becomes true once verified). A failure
 	// to send must not fail registration.
-	if err := s.issueEmailVerification(ctx, u); err != nil {
-		log.Printf("register: failed to send verification email to %s: %v", u.Email, err)
+	if err := s.issueEmailVerification(ctx, response.User); err != nil {
+		log.Printf("register: failed to send verification email to %s: %v", response.User.Email, err)
 	}
 
-	return s.authResponse(ctx, u)
+	return response, nil
 }
 
-// issueEmailVerification creates a verification token and sends it.
+// issueEmailVerification creates a six-digit code and sends it.
 func (s *Service) issueEmailVerification(ctx context.Context, u *User) error {
-	raw, hash, err := auth.GenerateOpaqueToken()
+	number, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
 	if err != nil {
 		return err
 	}
-	if err := s.repo.StoreEmailVerificationToken(ctx, u.ID, hash, time.Now().Add(s.verifyTTL)); err != nil {
+	code := fmt.Sprintf("%06d", number.Int64())
+	hash := s.tokens.HashEmailVerificationCode(u.Email, code)
+	issued, err := s.repo.StoreEmailVerificationCode(ctx, u.ID, hash)
+	if err != nil || !issued {
 		return err
 	}
 	if s.logTokens {
-		slog.Info("email verification token issued",
+		slog.Info("email verification code issued",
 			slog.String("email", u.Email),
-			slog.String("token", raw),
+			slog.String("code", code),
 		)
 	}
-	return s.mailer.SendEmailVerification(ctx, u.Email, raw)
+	if err := s.mailer.SendEmailVerification(ctx, u.Email, code); err != nil {
+		return errors.Join(err, s.repo.DeleteEmailVerificationCode(ctx, u.ID, hash))
+	}
+	return nil
 }
 
-// VerifyEmail consumes a verification token and marks the user's email verified.
+// VerifyEmail marks the user's email verified using a code or a legacy token.
 func (s *Service) VerifyEmail(ctx context.Context, in VerifyEmailInput) error {
-	if strings.TrimSpace(in.Token) == "" {
+	in.Token = strings.TrimSpace(in.Token)
+	if in.Email != "" || len(in.Token) == 6 {
+		email := strings.ToLower(strings.TrimSpace(in.Email))
+		if !validEmail(email) || len(in.Token) != 6 || strings.Trim(in.Token, "0123456789") != "" {
+			return invalid("email and a six-digit verification code are required")
+		}
+		return s.repo.VerifyEmailCode(ctx, email, s.tokens.HashEmailVerificationCode(email, in.Token))
+	}
+	if in.Token == "" {
 		return invalid("token is required")
 	}
 	userID, err := s.repo.ConsumeEmailVerificationToken(ctx, auth.HashToken(in.Token))
@@ -117,7 +151,7 @@ func (s *Service) VerifyEmail(ctx context.Context, in VerifyEmailInput) error {
 	return s.repo.MarkEmailVerified(ctx, userID)
 }
 
-// ResendVerification re-issues a verification token. To avoid account
+// ResendVerification re-issues a verification code. To avoid account
 // enumeration it always succeeds regardless of whether the email exists or is
 // already verified.
 func (s *Service) ResendVerification(ctx context.Context, in ResendVerificationInput) error {
@@ -140,6 +174,10 @@ func (s *Service) ResendVerification(ctx context.Context, in ResendVerificationI
 
 // Login verifies credentials and issues a token.
 func (s *Service) Login(ctx context.Context, in LoginInput) (*AuthResponse, error) {
+	return s.login(ctx, in, false)
+}
+
+func (s *Service) login(ctx context.Context, in LoginInput, teacher bool) (*AuthResponse, error) {
 	if !validEmail(strings.TrimSpace(in.Email)) || in.Password == "" {
 		return nil, invalid("email and password are required")
 	}
@@ -154,6 +192,15 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*AuthResponse, erro
 
 	if !auth.CheckPassword(u.PasswordHash, in.Password) {
 		return nil, ErrInvalidCredentials
+	}
+	if teacher {
+		assigned, err := s.repo.hasCatechismAssignment(ctx, u.ID)
+		if err != nil {
+			return nil, err
+		}
+		if !assigned {
+			return nil, ErrInvalidCredentials
+		}
 	}
 
 	return s.authResponse(ctx, u)
@@ -182,6 +229,15 @@ func (s *Service) Stats(ctx context.Context, churchID string) (*Stats, error) {
 func (s *Service) UpdateProfile(ctx context.Context, id string, in ProfileUpdateInput) (*User, error) {
 	if in.Name != nil && strings.TrimSpace(*in.Name) == "" {
 		return nil, invalid("name cannot be empty")
+	}
+	if in.Phone != nil {
+		current, err := s.repo.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if current.Phone == nil || *current.Phone != *in.Phone {
+			return nil, invalid("Mobile number changes require verification.")
+		}
 	}
 	if in.ChurchID != nil {
 		// Staff roles are bound to their church by an admin; letting them
@@ -306,6 +362,10 @@ func (s *Service) ResetPassword(ctx context.Context, in ResetPasswordInput) erro
 }
 
 func (s *Service) authResponse(ctx context.Context, u *User) (*AuthResponse, error) {
+	return s.issueSession(ctx, s.repo.pool, u)
+}
+
+func (s *Service) issueSession(ctx context.Context, db tokenWriter, u *User) (*AuthResponse, error) {
 	churchID := ""
 	if u.ChurchID != nil {
 		churchID = *u.ChurchID
@@ -319,7 +379,7 @@ func (s *Service) authResponse(ctx context.Context, u *User) (*AuthResponse, err
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repo.StoreRefreshToken(ctx, u.ID, refreshHash, time.Now().Add(s.refreshTTL)); err != nil {
+	if err := storeRefreshToken(ctx, db, u.ID, refreshHash, time.Now().Add(s.refreshTTL)); err != nil {
 		return nil, err
 	}
 

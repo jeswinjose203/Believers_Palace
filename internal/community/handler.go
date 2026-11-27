@@ -11,11 +11,13 @@ import (
 	"believers_palace/internal/httpx"
 )
 
-type Handler struct{ svc *Service }
+type Handler struct {
+	svc *Service
+}
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
-func (h *Handler) Routes() chi.Router {
+func (h *Handler) Routes(requireVerifiedEmail func(http.Handler) http.Handler) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.list)
 	r.Post("/", h.create)
@@ -26,19 +28,36 @@ func (h *Handler) Routes() chi.Router {
 	r.Get("/{communityId}/members", h.members)
 	r.Delete("/{communityId}/members/{userId}", h.remove)
 	r.Delete("/{communityId}/leave", h.leave)
-	r.Get("/{communityId}/messages", h.listMessages)
-	r.Post("/{communityId}/messages", h.postMessage)
-	r.Delete("/{communityId}/messages/{messageId}", h.deleteMessage)
+	r.Group(func(r chi.Router) {
+		r.Use(requireVerifiedEmail)
+		r.Get("/{communityId}/messages", h.listMessages)
+		r.Post("/{communityId}/messages", h.postMessage)
+		r.Delete("/{communityId}/messages/{messageId}", h.deleteMessage)
+	})
 	return r
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	items, err := h.svc.List(r.Context(), auth.MustFromContext(r.Context()))
+	options, err := parseListOptions(r)
 	if err != nil {
 		h.writeError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{"data": items})
+	if len(options) != 0 {
+		options[0].Limit++
+	}
+	items, err := h.svc.List(r.Context(), auth.MustFromContext(r.Context()), options...)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	result := map[string]any{"data": items}
+	if len(options) != 0 && len(items) == options[0].Limit {
+		items = items[:len(items)-1]
+		result["data"] = items
+		result["nextCursor"] = communityCursor(items[len(items)-1])
+	}
+	httpx.JSON(w, http.StatusOK, result)
 }
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var in CreateRequest

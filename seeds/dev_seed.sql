@@ -19,3 +19,80 @@ VALUES (
     true
 )
 ON CONFLICT (id) DO NOTHING;
+
+-- Additional development superadmin for testing with a separate login.
+INSERT INTO users (name, email, phone, password_hash, role)
+VALUES (
+    'Bpalace',
+    'bpalace@yopmail.com',
+    '+913344277677',
+    '$2a$12$vb8i.itcw8WjXDzcuRpXZugfsHANsNMGWpW5yEj9XZgXFRVoXX4O2',
+    'super_admin'
+)
+ON CONFLICT (email) DO NOTHING;
+
+-- Sample church for local catechism testing (fixed ID).
+INSERT INTO churches (id, name, address)
+VALUES (
+    '00000000-0000-0000-0000-000000000010',
+    'St. Mary Parish (Dev)',
+    '1 Faith Way'
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO catechism_classes (
+    id, church_id, name, description, level, min_age, max_age,
+    teacher_name, schedule, location, start_date, end_date, capacity, status
+)
+VALUES (
+    '00000000-0000-0000-0000-000000000020',
+    '00000000-0000-0000-0000-000000000010',
+    'First Communion 2026',
+    'Preparation classes for first Holy Communion.',
+    'first_communion',
+    7,
+    10,
+    'Fr. Sample',
+    '[{"day":"Saturday","time":"10:00"}]'::jsonb,
+    'Parish hall',
+    CURRENT_DATE,
+    CURRENT_DATE + INTERVAL '180 days',
+    25,
+    'open'
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO catechism_enrollments (
+    id, class_id, guardian_id, student_name, date_of_birth, notes, status
+)
+VALUES (
+    '00000000-0000-0000-0000-000000000021',
+    '00000000-0000-0000-0000-000000000020',
+    '00000000-0000-0000-0000-000000000001',
+    'Sample Child',
+    '2016-05-15',
+    'Dev seed enrollment',
+    'pending'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Marketplace sample categories (idempotent).
+INSERT INTO marketplace_categories (id, name, scope, sort_order, active)
+VALUES
+    ('00000000-0000-0000-0001-000000000001', 'General', 'community', 0, true),
+    ('00000000-0000-0000-0001-000000000002', 'Books & Media', 'community', 1, true),
+    ('00000000-0000-0000-0001-000000000010', 'Church Store', 'shop', 0, true)
+ON CONFLICT (name, scope) DO NOTHING;
+
+INSERT INTO shop_products (id, category_id, title, description, images, price_cents, active, created_by)
+VALUES (
+    '00000000-0000-0000-0002-000000000001',
+    '00000000-0000-0000-0001-000000000010',
+    'Sample Worship Hymnal',
+    'Development seed product for the official shop catalog.',
+    '[]'::jsonb,
+    1999,
+    true,
+    '00000000-0000-0000-0000-000000000001'
+)
+ON CONFLICT (id) DO NOTHING;

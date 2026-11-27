@@ -19,7 +19,7 @@ const (
 
 type store interface {
 	Create(context.Context, string, string, string, *string) (*Community, error)
-	List(context.Context, string) ([]Community, error)
+	List(context.Context, string, ...ListOptions) ([]Community, error)
 	Get(context.Context, string) (*Community, error)
 	Membership(context.Context, string, string) (string, bool, error)
 	RequestMembership(context.Context, string, string) (*Membership, error)
@@ -27,7 +27,7 @@ type store interface {
 	ReviewRequest(context.Context, string, string, bool) error
 	RemoveMember(context.Context, string, string) error
 	Leave(context.Context, string, string) error
-	CreateMessage(context.Context, string, string, string, *string, string) (*Message, error)
+	CreateMessage(context.Context, string, string, string, *string, string, ...string) (*Message, error)
 	ListMessages(context.Context, string, CursorQuery) ([]Message, bool, error)
 	DeleteMessage(context.Context, string, string) error
 	GetMessage(context.Context, string, string) (*Message, error)
@@ -69,8 +69,8 @@ func (s *Service) Create(ctx context.Context, id auth.Identity, in CreateRequest
 	return s.repo.Create(ctx, id.UserID, name, strings.TrimSpace(in.Description), image)
 }
 
-func (s *Service) List(ctx context.Context, id auth.Identity) ([]Community, error) {
-	return s.repo.List(ctx, id.UserID)
+func (s *Service) List(ctx context.Context, id auth.Identity, options ...ListOptions) ([]Community, error) {
+	return s.repo.List(ctx, id.UserID, options...)
 }
 
 func (s *Service) requireCommunity(ctx context.Context, cid string) (*Community, error) {
@@ -85,9 +85,6 @@ func (s *Service) membership(ctx context.Context, id auth.Identity, cid string) 
 	return status == "active", admin && status == "active", err
 }
 func (s *Service) requireMember(ctx context.Context, id auth.Identity, cid string) (bool, error) {
-	if _, err := s.requireCommunity(ctx, cid); err != nil {
-		return false, err
-	}
 	active, admin, err := s.membership(ctx, id, cid)
 	if err != nil {
 		return false, err
@@ -169,6 +166,11 @@ func (s *Service) Leave(ctx context.Context, id auth.Identity, cid string) error
 	}
 	return s.repo.Leave(ctx, cid, id.UserID)
 }
+func (s *Service) CanReadChat(ctx context.Context, id auth.Identity, cid string) bool {
+	_, err := s.requireMember(ctx, id, cid)
+	return err == nil
+}
+
 func (s *Service) ListMessages(ctx context.Context, id auth.Identity, cid string, q CursorQuery) (*CursorPage, error) {
 	if q.Before > 0 && (q.AfterSet || q.After > 0) {
 		return nil, &ValidationError{"use either before or after, not both"}
@@ -199,6 +201,9 @@ func (s *Service) Post(ctx context.Context, id auth.Identity, cid string, in Mes
 	if len(content) > maxMessageLength {
 		return nil, &ValidationError{"message is too long"}
 	}
+	if len(in.ClientID) > 64 {
+		return nil, &ValidationError{"client message ID is too long"}
+	}
 	name, pic, ok, err := s.users.DisplayOf(ctx, id.UserID)
 	if err != nil {
 		return nil, err
@@ -206,7 +211,7 @@ func (s *Service) Post(ctx context.Context, id auth.Identity, cid string, in Mes
 	if !ok {
 		name = "User"
 	}
-	return s.repo.CreateMessage(ctx, cid, id.UserID, name, pic, content)
+	return s.repo.CreateMessage(ctx, cid, id.UserID, name, pic, content, in.ClientID)
 }
 func (s *Service) DeleteMessage(ctx context.Context, id auth.Identity, cid, messageID string) error {
 	admin, err := s.requireMember(ctx, id, cid)

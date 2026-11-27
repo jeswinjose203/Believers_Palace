@@ -16,9 +16,11 @@ import (
 	"believers_palace/internal/announcement"
 	"believers_palace/internal/auth"
 	"believers_palace/internal/booking"
+	"believers_palace/internal/catechism"
 	"believers_palace/internal/cemetery"
 	"believers_palace/internal/certificate"
 	"believers_palace/internal/chat"
+	"believers_palace/internal/chatlive"
 	"believers_palace/internal/church"
 	"believers_palace/internal/community"
 	"believers_palace/internal/config"
@@ -26,29 +28,44 @@ import (
 	"believers_palace/internal/hall"
 	"believers_palace/internal/httpx"
 	"believers_palace/internal/mailer"
+	"believers_palace/internal/marketplace"
 	"believers_palace/internal/media"
 	"believers_palace/internal/personalcalendar"
+	"believers_palace/internal/social"
 	"believers_palace/internal/user"
 )
 
 // New builds the application HTTP handler with all routes and middleware.
-func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
+func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	if cfg.TrustProxyHeaders {
+		r.Use(trustedProxyIP)
+	}
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(30 * time.Second))
+	timeout := middleware.Timeout(30 * time.Second)
+	r.Use(func(next http.Handler) http.Handler {
+		bounded := timeout(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.URL.Path == "/api/chat/live" {
+				next.ServeHTTP(w, req)
+				return
+			}
+			bounded.ServeHTTP(w, req)
+		})
+	})
 	r.Use(securityHeaders)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+		AllowedMethods:   []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Debug-User-Id", "X-Debug-Role", "X-Debug-Church-Id"},
-		ExposedHeaders:   []string{"Link"},
+		ExposedHeaders:   []string{"Link", "Retry-After"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
+	r.Use(limitInFlight(cfg.HTTPMaxInFlight, "/api/chat/live"))
 	if cfg.RateLimit.Enabled {
 		// General per-IP limit across all endpoints.
 		r.Use(httprate.LimitByIP(cfg.RateLimit.General, time.Minute))
@@ -81,6 +98,9 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	userRepo := user.NewRepository(pool)
 	userSvc := user.NewService(userRepo, tm, mail, cfg.JWT.RefreshTTL, cfg.JWT.ResetTTL)
 	userSvc.SetLogTokens(cfg.AppEnv != "production") // log tokens in dev/test, not in prod
+	if cfg.FirebaseAuthProjectID != "" {
+		userSvc.SetFirebaseSignupProject(cfg.FirebaseAuthProjectID)
+	}
 	userHandler := user.NewHandler(userSvc, tm)
 
 	churchRepo := church.NewRepository(pool)
@@ -103,6 +123,10 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	eventSvc := event.NewService(eventRepo, churchRepo)
 	eventHandler := event.NewHandler(eventSvc)
 
+	catechismRepo := catechism.NewRepository(pool)
+	catechismSvc := catechism.NewService(catechismRepo, churchRepo)
+	catechismHandler := catechism.NewHandler(catechismSvc)
+
 	chatRepo := chat.NewRepository(pool)
 	chatSvc := chat.NewService(
 		chatRepo,
@@ -115,6 +139,31 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	communityRepo := community.NewRepository(pool)
 	communitySvc := community.NewService(communityRepo, userDisplayResolver{userRepo})
 	communityHandler := community.NewHandler(communitySvc)
+	chatTransport := chatlive.Postgres{Pool: pool}
+	var pushWorker *chatlive.PushWorker
+	if cfg.PushProjectID != "" {
+		var err error
+		pushWorker, err = chatlive.NewPushWorker(ctx, chatTransport, cfg.PushProjectID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	liveChat := chatlive.New(chatTransport, func(ctx context.Context, id auth.Identity, room chatlive.Room) bool {
+		switch room.Kind {
+		case "event":
+			return chatSvc.CanReadChat(ctx, id, room.ID)
+		case "direct":
+			return id.UserID == room.ID
+		case "community":
+			return communitySvc.CanReadChat(ctx, id, room.ID)
+		default:
+			return false
+		}
+	})
+
+	marketplaceRepo := marketplace.NewRepository(pool)
+	marketplaceSvc := marketplace.NewService(marketplaceRepo, userDisplayResolver{userRepo})
+	marketplaceHandler := marketplace.NewHandler(marketplaceSvc)
 
 	cemeteryRepo := cemetery.NewRepository(pool)
 	cemeterySvc := cemetery.NewService(cemeteryRepo, churchRepo)
@@ -132,14 +181,20 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	mediaSvc := media.NewService(mediaStorage, cfg.PublicBaseURL, cfg.Storage.MaxImageBytes)
+	mediaSvc := media.NewService(mediaStorage, cfg.PublicBaseURL, cfg.Storage.MaxImageBytes).WithCDN(cfg.Storage.MediaCDNBaseURL)
 	mediaHandler := media.NewHandler(mediaSvc)
- 
-    personalCalRepo := personalcalendar.NewRepository(pool)
-    personalCalSvc := personalcalendar.NewService(personalCalRepo, bookingRepo, eventRepo)
-    personalCalHandler := personalcalendar.NewHandler(personalCalSvc)
- 
-	// Health check.
+
+	personalCalRepo := personalcalendar.NewRepository(pool)
+	personalCalSvc := personalcalendar.NewService(personalCalRepo, bookingRepo, eventRepo, userRepo)
+	personalCalHandler := personalcalendar.NewHandler(personalCalSvc)
+
+	// Liveness stays independent of database health so database outages do
+	// not cause all API replicas to restart.
+	r.Get("/livez", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	// Database readiness check.
 	r.Get("/health", func(w http.ResponseWriter, req *http.Request) {
 		if err := pool.Ping(req.Context()); err != nil {
 			httpx.Error(w, http.StatusServiceUnavailable, "database unavailable")
@@ -150,6 +205,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 
 	// API routes (spec base path is /api).
 	r.Route("/api", func(api chi.Router) {
+		api.With(limitInFlight(cfg.ChatMaxConnections, "")).Get("/chat/live", liveChat.ServeHTTP)
 		// Public authentication routes, with a stricter per-IP rate limit to
 		// resist brute-force login and email-bomb abuse of password reset and
 		// verification resend.
@@ -170,9 +226,15 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 		// Authenticated routes.
 		api.Group(func(protected chi.Router) {
 			protected.Use(authMiddleware)
+			protected.With(userRepo.RequireVerifiedEmail).Post("/chat/live-ticket", liveChat.Ticket)
+			protected.With(userRepo.RequireVerifiedEmail).Get("/chat/preferences", chatTransport.ListPreferences)
+			protected.With(userRepo.RequireVerifiedEmail).Get("/chat/joined-communities", chatTransport.ListJoinedCommunities)
+			protected.With(userRepo.RequireVerifiedEmail).Put("/chat/preferences/{kind}/{roomId}", chatTransport.SetPreference(liveChat))
+			protected.With(userRepo.RequireVerifiedEmail).Post("/chat/push-devices", chatTransport.PushDevice(pushWorker != nil, false))
+			protected.Post("/chat/push-devices/remove", chatTransport.PushDevice(false, true))
 			protected.Mount("/users", userHandler.UserRoutes())
-            protected.Mount("/users/me/calendar", personalCalHandler.Routes())
-            protected.Mount("/calendar", personalCalHandler.HolidayRoutes())
+			protected.Mount("/users/me/calendar", personalCalHandler.Routes())
+			protected.Mount("/calendar", personalCalHandler.HolidayRoutes())
 			protected.Mount("/users/{userId}/certificates", certificateHandler.UserRoutes())
 			protected.Mount("/churches", churchHandler.Routes())
 
@@ -181,6 +243,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 			protected.Mount("/churches/{churchId}/halls", hallHandler.ChurchRoutes())
 			protected.Mount("/churches/{churchId}/bookings", bookingHandler.ChurchRoutes())
 			protected.Mount("/churches/{churchId}/events", eventHandler.ChurchRoutes())
+			protected.Mount("/churches/{churchId}/catechism-classes", catechismHandler.ChurchRoutes())
 			protected.Mount("/churches/{churchId}/cemetery-plots", cemeteryHandler.PlotChurchRoutes())
 			protected.Mount("/churches/{churchId}/cemetery-service-requests", cemeteryHandler.RequestChurchRoutes())
 
@@ -188,14 +251,24 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (http.Handler, error) {
 			protected.Mount("/announcements", announcementHandler.Routes())
 			protected.Mount("/halls", hallHandler.Routes())
 			protected.Mount("/bookings", bookingHandler.Routes())
-			protected.Mount("/events", eventHandler.RoutesWith(chatHandler.EventRoutes()))
-			protected.Mount("/communities", communityHandler.Routes())
+			protected.Mount("/catechism-classes", catechismHandler.ClassRoutes())
+			protected.Mount("/catechism-teacher/classes", catechismHandler.TeacherRoutes())
+			protected.Mount("/catechism-enrollments", catechismHandler.EnrollmentRoutes())
+			protected.Mount("/catechism-sessions", catechismHandler.SessionRoutes())
+			protected.Mount("/events", eventHandler.RoutesWith(chatHandler.EventRoutes(userRepo.RequireVerifiedEmail)))
+			protected.Mount("/social", social.New(pool, mediaSvc).WithUploadConcurrency(cfg.Storage.SocialUploadConcurrency).Routes(userRepo.RequireVerifiedEmail))
+			protected.Mount("/communities", communityHandler.Routes(userRepo.RequireVerifiedEmail))
+			protected.Mount("/marketplace", marketplaceHandler.Routes())
 			protected.Mount("/cemetery-service-requests", cemeteryHandler.RequestRoutes())
 			protected.Mount("/cemetery-plots", cemeteryHandler.PlotRoutes())
 			protected.Mount("/certificates", certificateHandler.Routes())
 		})
 	})
 
+	go chatTransport.Run(ctx, liveChat)
+	if pushWorker != nil {
+		go pushWorker.Run(ctx)
+	}
 	return r, nil
 }
 
@@ -206,14 +279,14 @@ type eventChurchResolver struct {
 }
 
 func (a eventChurchResolver) LookupEvent(ctx context.Context, eventID string) (chat.EventInfo, bool, error) {
-	ev, err := a.repo.GetByID(ctx, eventID)
+	churchID, registrationRequired, err := a.repo.ChatAccessInfo(ctx, eventID)
 	if errors.Is(err, event.ErrNotFound) {
 		return chat.EventInfo{}, false, nil
 	}
 	if err != nil {
 		return chat.EventInfo{}, false, err
 	}
-	return chat.EventInfo{ChurchID: ev.ChurchID, RegistrationRequired: ev.RegistrationRequired}, true, nil
+	return chat.EventInfo{ChurchID: churchID, RegistrationRequired: registrationRequired}, true, nil
 }
 
 // userDisplayResolver adapts the user repository to the chat package's
@@ -223,12 +296,12 @@ type userDisplayResolver struct {
 }
 
 func (a userDisplayResolver) DisplayOf(ctx context.Context, userID string) (string, *string, bool, error) {
-	u, err := a.repo.GetByID(ctx, userID)
+	name, profilePic, err := a.repo.DisplayByID(ctx, userID)
 	if errors.Is(err, user.ErrNotFound) {
 		return "", nil, false, nil
 	}
 	if err != nil {
 		return "", nil, false, err
 	}
-	return u.Name, u.ProfilePic, true, nil
+	return name, profilePic, true, nil
 }

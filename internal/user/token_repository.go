@@ -7,18 +7,22 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ErrTokenInvalid is returned when a refresh or reset token is unknown,
 // expired, already used, or revoked.
 var ErrTokenInvalid = errors.New("token is invalid or expired")
 
-// StoreRefreshToken persists the hash of a refresh token for a user.
-func (r *Repository) StoreRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
+type tokenWriter interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}
+
+func storeRefreshToken(ctx context.Context, db tokenWriter, userID, tokenHash string, expiresAt time.Time) error {
 	const q = `
 		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)`
-	if _, err := r.pool.Exec(ctx, q, userID, tokenHash, expiresAt); err != nil {
+	if _, err := db.Exec(ctx, q, userID, tokenHash, expiresAt); err != nil {
 		return fmt.Errorf("store refresh token: %w", err)
 	}
 	return nil
@@ -68,9 +72,11 @@ func (r *Repository) RevokeRefreshToken(ctx context.Context, tokenHash string) e
 // (log out everywhere).
 func (r *Repository) RevokeAllRefreshTokens(ctx context.Context, userID string) error {
 	const q = `
-		UPDATE refresh_tokens
-		SET revoked_at = now()
-		WHERE user_id = $1 AND revoked_at IS NULL`
+		WITH revoked AS (
+			UPDATE refresh_tokens SET revoked_at = now()
+			WHERE user_id = $1 AND revoked_at IS NULL
+		)
+		DELETE FROM chat_push_devices WHERE user_id = $1`
 	if _, err := r.pool.Exec(ctx, q, userID); err != nil {
 		return fmt.Errorf("revoke all refresh tokens: %w", err)
 	}
@@ -122,13 +128,46 @@ func (r *Repository) UpdatePassword(ctx context.Context, userID, passwordHash st
 	return nil
 }
 
-// StoreEmailVerificationToken persists the hash of a single-use verification token.
-func (r *Repository) StoreEmailVerificationToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
+// StoreEmailVerificationCode replaces the previous code after a one-minute cooldown.
+func (r *Repository) StoreEmailVerificationCode(ctx context.Context, userID, hash string) (bool, error) {
 	const q = `
-		INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
-		VALUES ($1, $2, $3)`
-	if _, err := r.pool.Exec(ctx, q, userID, tokenHash, expiresAt); err != nil {
-		return fmt.Errorf("store email verification token: %w", err)
+		INSERT INTO email_verification_codes (user_id, code_hash)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id) DO UPDATE
+		SET code_hash = EXCLUDED.code_hash, issued_at = now(), attempts_remaining = 5
+		WHERE email_verification_codes.issued_at <= now() - interval '1 minute'`
+	tag, err := r.pool.Exec(ctx, q, userID, hash)
+	if err != nil {
+		return false, fmt.Errorf("store email verification code: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+func (r *Repository) DeleteEmailVerificationCode(ctx context.Context, userID, hash string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM email_verification_codes WHERE user_id = $1 AND code_hash = $2`, userID, hash)
+	return err
+}
+
+// VerifyEmailCode records each attempt and verifies the account in one statement.
+func (r *Repository) VerifyEmailCode(ctx context.Context, email, hash string) error {
+	const q = `
+		WITH attempt AS (
+			UPDATE email_verification_codes AS c
+			SET attempts_remaining = CASE WHEN c.code_hash = $2 THEN 0 ELSE c.attempts_remaining - 1 END
+			FROM users AS u
+			WHERE u.id = c.user_id AND u.email = $1
+			  AND c.attempts_remaining > 0 AND c.issued_at > now() - interval '10 minutes'
+			RETURNING c.user_id, c.code_hash
+		)
+		UPDATE users AS u SET email_verified = true, updated_at = now()
+		FROM attempt
+		WHERE u.id = attempt.user_id AND u.email = $1 AND attempt.code_hash = $2`
+	tag, err := r.pool.Exec(ctx, q, email, hash)
+	if err != nil {
+		return fmt.Errorf("verify email code: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrTokenInvalid
 	}
 	return nil
 }

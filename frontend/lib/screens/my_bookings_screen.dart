@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 
@@ -37,7 +38,7 @@ class _MyBookingsScreenState extends ConsumerState<MyBookingsScreen> {
     if (!mounted) return;
     try {
       await ref.read(apiServiceProvider).cancelBooking(booking.id, reason: reason);
-      _show('Booking cancelled');
+      if (mounted) _show(context.tr('Booking cancelled'));
       _refresh();
     } catch (e) {
       _show(e.toString(), isError: true);
@@ -53,7 +54,7 @@ class _MyBookingsScreenState extends ConsumerState<MyBookingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My Bookings')),
+      appBar: AppBar(title: Text(context.tr('My Bookings'))),
       body: FutureBuilder<PaginatedResponse<Booking>>(
         future: _future,
         builder: (context, snapshot) {
@@ -61,11 +62,11 @@ class _MyBookingsScreenState extends ConsumerState<MyBookingsScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(child: Text(context.tr('Error: {0}', [snapshot.error])));
           }
           final bookings = snapshot.data?.data ?? [];
           if (bookings.isEmpty) {
-            return const Center(child: Text('No bookings yet.'));
+            return Center(child: Text(context.tr('No bookings yet.')));
           }
           return RefreshIndicator(
             onRefresh: _refresh,
@@ -73,15 +74,15 @@ class _MyBookingsScreenState extends ConsumerState<MyBookingsScreen> {
               itemCount: bookings.length,
               itemBuilder: (context, i) {
                 final b = bookings[i];
-                final fmt = DateFormat.yMd().add_jm();
+                final fmt = DateFormat.yMd(context.dateLocale).add_jm();
                 return ListTile(
                   title: Text('${fmt.format(b.startDate.toLocal())}'),
-                  subtitle: Text('Purpose: ${b.purpose ?? "-"}'),
+                  subtitle: Text(context.tr('Purpose: {0}', [b.purpose ?? "-"])),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Chip(
-                        label: Text(b.status),
+                        label: Text(context.tr(b.status)),
                         backgroundColor: _statusColor(b.status),
                       ),
                       if (b.status == 'pending' || b.status == 'approved')
@@ -119,19 +120,19 @@ class _CancelDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Cancel booking'),
+      title: Text(context.tr('Cancel booking')),
       content: TextField(
         controller: _controller,
-        decoration: const InputDecoration(labelText: 'Reason (optional)'),
+        decoration: InputDecoration(labelText: context.tr('Reason (optional)')),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Keep'),
+          child: Text(context.tr('Keep')),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(_controller.text.isEmpty ? null : _controller.text),
-          child: const Text('Cancel booking'),
+          child: Text(context.tr('Cancel booking')),
         ),
       ],
     );

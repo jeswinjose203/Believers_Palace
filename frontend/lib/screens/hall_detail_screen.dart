@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 
@@ -88,7 +89,7 @@ class _HallDetailScreenState extends ConsumerState<HallDetailScreen> {
 
   Future<void> _book() async {
     if (!_end.isAfter(_start)) {
-      _toast('End time must be after the start time.');
+      _toast(context.tr('End time must be after the start time.'));
       return;
     }
     setState(() => _booking = true);
@@ -102,7 +103,7 @@ class _HallDetailScreenState extends ConsumerState<HallDetailScreen> {
         'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       });
       if (!mounted) return;
-      _toast('Booking requested');
+      _toast(context.tr('Booking requested'));
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
@@ -114,7 +115,7 @@ class _HallDetailScreenState extends ConsumerState<HallDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final h = widget.hall;
-    final fmt = DateFormat('EEE, d MMM yyyy  h:mm a');
+    final fmt = DateFormat('EEE, d MMM yyyy  h:mm a', context.dateLocale);
 
     return Scaffold(
       appBar: AppBar(
@@ -170,19 +171,19 @@ class _HallDetailScreenState extends ConsumerState<HallDetailScreen> {
                   ),
                 ],
                 const Divider(height: 32),
-                const Text(
-                  'Choose date & time',
+                Text(
+                  context.tr('Choose date & time'),
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 8),
                 _SlotTile(
-                  label: 'Start',
+                  label: context.tr('Start'),
                   value: fmt.format(_start),
                   onTap: _booking ? null : _pickStart,
                 ),
                 const SizedBox(height: 10),
                 _SlotTile(
-                  label: 'End',
+                  label: context.tr('End'),
                   value: fmt.format(_end),
                   onTap: _booking ? null : _pickEnd,
                 ),
@@ -190,8 +191,8 @@ class _HallDetailScreenState extends ConsumerState<HallDetailScreen> {
                   const SizedBox(height: 16),
                   TextField(
                     controller: _purpose,
-                    decoration: const InputDecoration(
-                      labelText: 'Purpose (optional)',
+                    decoration: InputDecoration(
+                      labelText: context.tr('Purpose (optional)'),
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -200,8 +201,8 @@ class _HallDetailScreenState extends ConsumerState<HallDetailScreen> {
                     controller: _notes,
                     minLines: 2,
                     maxLines: 4,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes (optional)',
+                    decoration: InputDecoration(
+                      labelText: context.tr('Notes (optional)'),
                       alignLabelWithHint: true,
                       border: OutlineInputBorder(),
                     ),
@@ -223,7 +224,7 @@ class _HallDetailScreenState extends ConsumerState<HallDetailScreen> {
                               ),
                             )
                           : const Icon(Icons.event_available),
-                      label: Text(_booking ? 'Booking...' : 'Book Hall'),
+                      label: Text(_booking ? context.tr('Booking...') : context.tr('Book Hall')),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _kPurpleDark,
                         foregroundColor: Colors.white,
@@ -235,8 +236,8 @@ class _HallDetailScreenState extends ConsumerState<HallDetailScreen> {
                     ),
                   )
                 else
-                  const Text(
-                    'Booking is not available for your account.',
+                  Text(
+                    context.tr('Booking is not available for your account.'),
                     style: TextStyle(color: Colors.black54),
                   ),
               ],

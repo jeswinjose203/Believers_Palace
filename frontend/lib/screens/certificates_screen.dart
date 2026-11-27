@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
@@ -49,7 +50,7 @@ class _CertificatesScreenState extends ConsumerState<CertificatesScreen> {
       final dir = await getApplicationDocumentsDirectory();
       final path = '${dir.path}/${c.fileName}';
       await ref.read(apiServiceProvider).downloadCertificate(c.id, path);
-      _show('Saved to $path');
+      if (mounted) _show(context.tr('Saved to {0}', [path]));
     } catch (e) {
       _show(e.toString(), isError: true);
     }
@@ -73,7 +74,7 @@ class _CertificatesScreenState extends ConsumerState<CertificatesScreen> {
             );
             if (context.mounted) {
               Navigator.of(context).pop();
-              _show('Certificate uploaded');
+              if (mounted) _show(context.tr('Certificate uploaded'));
               _refresh();
             }
           } catch (e) {
@@ -88,7 +89,7 @@ class _CertificatesScreenState extends ConsumerState<CertificatesScreen> {
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
     return Scaffold(
-      appBar: AppBar(title: const Text('My Certificates')),
+      appBar: AppBar(title: Text(context.tr('My Certificates'))),
       floatingActionButton: FloatingActionButton(
         onPressed: _upload,
         child: const Icon(Icons.upload_file),
@@ -100,11 +101,11 @@ class _CertificatesScreenState extends ConsumerState<CertificatesScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(child: Text(context.tr('Error: {0}', [snapshot.error])));
           }
           final certificates = snapshot.data?.data ?? [];
           if (certificates.isEmpty) {
-            return const Center(child: Text('No certificates yet.'));
+            return Center(child: Text(context.tr('No certificates yet.')));
           }
           return RefreshIndicator(
             onRefresh: _refresh,
@@ -192,19 +193,19 @@ class _UploadCertificateDialogState extends State<_UploadCertificateDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Upload certificate'),
+      title: Text(context.tr('Upload certificate')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              title: Text(_file == null ? 'Select PDF' : 'PDF: $_fileName'),
+              title: Text(_file == null ? context.tr('Select PDF') : 'PDF: $_fileName'),
               trailing: const Icon(Icons.attach_file),
               onTap: _pickFile,
             ),
             DropdownButtonFormField<String>(
               value: _type,
-              decoration: const InputDecoration(labelText: 'Type'),
+              decoration: InputDecoration(labelText: context.tr('Type')),
               items: const [
                 'baptism',
                 'confirmation',
@@ -213,29 +214,29 @@ class _UploadCertificateDialogState extends State<_UploadCertificateDialog> {
                 'death',
                 'other',
               ]
-                  .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                  .map((v) => DropdownMenuItem(value: v, child: Text(context.tr(v))))
                   .toList(),
               onChanged: (v) => setState(() => _type = v!),
             ),
             TextField(
               controller: _number,
-              decoration: const InputDecoration(labelText: 'Certificate number'),
+              decoration: InputDecoration(labelText: context.tr('Certificate number')),
             ),
             TextField(
               controller: _fullName,
-              decoration: const InputDecoration(labelText: 'Full name on certificate'),
+              decoration: InputDecoration(labelText: context.tr('Full name on certificate')),
             ),
             ListTile(
-              title: const Text('Issue date (optional)'),
+              title: Text(context.tr('Issue date (optional)')),
               subtitle: Text(_issueDate == null
-                  ? 'Not set'
+                  ? context.tr('Not set')
                   : _issueDate!.toIso8601String().split('T').first),
               trailing: const Icon(Icons.calendar_today),
               onTap: _pickDate,
             ),
             TextField(
               controller: _notes,
-              decoration: const InputDecoration(labelText: 'Notes (optional)'),
+              decoration: InputDecoration(labelText: context.tr('Notes (optional)')),
             ),
           ],
         ),
@@ -243,7 +244,7 @@ class _UploadCertificateDialogState extends State<_UploadCertificateDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.tr('Cancel')),
         ),
         TextButton(
           onPressed: _file == null ? null : () {
@@ -256,7 +257,7 @@ class _UploadCertificateDialogState extends State<_UploadCertificateDialog> {
               notes: _notes.text.isEmpty ? null : _notes.text,
             ));
           },
-          child: const Text('Upload'),
+          child: Text(context.tr('Upload')),
         ),
       ],
     );

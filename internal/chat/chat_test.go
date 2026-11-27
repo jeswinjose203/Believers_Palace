@@ -19,7 +19,7 @@ func newFakeStore() *fakeStore {
 	return &fakeStore{msgs: map[string]*Message{}}
 }
 
-func (f *fakeStore) Create(_ context.Context, eventID string, userID *string, name string, pic *string, content string) (*Message, error) {
+func (f *fakeStore) Create(_ context.Context, eventID string, userID *string, name string, pic *string, content string, _ ...string) (*Message, error) {
 	m := &Message{ID: "m-new", EventID: eventID, UserID: userID, AuthorName: name, AuthorPic: pic, Content: content}
 	f.msgs[m.ID] = m
 	return m, nil

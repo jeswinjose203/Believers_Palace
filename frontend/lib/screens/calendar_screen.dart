@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
  
+import '../l10n/app_locale.dart';
+import '../core/auth_provider.dart';
+import '../core/calendar_time.dart';
 import '../models/calendar_models.dart';
 import '../providers/calendar_provider.dart';
 import '../services/api_service.dart';
-import '../services/calendar_notification_service.dart';
+import '../services/calendar_reminder_sync.dart';
  
 class CalendarScreen extends ConsumerStatefulWidget {
   const CalendarScreen({super.key});
@@ -22,11 +25,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   List<CalendarTask> _tasks = [];
   List<CalendarGoal> _goals = [];
   List<CalendarAchievement> _achievements = [];
+  List<PersonalCalendarEvent> _events = [];
+  List<ScheduleItem> _upcomingEvents = [];
+  bool _upcomingExpanded = false;
  
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll());
   }
  
@@ -53,13 +59,59 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       _goals = goals.data;
       _achievements = achievements;
     });
+    await _loadEvents();
+  }
+
+  void _clearLocalSideData() {
+    setState(() {
+      _tasks = [];
+      _goals = [];
+      _achievements = [];
+      _events = [];
+      _upcomingEvents = [];
+      _search = '';
+    });
+  }
+
+  Future<void> _loadEvents() async {
+    final api = ref.read(apiServiceProvider);
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day);
+    final to = from.add(const Duration(days: 8));
+    final schedule = await api.getCalendarSchedule(from, to);
+    final listed = await api.listCalendarEvents(limit: 200, order: 'asc');
+    final upcoming = _upcomingEventsFromSchedule(schedule);
+    if (!mounted) return;
+    setState(() {
+      _events = listed.data;
+      _upcomingEvents = upcoming;
+    });
+  }
+
+  List<ScheduleItem> _upcomingEventsFromSchedule(List<ScheduleItem> all) {
+    final now = DateTime.now();
+    final end = now.add(const Duration(days: 7));
+    bool upcomingKind(String kind) =>
+        kind == 'personal_event' || kind == 'church_event';
+    return all
+        .where((i) {
+          if (!upcomingKind(i.kind)) return false;
+          final t = i.startAt ?? i.date;
+          return t != null &&
+              t.isAfter(now.subtract(const Duration(hours: 1))) &&
+              t.isBefore(end);
+        })
+        .toList()
+      ..sort((a, b) {
+        final at = a.startAt ?? a.date ?? DateTime(0);
+        final bt = b.startAt ?? b.date ?? DateTime(0);
+        return at.compareTo(bt);
+      });
   }
  
   Future<void> _syncNotifications() async {
-    final api = ref.read(apiServiceProvider);
-    final events = await api.listCalendarEvents(limit: 100);
-    await CalendarNotificationService.instance
-        .rescheduleForEvents(events.data);
+    if (!mounted) return;
+    await syncCalendarReminders(ref);
   }
  
   void _toast(String msg) =>
@@ -67,8 +119,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
  
   List<ScheduleItem> _itemsForDay(DateTime day) {
     final ui = ref.read(calendarProvider);
-    final same = (DateTime? d) =>
-        d != null && d.year == day.year && d.month == day.month && d.day == day.day;
+    bool same(DateTime? d) => CalendarTime.onCalendarDay(d, day);
     return ui.schedule.where((i) {
       if (_search.isNotEmpty &&
           (i.title ?? '').toLowerCase().contains(_search.toLowerCase()) ==
@@ -109,33 +160,33 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     var start = DateTime.now();
     var end = start.add(const Duration(hours: 1));
     final reminders = <int>{15};
-    final fmt = DateFormat.yMMMd().add_jm();
+    final fmt = DateFormat.yMMMd(context.dateLocale).add_jm();
  
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('New event'),
+          title: Text(ctx.tr('New event')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
-                TextField(controller: desc, decoration: const InputDecoration(labelText: 'Description')),
+                TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
+                TextField(controller: desc, decoration: InputDecoration(labelText: ctx.tr('Description'))),
                 DropdownButtonFormField<String>(
                   value: category,
-                  items: const [
-                    DropdownMenuItem(value: 'personal', child: Text('Personal')),
-                    DropdownMenuItem(value: 'work', child: Text('Work')),
-                    DropdownMenuItem(value: 'family', child: Text('Family')),
-                    DropdownMenuItem(value: 'meetings', child: Text('Meetings')),
+                  items: [
+                    DropdownMenuItem(value: 'personal', child: Text(ctx.tr('Personal'))),
+                    DropdownMenuItem(value: 'work', child: Text(ctx.tr('Work'))),
+                    DropdownMenuItem(value: 'family', child: Text(ctx.tr('Family'))),
+                    DropdownMenuItem(value: 'meetings', child: Text(ctx.tr('Meetings'))),
                   ],
                   onChanged: (v) => setSt(() => category = v ?? 'personal'),
-                  decoration: const InputDecoration(labelText: 'Category'),
+                  decoration: InputDecoration(labelText: ctx.tr('Category')),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Starts'),
+                  title: Text(ctx.tr('Starts')),
                   subtitle: Text(fmt.format(start)),
                   trailing: const Icon(Icons.calendar_today),
                   onTap: () async {
@@ -152,7 +203,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Ends'),
+                  title: Text(ctx.tr('Ends')),
                   subtitle: Text(fmt.format(end)),
                   trailing: const Icon(Icons.schedule),
                   onTap: () async {
@@ -162,9 +213,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                     }
                   },
                 ),
-                const Align(
+                Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Reminders (minutes before)'),
+                  child: Text(ctx.tr('Reminders (minutes before start — e.g. 5 = 5 min earlier)')),
                 ),
                 Wrap(
                   spacing: 8,
@@ -187,15 +238,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
           ],
         ),
       ),
     );
     if (ok != true || title.text.trim().isEmpty) return;
     if (!end.isAfter(start)) {
-      _toast('End must be after start');
+      if (mounted) _toast(context.tr('End must be after start'));
       return;
     }
     try {
@@ -203,42 +254,109 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         'title': title.text.trim(),
         'description': desc.text.trim(),
         'category': category,
-        'startAt': start.toUtc().toIso8601String(),
-        'endAt': end.toUtc().toIso8601String(),
+        'startAt': CalendarTime.localDateTimeToUtcIso(start),
+        'endAt': CalendarTime.localDateTimeToUtcIso(end),
         'recurrence': 'none',
         'reminderMinutes': reminders.toList()..sort(),
       });
       await ref.read(calendarProvider.notifier).refreshSchedule();
+      await _loadEvents();
       await _syncNotifications();
-      _toast('Event created');
+      if (mounted) _toast(context.tr('Event created'));
     } catch (e) {
       _toast('$e');
     }
   }
  
-  Future<void> _addTask() async {
-    final title = TextEditingController();
-    var due = DateTime.now();
+  Future<void> _editTask(CalendarTask t) async {
+    final title = TextEditingController(text: t.title);
+    var due = t.dueDate.toLocal();
+    final fmt = DateFormat.yMMMd(context.dateLocale).add_jm();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New task'),
-        content: TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: Text(ctx.tr('Edit task')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(ctx.tr('Due')),
+                subtitle: Text(fmt.format(due)),
+                trailing: const Icon(Icons.schedule),
+                onTap: () async {
+                  final picked = await _pickDateTime(ctx, due, 'due');
+                  if (picked != null) setSt(() => due = picked);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
+          ],
+        ),
       ),
     );
-    if (ok != true) return;
+    if (ok != true || title.text.trim().isEmpty) return;
     try {
-      await ref.read(apiServiceProvider).createCalendarTask({
+      await ref.read(apiServiceProvider).patchCalendarTask(t.id, {
         'title': title.text.trim(),
-        'dueDate': DateTime(due.year, due.month, due.day).toUtc().toIso8601String(),
+        'dueDate': CalendarTime.localDateTimeToUtcIso(due),
       });
       await _loadSideData();
       await ref.read(calendarProvider.notifier).refreshSchedule();
-      _toast('Task added');
+      await _syncNotifications();
+      if (mounted) _toast(context.tr('Task updated'));
+    } catch (e) {
+      _toast('$e');
+    }
+  }
+
+  Future<void> _addTask() async {
+    final title = TextEditingController();
+    var due = DateTime.now().add(const Duration(hours: 1));
+    final fmt = DateFormat.yMMMd(context.dateLocale).add_jm();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: Text(ctx.tr('New task')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(ctx.tr('Due')),
+                subtitle: Text(fmt.format(due)),
+                trailing: const Icon(Icons.schedule),
+                onTap: () async {
+                  final picked = await _pickDateTime(ctx, due, 'due');
+                  if (picked != null) setSt(() => due = picked);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || title.text.trim().isEmpty) return;
+    try {
+      await ref.read(apiServiceProvider).createCalendarTask({
+        'title': title.text.trim(),
+        'dueDate': CalendarTime.localDateTimeToUtcIso(due),
+      });
+      await _loadSideData();
+      await ref.read(calendarProvider.notifier).refreshSchedule();
+      await _syncNotifications();
+      if (mounted) _toast(context.tr('Task added'));
     } catch (e) {
       _toast('$e');
     }
@@ -247,30 +365,21 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   Future<void> _addGoal() async {
     final title = TextEditingController();
     final target = TextEditingController(text: '7');
-    var mode = 'total';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('New goal'),
+          title: Text(ctx.tr('New goal')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
-              TextField(controller: target, decoration: const InputDecoration(labelText: 'Target days'), keyboardType: TextInputType.number),
-              DropdownButtonFormField<String>(
-                value: mode,
-                items: const [
-                  DropdownMenuItem(value: 'total', child: Text('Total check-ins')),
-                  DropdownMenuItem(value: 'streak', child: Text('Streak')),
-                ],
-                onChanged: (v) => setSt(() => mode = v ?? 'total'),
-              ),
+              TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
+              TextField(controller: target, decoration: InputDecoration(labelText: ctx.tr('Target days')), keyboardType: TextInputType.number),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
           ],
         ),
       ),
@@ -282,12 +391,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await ref.read(apiServiceProvider).createCalendarGoal({
         'title': title.text.trim(),
         'targetDays': int.tryParse(target.text) ?? 7,
-        'trackingMode': mode,
-        'startDate': start.toUtc().toIso8601String(),
+        'startDate': CalendarTime.localDateTimeToUtcIso(start),
       });
       await _loadSideData();
       await ref.read(calendarProvider.notifier).refreshSchedule();
-      _toast('Goal created');
+      if (mounted) _toast(context.tr('Goal created'));
     } catch (e) {
       _toast('$e');
     }
@@ -296,34 +404,25 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   Future<void> _editGoal(CalendarGoal g) async {
     final title = TextEditingController(text: g.title);
     final target = TextEditingController(text: '${g.targetDays}');
-    var mode = g.trackingMode;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
-          title: const Text('Edit goal'),
+          title: Text(ctx.tr('Edit goal')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: title, decoration: const InputDecoration(labelText: 'Title')),
+              TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
               TextField(
                 controller: target,
-                decoration: const InputDecoration(labelText: 'Target days'),
+                decoration: InputDecoration(labelText: ctx.tr('Target days')),
                 keyboardType: TextInputType.number,
-              ),
-              DropdownButtonFormField<String>(
-                value: mode,
-                items: const [
-                  DropdownMenuItem(value: 'total', child: Text('Total check-ins')),
-                  DropdownMenuItem(value: 'streak', child: Text('Streak')),
-                ],
-                onChanged: (v) => setSt(() => mode = v ?? mode),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
           ],
         ),
       ),
@@ -333,11 +432,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await ref.read(apiServiceProvider).updateCalendarGoal(g.id, {
         'title': title.text.trim(),
         'targetDays': int.tryParse(target.text) ?? g.targetDays,
-        'trackingMode': mode,
       });
       await _loadSideData();
       await ref.read(calendarProvider.notifier).refreshSchedule();
-      _toast('Goal updated');
+      if (mounted) _toast(context.tr('Goal updated'));
     } catch (e) {
       _toast('$e');
     }
@@ -347,10 +445,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete goal?'),
+        title: Text(ctx.tr('Delete goal?')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Delete'))),
         ],
       ),
     );
@@ -360,19 +458,24 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     await ref.read(calendarProvider.notifier).refreshSchedule();
   }
  
-  Future<void> _checkInGoal(CalendarGoal g) async {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  Future<void> _checkInGoal(CalendarGoal g, {DateTime? forDay}) async {
+    await _checkInGoalById(g.id, forDay: forDay);
+  }
+
+  Future<void> _checkInGoalById(String goalId, {DateTime? forDay}) async {
+    final day = forDay ?? DateTime.now();
+    final ymd = CalendarTime.localDateToYmd(day);
     try {
-      final resp = await ref.read(apiServiceProvider).checkInGoal(g.id, today);
+      final resp = await ref.read(apiServiceProvider).checkInGoal(goalId, ymd);
       await _loadSideData();
       await ref.read(calendarProvider.notifier).refreshSchedule();
       if (resp.newAchievements.isNotEmpty && mounted) {
         await showDialog<void>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Achievement unlocked!'),
+            title: Text(ctx.tr('Achievement unlocked!')),
             content: Text(resp.newAchievements.map((a) => a.title).join('\n')),
-            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Nice'))],
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('Nice')))],
           ),
         );
       }
@@ -393,10 +496,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
           child: Row(
             children: [
               SegmentedButton<CalendarViewMode>(
-                segments: const [
-                  ButtonSegment(value: CalendarViewMode.month, label: Text('Month')),
-                  ButtonSegment(value: CalendarViewMode.week, label: Text('Week')),
-                  ButtonSegment(value: CalendarViewMode.day, label: Text('Day')),
+                segments: [
+                  ButtonSegment(value: CalendarViewMode.month, label: Text(context.tr('Month'))),
+                  ButtonSegment(value: CalendarViewMode.week, label: Text(context.tr('Week'))),
+                  ButtonSegment(value: CalendarViewMode.day, label: Text(context.tr('Day'))),
                 ],
                 selected: {ui.viewMode},
                 onSelectionChanged: (s) async {
@@ -410,6 +513,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         ),
         if (ui.viewMode == CalendarViewMode.month)
           TableCalendar(
+            locale: context.dateLocale,
+            availableCalendarFormats: {
+              CalendarFormat.month: context.tr('Month'),
+              CalendarFormat.twoWeeks: context.tr('Two weeks'),
+              CalendarFormat.week: context.tr('Week'),
+            },
             firstDay: DateTime.utc(2020),
             lastDay: DateTime.utc(2035, 12, 31),
             focusedDay: ui.focusedDay,
@@ -437,7 +546,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
   Widget _buildWeekStrip(CalendarUiState ui) {
     final sundayStart = ui.preferences?.weekStartsOn == 'sunday';
     final ws = CalendarNotifier.weekStart(ui.selectedDay, sundayStart: sundayStart);
-  final fmt = DateFormat.E();
+  final fmt = DateFormat.E(context.dateLocale);
     return SizedBox(
       height: 72,
       child: ListView.builder(
@@ -484,7 +593,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
           ),
           Expanded(
             child: Text(
-              DateFormat.yMMMEd().format(ui.selectedDay),
+              DateFormat.yMMMEd(context.dateLocale).format(ui.selectedDay),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium,
             ),
@@ -515,13 +624,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         return ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            Text('Upcoming (7 days)', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            ..._upcoming(ui.schedule),
-            const Divider(height: 24),
-            Text(DateFormat.yMMMd().format(ui.selectedDay),
+            Text(DateFormat.yMMMd(context.dateLocale).format(ui.selectedDay),
                 style: Theme.of(context).textTheme.titleMedium),
-            ..._itemsForDay(ui.selectedDay).map(_scheduleTile),
+            const SizedBox(height: 8),
+            if (_itemsForDay(ui.selectedDay).isEmpty)
+              Text(context.tr('Nothing on this day'))
+            else
+              ..._itemsForDay(ui.selectedDay).map(_scheduleTile),
           ],
         );
     }
@@ -537,14 +646,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       children.add(
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-          child: Text(DateFormat.yMMMEd().format(day),
+          child: Text(DateFormat.yMMMEd(context.dateLocale).format(day),
               style: Theme.of(context).textTheme.titleSmall),
         ),
       );
       if (items.isEmpty) {
-        children.add(const Padding(
+        children.add(Padding(
           padding: EdgeInsets.symmetric(horizontal: 12),
-          child: Text('No items'),
+          child: Text(context.tr('No items')),
         ));
       } else {
         children.addAll(items.map(_scheduleTile));
@@ -559,41 +668,28 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     final timed = items.where((i) => i.startAt != null).toList()
       ..sort((a, b) => a.startAt!.compareTo(b.startAt!));
     final untimed = items.where((i) => i.startAt == null).toList();
-    final fmt = DateFormat.jm();
+    final fmt = DateFormat.jm(context.dateLocale);
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
         if (timed.isNotEmpty)
-          Text('Timed', style: Theme.of(context).textTheme.titleMedium),
+          Text(context.tr('Timed'), style: Theme.of(context).textTheme.titleMedium),
         ...timed.map((i) {
           final t = i.startAt!;
           return ListTile(
             leading: Text(fmt.format(t)),
-            title: Text(i.title ?? 'Untitled'),
+            title: Text(i.title ?? context.tr('Untitled')),
             subtitle: Text(i.kind),
           );
         }),
         if (untimed.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Text('All day / other', style: Theme.of(context).textTheme.titleMedium),
+          Text(context.tr('All day / other'), style: Theme.of(context).textTheme.titleMedium),
           ...untimed.map(_scheduleTile),
         ],
-        if (items.isEmpty) const Text('Nothing on this day'),
+        if (items.isEmpty) Text(context.tr('Nothing on this day')),
       ],
     );
-  }
- 
-  List<Widget> _upcoming(List<ScheduleItem> all) {
-    final now = DateTime.now();
-    final end = now.add(const Duration(days: 7));
-    final items = all.where((i) {
-      final t = i.startAt ?? i.dueDate ?? i.date;
-      return t != null && t.isAfter(now.subtract(const Duration(hours: 1))) && t.isBefore(end);
-    }).take(12);
-    if (items.isEmpty) {
-      return [const Text('Nothing scheduled')];
-    }
-    return items.map(_scheduleTile).toList();
   }
  
   Widget _scheduleTile(ScheduleItem i) {
@@ -602,23 +698,40 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       accent = _parseColor(i.color!);
     }
     final subtitle = switch (i.kind) {
-      'booking' => 'Hall booking • ${i.status ?? ''}',
-      'church_event' => 'Church event',
-      'holiday' => 'Public holiday',
-      'task' => 'Task',
-      'goal_checkin_due' => i.checkedInToday == true ? 'Checked in' : 'Tap goal tab to check in',
-      _ => i.category ?? 'Personal',
+      'booking' => context.tr('Hall booking • {0}', [context.tr(i.status ?? '')]),
+      'church_event' => context.tr('Church event'),
+      'holiday' => context.tr('Public holiday'),
+      'task' => context.tr('Task'),
+      'goal_checkin_due' => context.tr(
+          i.checkedInOnDay == true ? 'Checked in' : 'Check in for this day',
+        ),
+      _ => i.category ?? context.tr('Personal'),
     };
+    final selected = ref.read(calendarProvider).selectedDay;
+  Widget? trailing;
+    if (i.kind == 'goal_checkin_due' &&
+        i.goalId != null &&
+        i.checkedInOnDay != true) {
+      final day = i.date ?? selected;
+      trailing = TextButton(
+        onPressed: () => _checkInGoalById(i.goalId!, forDay: day),
+        child: Text(context.tr('Check in')),
+      );
+    }
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: accent ?? Theme.of(context).colorScheme.primaryContainer,
         child: Icon(_iconFor(i.kind), size: 18),
       ),
-      title: Text(i.title ?? 'Untitled'),
+      title: Text(i.title ?? context.tr('Untitled')),
       subtitle: Text(subtitle),
-      onTap: i.kind == 'personal_event' && i.id != null
-          ? () => _deletePersonalEvent(i.id!)
-          : null,
+      trailing: trailing,
+      onTap: switch (i.kind) {
+        'personal_event' when i.id != null => () => _managePersonalEvent(i.id!),
+        'goal_checkin_due' when i.goalId != null && i.checkedInOnDay != true =>
+          () => _checkInGoalById(i.goalId!, forDay: i.date ?? selected),
+        _ => null,
+      },
     );
   }
  
@@ -639,20 +752,164 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     return null;
   }
  
+  Future<void> _managePersonalEvent(String id) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: Text(ctx.tr('Edit event')),
+              onTap: () => Navigator.pop(ctx, 'edit'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: Text(ctx.tr('Delete event')),
+              onTap: () => Navigator.pop(ctx, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'delete') {
+      await _deletePersonalEvent(id);
+    } else if (action == 'edit') {
+      await _editPersonalEvent(id);
+    }
+  }
+
+  Future<void> _editPersonalEvent(String id) async {
+    final api = ref.read(apiServiceProvider);
+    PersonalCalendarEvent e;
+    try {
+      e = await api.getCalendarEvent(id);
+    } catch (err) {
+      _toast('$err');
+      return;
+    }
+    if (!mounted) return;
+    final title = TextEditingController(text: e.title);
+    final desc = TextEditingController(text: e.description ?? '');
+    var category = e.category;
+    var start = e.startAt.toLocal();
+    var end = e.endAt.toLocal();
+    final reminders = e.reminderMinutes.toSet();
+    final fmt = DateFormat.yMMMd(context.dateLocale).add_jm();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: Text(ctx.tr('Edit event')),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: title, decoration: InputDecoration(labelText: ctx.tr('Title'))),
+                TextField(controller: desc, decoration: InputDecoration(labelText: ctx.tr('Description'))),
+                DropdownButtonFormField<String>(
+                  value: category,
+                  items: [
+                    DropdownMenuItem(value: 'personal', child: Text(ctx.tr('Personal'))),
+                    DropdownMenuItem(value: 'work', child: Text(ctx.tr('Work'))),
+                    DropdownMenuItem(value: 'family', child: Text(ctx.tr('Family'))),
+                    DropdownMenuItem(value: 'meetings', child: Text(ctx.tr('Meetings'))),
+                  ],
+                  onChanged: (v) => setSt(() => category = v ?? category),
+                  decoration: InputDecoration(labelText: ctx.tr('Category')),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(ctx.tr('Starts')),
+                  subtitle: Text(fmt.format(start)),
+                  onTap: () async {
+                    final picked = await _pickDateTime(ctx, start, 'start');
+                    if (picked != null) setSt(() => start = picked);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(ctx.tr('Ends')),
+                  subtitle: Text(fmt.format(end)),
+                  onTap: () async {
+                    final picked = await _pickDateTime(ctx, end, 'end');
+                    if (picked != null) setSt(() => end = picked);
+                  },
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(ctx.tr('Reminders (minutes before start — e.g. 5 = 5 min earlier)')),
+                ),
+                Wrap(
+                  spacing: 8,
+                  children: [5, 15, 30, 60, 1440].map((m) {
+                    final selected = reminders.contains(m);
+                    return FilterChip(
+                      label: Text(m >= 60 ? '${m ~/ 60}h' : '$m'),
+                      selected: selected,
+                      onSelected: (v) => setSt(() {
+                        if (v) {
+                          reminders.add(m);
+                        } else {
+                          reminders.remove(m);
+                        }
+                      }),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Save'))),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || title.text.trim().isEmpty) return;
+    if (!end.isAfter(start)) {
+      if (mounted) _toast(context.tr('End must be after start'));
+      return;
+    }
+    try {
+      await api.updateCalendarEvent(id, {
+        'title': title.text.trim(),
+        'description': desc.text.trim(),
+        'category': category,
+        'startAt': CalendarTime.localDateTimeToUtcIso(start),
+        'endAt': CalendarTime.localDateTimeToUtcIso(end),
+        'recurrence': e.recurrence,
+        'reminderMinutes': reminders.toList()..sort(),
+      });
+      await ref.read(calendarProvider.notifier).refreshSchedule();
+      await _loadEvents();
+      await _syncNotifications();
+      if (mounted) _toast(context.tr('Event updated'));
+    } catch (err) {
+      _toast('$err');
+    }
+  }
+
   Future<void> _deletePersonalEvent(String id) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete event?'),
+        title: Text(ctx.tr('Delete event?')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('Delete'))),
         ],
       ),
     );
     if (ok != true) return;
     await ref.read(apiServiceProvider).deleteCalendarEvent(id);
     await ref.read(calendarProvider.notifier).refreshSchedule();
+    await _loadEvents();
+    await _syncNotifications();
   }
  
   void _showDaySheet(DateTime day) {
@@ -662,7 +919,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text(DateFormat.yMMMEd().format(day), style: Theme.of(context).textTheme.titleLarge),
+            Text(DateFormat.yMMMEd(context.dateLocale).format(day), style: Theme.of(context).textTheme.titleLarge),
             ..._itemsForDay(day).map(_scheduleTile),
           ],
         ),
@@ -672,17 +929,25 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
  
   @override
   Widget build(BuildContext context) {
+    ref.listen(authProvider.select((s) => s.user?.id), (prev, next) {
+      if (prev == next) return;
+      _clearLocalSideData();
+      if (next != null) {
+        Future.microtask(_loadAll);
+      }
+    });
     final ui = ref.watch(calendarProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Calendar'),
+        title: Text(context.tr('My Calendar')),
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [
-            Tab(text: 'Calendar'),
-            Tab(text: 'Tasks'),
-            Tab(text: 'Goals'),
-            Tab(text: 'Trophies'),
+          tabs: [
+            Tab(text: context.tr('Calendar')),
+            Tab(text: context.tr('Events')),
+            Tab(text: context.tr('Tasks')),
+            Tab(text: context.tr('Goals')),
+            Tab(text: context.tr('Trophies')),
           ],
         ),
         actions: [
@@ -704,6 +969,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
               controller: _tabs,
               children: [
                 _buildCalendarTab(),
+                _eventsTab(),
                 _tasksTab(),
                 _goalsTab(),
                 _trophiesTab(),
@@ -712,6 +978,101 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     );
   }
  
+  Widget _eventsTab() {
+    final dateFmt = DateFormat.yMMMd(context.dateLocale).add_jm();
+    return RefreshIndicator(
+      onRefresh: _loadEvents,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: _addEvent,
+              icon: const Icon(Icons.add),
+              label: Text(context.tr('New event')),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Material(
+            elevation: 0,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(12),
+            child: Column(
+              children: [
+                ListTile(
+                  title: Text(context.tr('Upcoming (7 days)'), style: Theme.of(context).textTheme.titleMedium),
+                  trailing: Icon(_upcomingExpanded ? Icons.expand_less : Icons.expand_more),
+                  onTap: () => setState(() => _upcomingExpanded = !_upcomingExpanded),
+                ),
+                if (_upcomingExpanded) ...[
+                  const Divider(height: 1),
+                  if (_upcomingEvents.isEmpty)
+                    Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        context.tr('No upcoming events in the next 7 days (set My church to see church events)'),
+                      ),
+                    )
+                  else
+                    ..._upcomingEvents.map((i) {
+                      final when = (i.startAt ?? i.date)?.toLocal();
+                      final isPersonal = i.kind == 'personal_event';
+                      final kindLabel = isPersonal ? 'Your event' : 'Church event';
+                      return ListTile(
+                        leading: Icon(isPersonal ? Icons.event : Icons.church),
+                        title: Text(i.title ?? context.tr('Untitled')),
+                        subtitle: Text(
+                          when != null ? '$kindLabel • ${dateFmt.format(when)}' : kindLabel,
+                        ),
+                        onTap: isPersonal && i.id != null
+                            ? () => _managePersonalEvent(i.id!)
+                            : null,
+                      );
+                    }),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(context.tr('Your events'), style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (_events.isEmpty)
+            Text(context.tr('No events yet. Tap New event to create one.'))
+          else
+            ..._events.map((e) {
+              final start = e.startAt.toLocal();
+              final end = e.endAt.toLocal();
+              final range = e.allDay
+                  ? DateFormat.yMMMd(context.dateLocale).format(start)
+                  : '${dateFmt.format(start)} – ${DateFormat.jm(context.dateLocale).format(end)}';
+              return Card(
+                child: ListTile(
+                  title: Text(e.title),
+                  subtitle: Text('$range • ${e.category}'),
+                  trailing: PopupMenuButton<String>(
+                    itemBuilder: (_) => [
+                      PopupMenuItem(value: 'edit', child: Text(context.tr('Edit'))),
+                      PopupMenuItem(value: 'delete', child: Text(context.tr('Delete'))),
+                    ],
+                    onSelected: (v) async {
+                      switch (v) {
+                        case 'edit':
+                          await _editPersonalEvent(e.id);
+                        case 'delete':
+                          await _deletePersonalEvent(e.id);
+                      }
+                    },
+                  ),
+                  onTap: () => _editPersonalEvent(e.id),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
   Widget _tasksTab() => ListView(
         padding: const EdgeInsets.all(12),
         children: [
@@ -720,23 +1081,41 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             child: FilledButton.icon(
               onPressed: _addTask,
               icon: const Icon(Icons.add),
-              label: const Text('Add task'),
+              label: Text(context.tr('Add task')),
             ),
           ),
-          ..._tasks.map((t) => CheckboxListTile(
-                value: t.completed,
-                title: Text(t.title),
-                subtitle: Text(DateFormat.yMMMd().format(t.dueDate)),
-                onChanged: (v) async {
-                  await ref.read(apiServiceProvider).patchCalendarTask(t.id, {'completed': v ?? false});
-                  await _loadSideData();
-                  await ref.read(calendarProvider.notifier).refreshSchedule();
-                },
-              )),
+          ..._tasks.map((t) {
+            final dueLocal = t.dueDate.toLocal();
+            final subtitle = DateFormat.yMMMd(context.dateLocale).add_jm().format(dueLocal);
+            return Card(
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: t.completed,
+                    onChanged: (v) async {
+                      await ref.read(apiServiceProvider).patchCalendarTask(t.id, {'completed': v ?? false});
+                      await _loadSideData();
+                      await ref.read(calendarProvider.notifier).refreshSchedule();
+                      await _syncNotifications();
+                    },
+                  ),
+                  Expanded(
+                    child: ListTile(
+                      title: Text(t.title),
+                      subtitle: Text(subtitle),
+                      onTap: () => _editTask(t),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       );
  
-  Widget _goalsTab() => ListView(
+  Widget _goalsTab() {
+    final selectedDay = ref.watch(calendarProvider).selectedDay;
+    return ListView(
         padding: const EdgeInsets.all(12),
         children: [
           Align(
@@ -744,17 +1123,45 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
             child: FilledButton.icon(
               onPressed: _addGoal,
               icon: const Icon(Icons.add),
-              label: const Text('Add goal'),
+              label: Text(context.tr('Add goal')),
             ),
           ),
           ..._goals.map((g) {
-            final progress = g.trackingMode == 'streak'
-                ? g.currentStreak / g.targetDays
-                : g.progressFraction;
+            final progress = g.progressFraction;
+            final streakLabel = g.currentStreak > 0
+                ? '${g.currentStreak} day streak'
+                : null;
             return Card(
               child: ListTile(
-                title: Text(g.title),
-                subtitle: Text('${g.checkInCount}/${g.targetDays} days • ${g.status}'),
+                title: Row(
+                  children: [
+                    Expanded(child: Text(g.title)),
+                    if (streakLabel != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.local_fire_department,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${g.currentStreak}',
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                subtitle: Text(
+                  streakLabel != null
+                      ? context.tr('{0}/{1} days • {2} • {3}', [g.checkInCount, g.targetDays, streakLabel, g.status])
+                      : context.tr('{0}/{1} days • {2}', [g.checkInCount, g.targetDays, g.status]),
+                ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -766,14 +1173,21 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                     PopupMenuButton<String>(
                       itemBuilder: (_) => [
                         if (g.status == 'active')
-                          const PopupMenuItem(value: 'checkin', child: Text('Check in today')),
-                        const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                        const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                          PopupMenuItem(
+                            value: 'checkin',
+                            child: Text(
+                              CalendarTime.sameCalendarDay(selectedDay, DateTime.now())
+                                  ? context.tr('Check in today')
+                                  : context.tr('Check in for {0}', [DateFormat.yMMMd(context.dateLocale).format(selectedDay)]),
+                            ),
+                          ),
+                        PopupMenuItem(value: 'edit', child: Text(context.tr('Edit'))),
+                        PopupMenuItem(value: 'delete', child: Text(context.tr('Delete'))),
                       ],
                       onSelected: (v) async {
                         switch (v) {
                           case 'checkin':
-                            await _checkInGoal(g);
+                            await _checkInGoal(g, forDay: selectedDay);
                           case 'edit':
                             await _editGoal(g);
                           case 'delete':
@@ -783,13 +1197,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                     ),
                   ],
                 ),
-                onTap: g.status == 'active' ? () => _checkInGoal(g) : null,
+                onTap: g.status == 'active' ? () => _checkInGoal(g, forDay: selectedDay) : null,
               ),
             );
           }),
         ],
       );
- 
+  }
+
   Widget _trophiesTab() => GridView.builder(
         padding: const EdgeInsets.all(12),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(

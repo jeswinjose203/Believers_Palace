@@ -15,12 +15,14 @@ type Message struct {
 	AuthorName string    `json:"authorName"`
 	AuthorPic  *string   `json:"authorPic"`
 	Content    string    `json:"content"`
+	ClientID   *string   `json:"clientId,omitempty"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
 // CreateRequest is the payload for posting a message.
 type CreateRequest struct {
-	Content string `json:"content"`
+	ClientID string `json:"clientId,omitempty"`
+	Content  string `json:"content"`
 }
 
 // CursorPage is the response of the cursor-based message listing. Data is

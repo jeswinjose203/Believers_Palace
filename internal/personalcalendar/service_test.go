@@ -1,9 +1,41 @@
 package personalcalendar
- 
+
 import (
+    "context"
     "testing"
     "time"
 )
+
+type fakeChurchResolver struct {
+    churchID string
+    ok       bool
+    err      error
+}
+
+func (f *fakeChurchResolver) ChurchIDOf(_ context.Context, _ string) (string, bool, error) {
+    return f.churchID, f.ok, f.err
+}
+
+func TestScheduleChurchIDFromResolver(t *testing.T) {
+    t.Run("uses profile church", func(t *testing.T) {
+        svc := &Service{userChurch: &fakeChurchResolver{churchID: "church-abc", ok: true}}
+        if got := svc.scheduleChurchID(context.Background(), "user-1"); got != "church-abc" {
+            t.Fatalf("got %q, want church-abc", got)
+        }
+    })
+    t.Run("empty when no church", func(t *testing.T) {
+        svc := &Service{userChurch: &fakeChurchResolver{ok: true, churchID: ""}}
+        if got := svc.scheduleChurchID(context.Background(), "user-1"); got != "" {
+            t.Fatalf("got %q, want empty", got)
+        }
+    })
+    t.Run("empty when resolver nil", func(t *testing.T) {
+        svc := &Service{}
+        if got := svc.scheduleChurchID(context.Background(), "user-1"); got != "" {
+            t.Fatalf("got %q, want empty", got)
+        }
+    })
+}
  
 func TestExpandDailyRecurrence(t *testing.T) {
     start := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)

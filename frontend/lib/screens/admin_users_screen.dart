@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import 'user_stats_dashboard.dart';
@@ -69,23 +70,23 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text('Role for ${user.name}'),
+          title: Text(context.tr('Role for {0}', [user.name])),
           content: DropdownButtonFormField<String>(
             value: selected,
-            decoration: const InputDecoration(labelText: 'Role'),
+            decoration: InputDecoration(labelText: context.tr('Role')),
             items: _roles
-                .map((r) => DropdownMenuItem(value: r, child: Text(roleLabel(r))))
+                .map((r) => DropdownMenuItem(value: r, child: Text(context.tr(roleLabel(r)))))
                 .toList(),
             onChanged: (v) => setState(() => selected = v!),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(context.tr('Cancel')),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(selected),
-              child: const Text('Save'),
+              child: Text(context.tr('Save')),
             ),
           ],
         ),
@@ -94,7 +95,8 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
     if (result == null || result == user.role) return;
     try {
       await ref.read(apiServiceProvider).updateRole(user.id, result);
-      _show('Role updated to ${roleLabel(result)}');
+      if (!mounted) return;
+      _show(context.tr('Role updated to {0}', [context.tr(roleLabel(result))]));
       _refresh();
     } catch (e) {
       _show(e.toString());
@@ -105,25 +107,25 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manage Users'),
+        title: Text(context.tr('Manage Users')),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: DropdownButtonFormField<String?>(
               value: _roleFilter,
-              decoration: const InputDecoration(
-                labelText: 'Filter by role',
+              decoration: InputDecoration(
+                labelText: context.tr('Filter by role'),
                 isDense: true,
                 filled: true,
                 fillColor: Colors.white,
               ),
               items: [
-                const DropdownMenuItem<String?>(
-                    value: null, child: Text('All roles')),
+                DropdownMenuItem<String?>(
+                    value: null, child: Text(context.tr('All roles'))),
                 ..._roles.map(
                   (r) => DropdownMenuItem<String?>(
-                      value: r, child: Text(roleLabel(r))),
+                      value: r, child: Text(context.tr(roleLabel(r)))),
                 ),
               ],
               onChanged: (v) {
@@ -154,7 +156,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                    child: Text('All users',
+                    child: Text(context.tr('All users'),
                         style: Theme.of(context).textTheme.titleSmall),
                   ),
                 ),
@@ -169,14 +171,14 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
-                      child: Center(child: Text('Error: ${snapshot.error}')),
+                      child: Center(child: Text(context.tr('Error: {0}', [snapshot.error]))),
                     ),
                   )
                 else if (users.isEmpty)
-                  const SliverToBoxAdapter(
+                  SliverToBoxAdapter(
                     child: Padding(
                       padding: EdgeInsets.all(24),
-                      child: Center(child: Text('No users found.')),
+                      child: Center(child: Text(context.tr('No users found.'))),
                     ),
                   )
                 else
@@ -199,7 +201,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                         ),
                         title: Text(u.name),
                         subtitle: Text(u.email),
-                        trailing: Chip(label: Text(roleLabel(u.role))),
+                        trailing: Chip(label: Text(context.tr(roleLabel(u.role)))),
                         onTap: () => _changeRole(u),
                       );
                     },

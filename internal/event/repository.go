@@ -25,6 +25,16 @@ type Repository struct {
 	pool *pgxpool.Pool
 }
 
+// ChatAccessInfo returns only the event fields needed to authorize chat.
+func (r *Repository) ChatAccessInfo(ctx context.Context, id string) (churchID string, registrationRequired bool, err error) {
+	err = r.pool.QueryRow(ctx, `SELECT church_id,registration_required FROM events WHERE id=$1`, id).
+		Scan(&churchID, &registrationRequired)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return
+}
+
 // NewRepository creates an event repository.
 func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
@@ -132,27 +142,27 @@ func (r *Repository) ListByChurch(ctx context.Context, churchID, search string, 
 	}
 	return items, total, nil
 }
- 
+
 // ListByChurchInRange returns church events overlapping [from, to].
 func (r *Repository) ListByChurchInRange(ctx context.Context, churchID string, from, to time.Time) ([]Event, error) {
-    const q = `SELECT ` + columns + ` FROM events
+	const q = `SELECT ` + columns + ` FROM events
         WHERE church_id = $1 AND start_date <= $3
         AND (end_date IS NULL OR end_date >= $2)
         ORDER BY start_date`
-    rows, err := r.pool.Query(ctx, q, churchID, from, to)
-    if err != nil {
-        return nil, fmt.Errorf("list events in range: %w", err)
-    }
-    defer rows.Close()
-    var items []Event
-    for rows.Next() {
-        e, err := scan(rows)
-        if err != nil {
-            return nil, err
-        }
-        items = append(items, *e)
-    }
-    return items, rows.Err()
+	rows, err := r.pool.Query(ctx, q, churchID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("list events in range: %w", err)
+	}
+	defer rows.Close()
+	var items []Event
+	for rows.Next() {
+		e, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *e)
+	}
+	return items, rows.Err()
 }
 
 // Update replaces an event's fields and returns the updated record.
@@ -190,17 +200,6 @@ func (r *Repository) Delete(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 	return nil
-}
-
-// CountRegistrations returns the number of registrations for an event.
-func (r *Repository) CountRegistrations(ctx context.Context, eventID string) (int, error) {
-	var n int
-	if err := r.pool.QueryRow(ctx,
-		`SELECT count(*) FROM event_registrations WHERE event_id = $1`, eventID,
-	).Scan(&n); err != nil {
-		return 0, fmt.Errorf("count registrations: %w", err)
-	}
-	return n, nil
 }
 
 // RegisteredEventIDs returns the subset of eventIDs the user is registered for.
@@ -309,6 +308,29 @@ func (r *Repository) ListRegistrations(ctx context.Context, eventID string, limi
 // anonymous attendees. A duplicate signed-in registration yields
 // ErrAlreadyRegistered.
 func (r *Repository) CreateRegistration(ctx context.Context, eventID string, userID *string, in RegistrationRequest) (*Registration, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return nil, fmt.Errorf("begin event registration: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var capacity *int
+	err = tx.QueryRow(ctx, `SELECT capacity FROM events WHERE id=$1 FOR NO KEY UPDATE`, eventID).Scan(&capacity)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lock event for registration: %w", err)
+	}
+	if capacity != nil {
+		var count int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM event_registrations WHERE event_id=$1`, eventID).Scan(&count); err != nil {
+			return nil, fmt.Errorf("count registrations: %w", err)
+		}
+		if count >= *capacity {
+			return nil, ErrRegistrationUnavailable
+		}
+	}
 	const q = `
 		INSERT INTO event_registrations (event_id, user_id, attendee_name, attendee_email, attendee_phone, notes)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -318,7 +340,7 @@ func (r *Repository) CreateRegistration(ctx context.Context, eventID string, use
 		reg                       Registration
 		name, email, phone, notes *string
 	)
-	err := r.pool.QueryRow(ctx, q,
+	err = tx.QueryRow(ctx, q,
 		eventID, userID, nullify(in.AttendeeName), nullify(in.AttendeeEmail),
 		nullify(in.AttendeePhone), nullify(in.Notes),
 	).Scan(&reg.ID, &reg.EventID, &reg.UserID, &name, &email, &phone, &notes, &reg.CreatedAt)
@@ -328,6 +350,9 @@ func (r *Repository) CreateRegistration(ctx context.Context, eventID string, use
 			return nil, ErrAlreadyRegistered
 		}
 		return nil, fmt.Errorf("create registration: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit event registration: %w", err)
 	}
 	if name != nil {
 		reg.AttendeeName = *name

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api_client.dart';
 import '../models/calendar_models.dart';
 import '../models/community_models.dart';
+import '../models/marketplace_models.dart';
 import '../models/models.dart';
  
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
@@ -17,21 +18,70 @@ class ApiService {
   final ApiClient _client;
  
   ApiService(this._client);
+
+  Future<void> verifyAccountPhone(String phone, String token) =>
+      _client.postVoid('/users/me/verify-phone', body: {
+        'phone': phone,
+        'firebaseIdToken': token,
+      });
  
-  void setToken(String? token) => _client.setToken(token);
+  void setToken(String? token, {bool rotated = false}) =>
+      _client.setToken(token, rotated: rotated);
+  String? get accessToken => _client.accessToken;
+  set refreshSession(Future<bool> Function(String)? callback) =>
+      _client.refreshSession = callback;
+
+  Future<String> createChatLiveTicket() => _client.post(
+        '/chat/live-ticket',
+        (json) => json['ticket'] as String,
+        body: const <String, dynamic>{},
+      );
+
+  Future<Map<String, bool>> listChatPreferences() => _client.get(
+        '/chat/preferences',
+        (json) => {
+          for (final row in json['data'] as List)
+            '${row['kind']}.${row['id']}': row['muted'] as bool,
+        },
+      );
+
+  Future<Map<String, String>> listJoinedCommunityChats() => _client.get(
+        '/chat/joined-communities',
+        (json) => Map<String, String>.from(json['data'] as Map),
+      );
+
+  Future<void> setChatPreference(String kind, String id,
+      {bool? muted, bool onlyIfMissing = false}) async {
+    await _client.put(
+      '/chat/preferences/$kind/$id',
+      (_) => true,
+      body: {
+        if (muted != null) 'muted': muted,
+        if (muted == null || onlyIfMissing) 'followOnly': true,
+      },
+    );
+  }
+
+  Future<void> registerChatPushDevice(String token) =>
+      _client.postVoid('/chat/push-devices', body: {'token': token});
+
+  Future<void> removeChatPushDevice(String token) =>
+      _client.postVoid('/chat/push-devices/remove', body: {'token': token});
  
   // Auth
-  Future<AuthResponse> login(String email, String password) => _client.post(
-        '/auth/login',
+  Future<AuthResponse> login(String email, String password, {bool teacher = false}) => _client.post(
+        teacher ? '/auth/teacher-login' : '/auth/login',
         AuthResponse.fromJson,
         body: {'email': email, 'password': password},
       );
  
   Future<AuthResponse> register({
     required String name,
+    required String username,
     required String email,
     required String password,
-    String? phone,
+    required String phone,
+    required String firebaseIdToken,
     String? unit,
     String? churchId,
   }) =>
@@ -40,13 +90,15 @@ class ApiService {
         AuthResponse.fromJson,
         body: {
           'name': name,
+          'username': username,
           'email': email,
           'password': password,
           'phone': phone,
+          'firebaseIdToken': firebaseIdToken,
           'unit': unit,
           'churchId': churchId,
         },
-      );
+      ).timeout(const Duration(seconds: 35));
  
   Future<AuthResponse> refresh(String refreshToken) => _client.post(
         '/auth/refresh',
@@ -66,8 +118,8 @@ class ApiService {
       _client.postVoid('/auth/reset-password',
           body: {'token': token, 'newPassword': newPassword});
  
-  Future<void> verifyEmail(String token) =>
-      _client.postVoid('/auth/verify-email', body: {'token': token});
+  Future<void> verifyEmail(String email, String code) =>
+      _client.postVoid('/auth/verify-email', body: {'email': email, 'token': code});
  
   Future<void> resendVerification(String email) =>
       _client.postVoid('/auth/resend-verification', body: {'email': email});
@@ -320,22 +372,33 @@ class ApiService {
         },
       );
  
-  Future<ChatMessage> postEventMessage(String eventId, String content) =>
+  Future<ChatMessage> postEventMessage(String eventId, String content, {String? clientId}) =>
       _client.post(
         '/events/$eventId/messages',
         ChatMessage.fromJson,
-        body: {'content': content},
+        body: {'content': content, if (clientId != null) 'clientId': clientId},
       );
  
   Future<void> deleteEventMessage(String eventId, String messageId) =>
       _client.delete('/events/$eventId/messages/$messageId');
 
   // Communities
-  Future<List<Community>> listCommunities() async {
-    final json = await _client.getRaw('/communities');
-    return (json['data'] as List)
-        .map((item) => Community.fromJson(item as Map<String, dynamic>))
-        .toList();
+  Future<CommunityPage> listCommunityPage({
+    required bool joined,
+    String? cursor,
+  }) async {
+    final json = await _client.getRaw('/communities', query: {
+      'limit': 30,
+      'joined': joined,
+      if (cursor != null) 'cursor': cursor,
+    });
+    return (
+      items: (json['data'] as List)
+          .map((item) => Community.fromJson(item as Map<String, dynamic>))
+          .where((item) => !joined || item.status == 'active' || item.isAdmin)
+          .toList(),
+      nextCursor: json['nextCursor'] as String?,
+    );
   }
 
   Future<Community> createCommunity(
@@ -396,9 +459,9 @@ class ApiService {
         },
       );
 
-  Future<CommunityMessage> postCommunityMessage(String id, String content) =>
+  Future<CommunityMessage> postCommunityMessage(String id, String content, {String? clientId}) =>
       _client.post('/communities/$id/messages', CommunityMessage.fromJson,
-          body: {'content': content});
+          body: {'content': content, if (clientId != null) 'clientId': clientId});
 
   Future<void> deleteCommunityMessage(String id, String messageId) =>
       _client.delete('/communities/$id/messages/$messageId');
@@ -551,6 +614,10 @@ class ApiService {
   Future<PaginatedResponse<PersonalCalendarEvent>> listCalendarEvents({
     String? search,
     String? category,
+    String? fromDate,
+    String? toDate,
+    int? upcomingDays,
+    String order = 'desc',
     int page = 1,
     int limit = 50,
   }) =>
@@ -560,6 +627,10 @@ class ApiService {
         query: {
           if (search != null && search.isNotEmpty) 'search': search,
           if (category != null && category.isNotEmpty) 'category': category,
+          if (fromDate != null && fromDate.isNotEmpty) 'fromDate': fromDate,
+          if (toDate != null && toDate.isNotEmpty) 'toDate': toDate,
+          if (upcomingDays != null) 'upcomingDays': upcomingDays,
+          'order': order,
           'page': page,
           'limit': limit,
         },
@@ -567,17 +638,24 @@ class ApiService {
  
   Future<PersonalCalendarEvent> createCalendarEvent(Map<String, dynamic> body) =>
       _client.post('/users/me/calendar/events', PersonalCalendarEvent.fromJson, body: body);
- 
+
+  Future<PersonalCalendarEvent> getCalendarEvent(String id) =>
+      _client.get('/users/me/calendar/events/$id', PersonalCalendarEvent.fromJson);
+
   Future<PersonalCalendarEvent> updateCalendarEvent(String id, Map<String, dynamic> body) =>
       _client.patch('/users/me/calendar/events/$id', PersonalCalendarEvent.fromJson, body: body);
  
   Future<void> deleteCalendarEvent(String id) =>
       _client.delete('/users/me/calendar/events/$id');
  
-  Future<List<ScheduleItem>> getCalendarSchedule(DateTime from, DateTime to) async {
+  Future<List<ScheduleItem>> getCalendarSchedule(DateTime from, DateTime toExclusive) async {
+    String ymd(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final fromDay = DateTime(from.year, from.month, from.day);
+    final toDay = toExclusive.subtract(const Duration(days: 1));
     final json = await _client.getRaw(
       '/users/me/calendar/schedule',
-      query: {'from': from.toUtc().toIso8601String(), 'to': to.toUtc().toIso8601String()},
+      query: {'fromDate': ymd(fromDay), 'toDate': ymd(toDay.isBefore(fromDay) ? fromDay : toDay)},
     );
     return (json['data'] as List<dynamic>)
         .map((e) => ScheduleItem.fromJson(e as Map<String, dynamic>))
@@ -636,4 +714,174 @@ class ApiService {
         .map((e) => CalendarAchievement.fromJson(e as Map<String, dynamic>))
         .toList();
   }
+
+  // Marketplace — categories
+  Future<List<MarketplaceCategory>> listMarketplaceCategories(
+    String scope, {
+    bool all = false,
+  }) async {
+    final json = await _client.getRaw(
+      '/marketplace/categories',
+      query: {'scope': scope, if (all) 'all': 'true'},
+    );
+    return (json['data'] as List)
+        .map((e) => MarketplaceCategory.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<MarketplaceCategory> createMarketplaceCategory(
+    String scope, {
+    required String name,
+    int sortOrder = 0,
+    bool active = true,
+  }) =>
+      _client.post(
+        '/marketplace/categories?scope=$scope',
+        MarketplaceCategory.fromJson,
+        body: {'name': name, 'sortOrder': sortOrder, 'active': active},
+      );
+
+  Future<MarketplaceCategory> updateMarketplaceCategory(
+    String id, {
+    required String name,
+    int? sortOrder,
+    bool? active,
+  }) =>
+      _client.put(
+        '/marketplace/categories/$id',
+        MarketplaceCategory.fromJson,
+        body: {
+          'name': name,
+          if (sortOrder != null) 'sortOrder': sortOrder,
+          if (active != null) 'active': active,
+        },
+      );
+
+  Future<void> deleteMarketplaceCategory(String id) =>
+      _client.delete('/marketplace/categories/$id');
+
+  // Community advertisements
+  Future<PaginatedResponse<CommunityAd>> browseCommunityAds({
+    String? search,
+    String? categoryId,
+    int? minPrice,
+    int? maxPrice,
+    bool excludeSold = false,
+    int page = 1,
+    int limit = 20,
+  }) =>
+      _client.get(
+        '/marketplace/community-ads',
+        (json) => PaginatedResponse.fromJson(json, CommunityAd.fromJson),
+        query: {
+          if (search != null && search.isNotEmpty) 'search': search,
+          if (categoryId != null && categoryId.isNotEmpty) 'categoryId': categoryId,
+          if (minPrice != null) 'minPrice': minPrice,
+          if (maxPrice != null) 'maxPrice': maxPrice,
+          if (excludeSold) 'excludeSold': 'true',
+          'page': page,
+          'limit': limit,
+        },
+      );
+
+  Future<PaginatedResponse<CommunityAd>> listMyCommunityAds({
+    int page = 1,
+    int limit = 20,
+  }) =>
+      _client.get(
+        '/marketplace/community-ads/mine',
+        (json) => PaginatedResponse.fromJson(json, CommunityAd.fromJson),
+        query: {'page': page, 'limit': limit},
+      );
+
+  Future<PaginatedResponse<CommunityAd>> listCommunityAdsAdmin({
+    String status = 'pending_approval',
+    String? search,
+    int page = 1,
+    int limit = 20,
+  }) =>
+      _client.get(
+        '/marketplace/community-ads/admin',
+        (json) => PaginatedResponse.fromJson(json, CommunityAd.fromJson),
+        query: {
+          'status': status,
+          if (search != null && search.isNotEmpty) 'search': search,
+          'page': page,
+          'limit': limit,
+        },
+      );
+
+  Future<CommunityAd> getCommunityAd(String id) =>
+      _client.get('/marketplace/community-ads/$id', CommunityAd.fromJson);
+
+  Future<CommunityAd> createCommunityAd(Map<String, dynamic> body) =>
+      _client.post('/marketplace/community-ads', CommunityAd.fromJson, body: body);
+
+  Future<CommunityAd> updateCommunityAd(String id, Map<String, dynamic> body) =>
+      _client.put('/marketplace/community-ads/$id', CommunityAd.fromJson, body: body);
+
+  Future<void> deleteCommunityAd(String id) =>
+      _client.delete('/marketplace/community-ads/$id');
+
+  Future<CommunityAd> approveCommunityAd(String id) =>
+      _client.post('/marketplace/community-ads/$id/approve', CommunityAd.fromJson);
+
+  Future<CommunityAd> rejectCommunityAd(String id, {String? reason}) =>
+      _client.post(
+        '/marketplace/community-ads/$id/reject',
+        CommunityAd.fromJson,
+        body: reason != null ? {'reason': reason} : null,
+      );
+
+  Future<CommunityAd> markCommunityAdSold(String id) =>
+      _client.post('/marketplace/community-ads/$id/sold', CommunityAd.fromJson);
+
+  // Shop products
+  Future<PaginatedResponse<ShopProduct>> browseShopProducts({
+    String? search,
+    String? categoryId,
+    int? minPrice,
+    int? maxPrice,
+    int page = 1,
+    int limit = 20,
+  }) =>
+      _client.get(
+        '/marketplace/shop/products',
+        (json) => PaginatedResponse.fromJson(json, ShopProduct.fromJson),
+        query: {
+          if (search != null && search.isNotEmpty) 'search': search,
+          if (categoryId != null && categoryId.isNotEmpty) 'categoryId': categoryId,
+          if (minPrice != null) 'minPrice': minPrice,
+          if (maxPrice != null) 'maxPrice': maxPrice,
+          'page': page,
+          'limit': limit,
+        },
+      );
+
+  Future<PaginatedResponse<ShopProduct>> listShopProductsAdmin({
+    String? search,
+    int page = 1,
+    int limit = 20,
+  }) =>
+      _client.get(
+        '/marketplace/shop/products/admin',
+        (json) => PaginatedResponse.fromJson(json, ShopProduct.fromJson),
+        query: {
+          if (search != null && search.isNotEmpty) 'search': search,
+          'page': page,
+          'limit': limit,
+        },
+      );
+
+  Future<ShopProduct> getShopProduct(String id) =>
+      _client.get('/marketplace/shop/products/$id', ShopProduct.fromJson);
+
+  Future<ShopProduct> createShopProduct(Map<String, dynamic> body) =>
+      _client.post('/marketplace/shop/products', ShopProduct.fromJson, body: body);
+
+  Future<ShopProduct> updateShopProduct(String id, Map<String, dynamic> body) =>
+      _client.put('/marketplace/shop/products/$id', ShopProduct.fromJson, body: body);
+
+  Future<void> deleteShopProduct(String id) =>
+      _client.delete('/marketplace/shop/products/$id');
 }

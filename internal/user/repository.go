@@ -16,6 +16,8 @@ import (
 // ErrNotFound is returned when a user does not exist.
 var ErrNotFound = errors.New("user not found")
 
+var ErrUsernameExists = errors.New("username already registered")
+
 // ErrEmailExists is returned when an email is already registered.
 var ErrEmailExists = errors.New("email already registered")
 
@@ -43,13 +45,13 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-const userColumns = `id, name, email, password_hash, phone, unit, profile_pic, role, church_id, email_verified, created_at`
+const userColumns = `id, name, email, password_hash, phone, unit, profile_pic, role, church_id, email_verified, phone_verified, created_at`
 
 func scanUser(row pgx.Row) (*User, error) {
 	var u User
 	err := row.Scan(
 		&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.Phone, &u.Unit,
-		&u.ProfilePic, &u.Role, &u.ChurchID, &u.EmailVerified, &u.CreatedAt,
+		&u.ProfilePic, &u.Role, &u.ChurchID, &u.EmailVerified, &u.PhoneVerified, &u.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -57,20 +59,25 @@ func scanUser(row pgx.Row) (*User, error) {
 	return &u, nil
 }
 
-// Create inserts a new user with a pre-hashed password.
-func (r *Repository) Create(ctx context.Context, in RegisterInput, passwordHash string, role auth.Role) (*User, error) {
+func (r *Repository) createVerified(ctx context.Context, tx pgx.Tx, in RegisterInput, passwordHash string) (*User, error) {
 	const q = `
-		INSERT INTO users (name, email, password_hash, phone, unit, church_id, role)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO users (name, email, password_hash, phone, unit, church_id, role, phone_verified, username)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, COALESCE($8, 'member_' || encode(gen_random_bytes(12), 'hex')))
 		RETURNING ` + userColumns
 
-	row := r.pool.QueryRow(ctx, q,
-		in.Name, strings.ToLower(in.Email), passwordHash, in.Phone, in.Unit, in.ChurchID, role,
+	row := tx.QueryRow(ctx, q,
+		in.Name, strings.ToLower(in.Email), passwordHash, in.Phone, in.Unit, in.ChurchID, auth.RoleUser, in.Username,
 	)
 	u, err := scanUser(row)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			if pgErr.ConstraintName == "users_verified_phone_unique" {
+				return nil, ErrPhoneExists
+			}
+			if pgErr.ConstraintName == "users_username_ci_idx" {
+				return nil, ErrUsernameExists
+			}
 			return nil, ErrEmailExists
 		}
 		return nil, fmt.Errorf("create user: %w", err)
@@ -106,6 +113,16 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*User, error) {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 	return u, nil
+}
+
+// DisplayByID returns the name and profile photo used in public author snapshots.
+func (r *Repository) DisplayByID(ctx context.Context, id string) (name string, profilePic *string, err error) {
+	err = r.pool.QueryRow(ctx, `SELECT name,profile_pic FROM users WHERE id=$1`, id).
+		Scan(&name, &profilePic)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return
 }
 
 // GetByEmail returns a user by email.
@@ -216,10 +233,6 @@ func (r *Repository) UpdateProfile(ctx context.Context, id string, in ProfileUpd
 		args = append(args, *in.Name)
 		sets = append(sets, fmt.Sprintf("name = $%d", len(args)))
 	}
-	if in.Phone != nil {
-		args = append(args, in.Phone)
-		sets = append(sets, fmt.Sprintf("phone = $%d", len(args)))
-	}
 	if in.Unit != nil {
 		args = append(args, in.Unit)
 		sets = append(sets, fmt.Sprintf("unit = $%d", len(args)))
@@ -285,4 +298,11 @@ func (r *Repository) UpdateRole(ctx context.Context, id string, role auth.Role) 
 		return nil, fmt.Errorf("update role: %w", err)
 	}
 	return u, nil
+}
+
+func (r *Repository) hasCatechismAssignment(ctx context.Context, userID string) (bool, error) {
+	var assigned bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM catechism_teachers WHERE user_id=$1)
+		OR EXISTS(SELECT 1 FROM catechism_classes WHERE teacher_user_id=$1)`, userID).Scan(&assigned)
+	return assigned, err
 }

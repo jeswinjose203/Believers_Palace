@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
  
+import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/today_schedule_card.dart';
 import 'church_detail_screen.dart';
 import 'churches_screen.dart';
+import 'dart:async';
  
 /// Home tab for non-super-admin users.
 ///
@@ -68,16 +70,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Could not load your church: ${snapshot.error}',
+                  Text(context.tr('Could not load your church: {0}', [snapshot.error]),
                       textAlign: TextAlign.center),
                   const SizedBox(height: 12),
                   FilledButton(
                     onPressed: () => _reload(churchId),
-                    child: const Text('Retry'),
+                    child: Text(context.tr('Retry')),
                   ),
                   TextButton(
                     onPressed: _chooseChurch,
-                    child: const Text('Choose another church'),
+                    child: Text(context.tr('Choose another church')),
                   ),
                 ],
               ),
@@ -85,19 +87,97 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           );
         }
         return Column(
-          children: [
-            const TodayScheduleCard(),
-            Expanded(
-              child: ChurchDetailScreen(
-                key: ValueKey(churchId),
-                church: snapshot.data!,
-                isHome: true,
-              ),
-            ),
-          ],
-        );
+  children: [
+    _FadeSlideIn(
+      delay: const Duration(milliseconds: 100),
+      child: const TodayScheduleCard(),
+    ),
+
+    Expanded(
+      child: _FadeSlideIn(
+        delay: const Duration(milliseconds: 250),
+        child: ChurchDetailScreen(
+          key: ValueKey(churchId),
+          church: snapshot.data!,
+          isHome: true,
+        ),
+      ),
+    ),
+  ],
+);
       },
     );
   }
 }
- 
+ class _FadeSlideIn extends StatefulWidget {
+  final Widget child;
+  final Duration delay;
+
+  const _FadeSlideIn({
+    required this.child,
+    this.delay = Duration.zero,
+  });
+
+  @override
+  State<_FadeSlideIn> createState() => _FadeSlideInState();
+}
+
+class _FadeSlideInState extends State<_FadeSlideIn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  late final Animation<double> _opacity;
+  late final Animation<Offset> _position;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _opacity = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
+    );
+
+    _position = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+
+    _startAnimation();
+  }
+
+  Future<void> _startAnimation() async {
+    await Future.delayed(widget.delay);
+
+    if (mounted) {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(
+        position: _position,
+        child: widget.child,
+      ),
+    );
+  }
+}

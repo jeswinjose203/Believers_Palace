@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/app_locale.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 
@@ -40,9 +41,9 @@ class _EventRegistrationsScreenState
 
   @override
   Widget build(BuildContext context) {
-    final fmt = DateFormat.MMMd().add_jm();
+    final fmt = DateFormat.MMMd(context.dateLocale).add_jm();
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.event.title} · Registrations')),
+      appBar: AppBar(title: Text(context.tr('{0} · Registrations', [widget.event.title]))),
       body: FutureBuilder<PaginatedResponse<EventRegistration>>(
         future: _future,
         builder: (context, snap) {
@@ -50,7 +51,7 @@ class _EventRegistrationsScreenState
             return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError) {
-            return Center(child: Text('Error: ${snap.error}'));
+            return Center(child: Text(context.tr('Error: {0}', [snap.error])));
           }
           final res = snap.data!;
           final total = res.pagination.total;
@@ -61,17 +62,17 @@ class _EventRegistrationsScreenState
               children: [
                 ListTile(
                   leading: const Icon(Icons.groups),
-                  title: Text('$total registered',
+                  title: Text(context.tr('{0} registered', [total]),
                       style: const TextStyle(fontWeight: FontWeight.w700)),
                   subtitle: widget.event.capacity != null
-                      ? Text('Capacity: ${widget.event.capacity}')
+                      ? Text(context.tr('Capacity: {0}', [widget.event.capacity]))
                       : null,
                 ),
                 const Divider(height: 1),
                 if (res.data.isEmpty)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.all(32),
-                    child: Center(child: Text('No one has registered yet.')),
+                    child: Center(child: Text(context.tr('No one has registered yet.'))),
                   ),
                 for (final r in res.data)
                   ListTile(
@@ -79,7 +80,7 @@ class _EventRegistrationsScreenState
                     title: Text(
                       (r.attendeeName ?? '').isNotEmpty
                           ? r.attendeeName!
-                          : 'Unnamed attendee',
+                          : context.tr('Unnamed attendee'),
                     ),
                     subtitle: Text([
                       if ((r.attendeeEmail ?? '').isNotEmpty) r.attendeeEmail!,

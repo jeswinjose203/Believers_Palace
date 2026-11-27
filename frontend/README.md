@@ -43,6 +43,27 @@ A Flutter mobile/web frontend for the Believers Palace church management API.
 - My bookings list and cancel
 - My certificates list, download, and PDF upload
 - Profile view and edit, plus "log out everywhere"
+- Incoming message alerts for joined communities and event chats a user
+  has opened. The bell in each chat saves its mute setting to the account.
+
+## Mobile chat push
+
+For an Android or iOS build, supply the Firebase project values with
+`--dart-define` for `FCM_PROJECT_ID`, `FCM_SENDER_ID`, `FCM_API_KEY`, and
+`FCM_ANDROID_APP_ID` or `FCM_IOS_APP_ID` for the target platform. Use the API key
+and Firebase app ID from the registered app's configuration. The API needs
+FCM credentials for the same project. For a generated iOS project, set
+`FirebaseMessagingInstallationIdEnabled` to `YES` and
+`FirebaseMessagingAutoInitEnabled` to `NO` in `Runner/Info.plist`.
+Enable Push Notifications and Remote notifications in Xcode and configure
+the APNs key in Firebase.
+Test on physical devices with the app foregrounded and backgrounded.
+Foreground polling and live updates continue to work on builds without push
+configuration.
+- **Joined** tab in Communities lists memberships and groups you administer.
+- **Marketplace** tab inside each church: community listings (search, categories, post/edit/delete,
+  mark sold, contact seller) and official **shop** catalog; admins moderate
+  pending ads and manage categories + shop products
 
 ## Authentication
 

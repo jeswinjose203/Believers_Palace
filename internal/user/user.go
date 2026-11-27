@@ -16,6 +16,7 @@ type User struct {
 	ProfilePic    *string   `json:"profilePic"`
 	Role          auth.Role `json:"role"`
 	ChurchID      *string   `json:"churchId"`
+	PhoneVerified bool      `json:"phoneVerified"`
 	EmailVerified bool      `json:"emailVerified"`
 	CreatedAt     time.Time `json:"createdAt"`
 
@@ -25,12 +26,14 @@ type User struct {
 
 // RegisterInput is the payload for user registration.
 type RegisterInput struct {
-	Name     string  `json:"name"`
-	Email    string  `json:"email"`
-	Password string  `json:"password"`
-	Phone    *string `json:"phone"`
-	Unit     *string `json:"unit"`
-	ChurchID *string `json:"churchId"`
+	Username        *string `json:"username"`
+	Name            string  `json:"name"`
+	Email           string  `json:"email"`
+	Password        string  `json:"password"`
+	Phone           *string `json:"phone"`
+	FirebaseIDToken string  `json:"firebaseIdToken"`
+	Unit            *string `json:"unit"`
+	ChurchID        *string `json:"churchId"`
 }
 
 // LoginInput is the payload for login.
@@ -84,6 +87,7 @@ type ResetPasswordInput struct {
 
 // VerifyEmailInput is the payload for verifying an email address.
 type VerifyEmailInput struct {
+	Email string `json:"email"`
 	Token string `json:"token"`
 }
 

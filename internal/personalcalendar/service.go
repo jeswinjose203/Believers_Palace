@@ -25,17 +25,34 @@ type bookingLister interface {
 type eventLister interface {
     ListByChurchInRange(ctx context.Context, churchID string, from, to time.Time) ([]event.Event, error)
 }
- 
+
+// churchIDResolver returns the user's selected church from profile (not JWT).
+type churchIDResolver interface {
+    ChurchIDOf(ctx context.Context, userID string) (string, bool, error)
+}
+
 // Service holds personal calendar business logic.
 type Service struct {
-    repo     *Repository
-    bookings bookingLister
-    events   eventLister
+    repo      *Repository
+    bookings  bookingLister
+    events    eventLister
+    userChurch churchIDResolver
 }
- 
+
 // NewService creates a personal calendar service.
-func NewService(repo *Repository, bookings bookingLister, events eventLister) *Service {
-    return &Service{repo: repo, bookings: bookings, events: events}
+func NewService(repo *Repository, bookings bookingLister, events eventLister, userChurch churchIDResolver) *Service {
+    return &Service{repo: repo, bookings: bookings, events: events, userChurch: userChurch}
+}
+
+func (s *Service) scheduleChurchID(ctx context.Context, userID string) string {
+    if s.userChurch == nil {
+        return ""
+    }
+    churchID, ok, err := s.userChurch.ChurchIDOf(ctx, userID)
+    if err != nil || !ok || churchID == "" {
+        return ""
+    }
+    return churchID
 }
  
 // GetOrCreatePreferences returns preferences, inserting defaults on first access.
@@ -47,6 +64,7 @@ func (s *Service) GetOrCreatePreferences(ctx context.Context, id auth.Identity) 
             DateFormat:     "dmy",
             WeekStartsOn:   "monday",
             HolidayCountry: "IN",
+            Timezone:       defaultTimezone,
             CategoryColors: DefaultCategoryColors(),
         }
         return s.repo.UpsertPreferences(ctx, id.UserID, def)
@@ -71,6 +89,9 @@ func (s *Service) PatchPreferences(ctx context.Context, id auth.Identity, patch 
     }
     if patch.HolidayCountry != nil {
         cur.HolidayCountry = strings.ToUpper(*patch.HolidayCountry)
+    }
+    if patch.Timezone != nil && strings.TrimSpace(*patch.Timezone) != "" {
+        cur.Timezone = strings.TrimSpace(*patch.Timezone)
     }
     if patch.CategoryColors != nil {
         cur.CategoryColors = *patch.CategoryColors
@@ -110,9 +131,9 @@ func (s *Service) CreateEvent(ctx context.Context, id auth.Identity, in EventReq
     return s.repo.CreateEvent(ctx, id.UserID, in)
 }
  
-// ListEvents lists events with optional search.
-func (s *Service) ListEvents(ctx context.Context, id auth.Identity, search, category string, limit, offset int) ([]Event, int, error) {
-    return s.repo.ListEvents(ctx, id.UserID, search, category, limit, offset)
+// ListEvents lists events with optional search, date range, and ordering.
+func (s *Service) ListEvents(ctx context.Context, id auth.Identity, q EventListQuery, limit, offset int) ([]Event, int, error) {
+    return s.repo.ListEvents(ctx, id.UserID, q, limit, offset)
 }
  
 // ListExpandedEvents returns occurrences in a time window.
@@ -202,6 +223,17 @@ func (s *Service) CreateTask(ctx context.Context, id auth.Identity, in TaskReque
     if in.DueDate == nil {
         return nil, invalid("dueDate is required")
     }
+    prefs, err := s.GetOrCreatePreferences(ctx, id)
+    if err != nil {
+        return nil, err
+    }
+    loc := loadLocation(prefs.Timezone)
+    d := in.DueDate.In(loc)
+    if d.Hour() == 0 && d.Minute() == 0 && d.Second() == 0 {
+        d = time.Date(d.Year(), d.Month(), d.Day(), 9, 0, 0, 0, loc)
+    }
+    due := d.UTC()
+    in.DueDate = &due
     return s.repo.CreateTask(ctx, id.UserID, in)
 }
  
@@ -212,6 +244,16 @@ func (s *Service) ListTasks(ctx context.Context, id auth.Identity, limit, offset
  
 // PatchTask updates a task.
 func (s *Service) PatchTask(ctx context.Context, id auth.Identity, taskID string, in TaskPatch) (*Task, error) {
+    if in.DueDate != nil {
+        prefs, err := s.GetOrCreatePreferences(ctx, id)
+        if err != nil {
+            return nil, err
+        }
+        loc := loadLocation(prefs.Timezone)
+        d := in.DueDate.In(loc)
+        due := d.UTC()
+        in.DueDate = &due
+    }
     return s.repo.PatchTask(ctx, id.UserID, taskID, in)
 }
  
@@ -228,19 +270,32 @@ func (s *Service) CreateGoal(ctx context.Context, id auth.Identity, in GoalReque
     if in.TargetDays == nil || *in.TargetDays < 1 {
         return nil, invalid("targetDays must be at least 1")
     }
+    prefs, err := s.GetOrCreatePreferences(ctx, id)
+    if err != nil {
+        return nil, err
+    }
+    loc := loadLocation(prefs.Timezone)
     if in.StartDate == nil {
-        now := time.Now().UTC()
-        d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+        d := calendarDateUTC(time.Now(), loc)
+        in.StartDate = &d
+    } else {
+        d := calendarDateUTC(*in.StartDate, loc)
         in.StartDate = &d
     }
+    if in.EndDate != nil {
+        d := calendarDateUTC(*in.EndDate, loc)
+        in.EndDate = &d
+    }
+    total := TrackingTotal
+    in.TrackingMode = &total
     g, err := s.repo.CreateGoal(ctx, id.UserID, in)
     if err != nil {
         return nil, err
     }
-    return s.enrichGoal(ctx, g)
+    return s.enrichGoal(ctx, id, g)
 }
- 
-func (s *Service) enrichGoal(ctx context.Context, g *Goal) (*Goal, error) {
+
+func (s *Service) enrichGoal(ctx context.Context, id auth.Identity, g *Goal) (*Goal, error) {
     dates, err := s.repo.ListCheckInDates(ctx, g.ID)
     if err != nil {
         return nil, err
@@ -250,7 +305,12 @@ func (s *Service) enrichGoal(ctx context.Context, g *Goal) (*Goal, error) {
         return nil, err
     }
     g.CheckInCount = count
-    g.CurrentStreak = currentStreakEndingOn(dates, time.Now().UTC())
+    prefs, err := s.GetOrCreatePreferences(ctx, id)
+    if err != nil {
+        return nil, err
+    }
+    loc := loadLocation(prefs.Timezone)
+    g.CurrentStreak = currentStreakEndingOn(dates, calendarDateUTC(time.Now(), loc))
     return g, nil
 }
  
@@ -261,7 +321,7 @@ func (s *Service) ListGoals(ctx context.Context, id auth.Identity, status string
         return nil, 0, err
     }
     for i := range items {
-        g, err := s.enrichGoal(ctx, &items[i])
+        g, err := s.enrichGoal(ctx, id, &items[i])
         if err != nil {
             return nil, 0, err
         }
@@ -285,9 +345,6 @@ func (s *Service) UpdateGoal(ctx context.Context, id auth.Identity, goalID strin
     if in.TargetDays != nil && *in.TargetDays > 0 {
         cur.TargetDays = *in.TargetDays
     }
-    if in.TrackingMode != nil {
-        cur.TrackingMode = *in.TrackingMode
-    }
     if in.StartDate != nil {
         cur.StartDate = in.StartDate
     }
@@ -297,6 +354,8 @@ func (s *Service) UpdateGoal(ctx context.Context, id auth.Identity, goalID strin
     if in.Status != nil {
         cur.Status = *in.Status
     }
+    total := TrackingTotal
+    cur.TrackingMode = total
     merged := GoalRequest{
         Title:        cur.Title,
         Description:  cur.Description,
@@ -310,7 +369,7 @@ func (s *Service) UpdateGoal(ctx context.Context, id auth.Identity, goalID strin
     if err != nil {
         return nil, err
     }
-    return s.enrichGoal(ctx, g)
+    return s.enrichGoal(ctx, id, g)
 }
  
 // DeleteGoal removes a goal.
@@ -327,25 +386,40 @@ func (s *Service) CheckIn(ctx context.Context, id auth.Identity, goalID string, 
     if g.Status != GoalActive {
         return nil, invalid("goal is not active")
     }
-    day = time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC)
-    if err := s.repo.UpsertCheckIn(ctx, goalID, day, note); err != nil {
-        return nil, err
-    }
-    g, err = s.enrichGoal(ctx, g)
+    prefs, err := s.GetOrCreatePreferences(ctx, id)
     if err != nil {
         return nil, err
     }
- 
+    loc := loadLocation(prefs.Timezone)
+    day = calendarDateUTC(day, loc)
+    gStart, gEnd, ok := goalCheckInWindow(*g)
+    if !ok || day.Before(gStart) || day.After(gEnd) {
+        return nil, invalid("check-in date is outside the goal period")
+    }
+    if err := s.repo.UpsertCheckIn(ctx, goalID, day, note); err != nil {
+        return nil, err
+    }
+    g, err = s.enrichGoal(ctx, id, g)
+    if err != nil {
+        return nil, err
+    }
+
     var newAch []Achievement
-    progress := progressForGoal(g.TrackingMode, g.CheckInCount, g.CurrentStreak)
-    if progress >= g.TargetDays && g.Status == GoalActive {
-        now := time.Now().UTC()
+    now := time.Now().UTC()
+    if g.CurrentStreak >= 7 {
+        if ok, _ := s.repo.TryUnlockAchievement(ctx, id.UserID, "streak_7", nil); ok {
+            newAch = append(newAch, Achievement{Code: "streak_7", Title: "Week warrior", Description: "7-day check-in streak", Icon: "local_fire_department", UnlockedAt: &now, Unlocked: true})
+        }
+    }
+    if g.CheckInCount >= g.TargetDays && g.Status == GoalActive {
         _ = s.repo.MarkGoalCompleted(ctx, goalID, now)
         g.Status = GoalCompleted
         g.CompletedAt = &now
- 
-        if ok, _ := s.repo.TryUnlockAchievement(ctx, id.UserID, "goal_complete", &goalID); ok {
-            newAch = append(newAch, Achievement{Code: "goal_complete", Title: g.Title, Description: "Goal completed", Icon: "emoji_events", GoalID: &goalID, UnlockedAt: &now, Unlocked: true})
+
+        if g.TargetDays >= 30 {
+            if ok, _ := s.repo.TryUnlockAchievement(ctx, id.UserID, "month_warrior", nil); ok {
+                newAch = append(newAch, Achievement{Code: "month_warrior", Title: "Month warrior", Description: "Completed a 30-day challenge", Icon: "workspace_premium", UnlockedAt: &now, Unlocked: true})
+            }
         }
         completed, _ := s.repo.CountCompletedGoals(ctx, id.UserID)
         if completed == 1 {
@@ -353,16 +427,11 @@ func (s *Service) CheckIn(ctx context.Context, id auth.Identity, goalID string, 
                 newAch = append(newAch, Achievement{Code: "first_goal", Title: "First steps", Description: "Completed your first goal", Icon: "military_tech", UnlockedAt: &now, Unlocked: true})
             }
         }
-        if g.TrackingMode == TrackingStreak && g.TargetDays >= 7 {
-            if ok, _ := s.repo.TryUnlockAchievement(ctx, id.UserID, "streak_7", nil); ok {
-                newAch = append(newAch, Achievement{Code: "streak_7", Title: "Week warrior", Description: "Completed a 7-day streak goal", Icon: "local_fire_department", UnlockedAt: &now, Unlocked: true})
-            }
-        }
         g, err = s.repo.GetGoal(ctx, id.UserID, goalID)
         if err != nil {
             return nil, err
         }
-        g, err = s.enrichGoal(ctx, g)
+        g, err = s.enrichGoal(ctx, id, g)
         if err != nil {
             return nil, err
         }
@@ -375,7 +444,11 @@ func (s *Service) RemoveCheckIn(ctx context.Context, id auth.Identity, goalID st
     if _, err := s.repo.GetGoal(ctx, id.UserID, goalID); err != nil {
         return nil, err
     }
-    day = time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC)
+    prefs, err := s.GetOrCreatePreferences(ctx, id)
+    if err != nil {
+        return nil, err
+    }
+    day = calendarDateUTC(day, loadLocation(prefs.Timezone))
     if err := s.repo.DeleteCheckIn(ctx, goalID, day); err != nil {
         return nil, err
     }
@@ -383,9 +456,9 @@ func (s *Service) RemoveCheckIn(ctx context.Context, id auth.Identity, goalID st
     if err != nil {
         return nil, err
     }
-    return s.enrichGoal(ctx, g)
+    return s.enrichGoal(ctx, id, g)
 }
- 
+
 // ListAchievements returns achievement catalog with unlock state.
 func (s *Service) ListAchievements(ctx context.Context, id auth.Identity) ([]Achievement, error) {
     return s.repo.ListAchievements(ctx, id.UserID)
@@ -450,12 +523,14 @@ func (s *Service) Schedule(ctx context.Context, id auth.Identity, from, to time.
     for _, t := range tasks {
         d := t.DueDate
         c := t.Completed
+        st := t.DueDate
         items = append(items, ScheduleItem{
             Kind:        "task",
             ID:          t.ID,
             Title:       t.Title,
             Description: t.Description,
             DueDate:     &d,
+            StartAt:     &st,
             Completed:   &c,
         })
     }
@@ -478,8 +553,9 @@ func (s *Service) Schedule(ctx context.Context, id auth.Identity, from, to time.
         }
     }
  
-    if s.events != nil && id.ChurchID != "" {
-        chEvents, err := s.events.ListByChurchInRange(ctx, id.ChurchID, from, to)
+    churchID := s.scheduleChurchID(ctx, id.UserID)
+    if s.events != nil && churchID != "" {
+        chEvents, err := s.events.ListByChurchInRange(ctx, churchID, from, to)
         if err != nil {
             return nil, err
         }
@@ -504,12 +580,16 @@ func (s *Service) Schedule(ctx context.Context, id auth.Identity, from, to time.
         }
     }
  
+    loc := loadLocation(prefs.Timezone)
+    fromDay := calendarDateUTC(from, loc)
+    toDay := calendarDateUTC(to, loc)
+
     goals, err := s.repo.ListActiveGoals(ctx, id.UserID)
     if err != nil {
         return nil, err
     }
-    for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
-        day := dayUTC(d)
+    for d := fromDay; !d.After(toDay); d = d.AddDate(0, 0, 1) {
+        day := d
         for _, g := range goals {
             gStart, gEnd, ok := goalCheckInWindow(g)
             if !ok || day.Before(gStart) || day.After(gEnd) {
@@ -525,7 +605,7 @@ func (s *Service) Schedule(ctx context.Context, id auth.Identity, from, to time.
                 GoalID:         g.ID,
                 Title:          g.Title,
                 Date:           &day,
-                CheckedInToday: &v,
+                CheckedInOnDay: &v,
             })
         }
     }
