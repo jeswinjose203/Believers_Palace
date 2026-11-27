@@ -42,6 +42,15 @@ func (h *Handler) TeacherRoutes() chi.Router {
 
 func (h *Handler) teacherClasses(w http.ResponseWriter, r *http.Request) {
 	id := auth.MustFromContext(r.Context())
+	var assigned bool
+	if err := h.svc.repo.pool.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM catechism_teachers WHERE user_id=$1) OR EXISTS(SELECT 1 FROM catechism_classes WHERE teacher_user_id=$1)`, id.UserID).Scan(&assigned); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	if !assigned {
+		h.writeError(w, ErrForbidden)
+		return
+	}
 	p := httpx.ParsePageParams(r)
 	h.workspaceJSON(w, r, `WITH assigned AS (
 		SELECT class_id FROM catechism_teachers WHERE user_id=$1
@@ -108,7 +117,7 @@ func (h *Handler) getWorkspace(w http.ResponseWriter, r *http.Request) {
 	h.workspaceJSON(w, r, `WITH access AS (`+workspacePermissions+`),
 		students AS (
 			SELECT page.* FROM access a CROSS JOIN LATERAL (
-				(SELECT e.id,e.student_name AS name,e.status,(a.teacher OR e.guardian_id=$2) AS "canViewHistory"
+				(SELECT e.id,e.student_name AS name,e.status,(a.teacher OR a.admin OR e.guardian_id=$2) AS "canViewHistory"
 				FROM catechism_enrollments e WHERE e.class_id=a.id AND (a.teacher OR a.admin)
 				AND e.status IN ('approved','completed')
 				ORDER BY e.student_name,e.id LIMIT $5 OFFSET $6)
@@ -134,8 +143,25 @@ func (h *Handler) getWorkspace(w http.ResponseWriter, r *http.Request) {
 			) assigned JOIN users u ON u.id=assigned.user_id
 			LEFT JOIN catechism_teachers t ON t.class_id=assigned.class_id AND t.user_id=u.id
 			ORDER BY u.name,u.id LIMIT $5 OFFSET $6
+		), test_counts AS (
+			SELECT t.class_id,t.name,t.maximum,t.created_at,
+				count(e.id) FILTER (WHERE e.id IS NOT NULL AND e.status IN ('approved','completed')
+					AND (a.teacher OR a.admin OR e.guardian_id=$2))::int AS marks_count
+			FROM access a JOIN catechism_tests t ON t.class_id=a.id
+			LEFT JOIN catechism_marks m ON m.assessment=t.name
+			LEFT JOIN catechism_enrollments e ON e.id=m.enrollment_id AND e.class_id=t.class_id
+			WHERE a.teacher OR a.admin OR EXISTS(SELECT 1 FROM catechism_enrollments approved
+				WHERE approved.class_id=a.id AND approved.guardian_id=$2 AND approved.status IN ('approved','completed'))
+			GROUP BY t.id
+		), tests AS (
+			SELECT class_id,jsonb_agg(jsonb_build_object('name',name,'maximum',maximum,
+				'marksCount',marks_count,'createdAt',created_at) ORDER BY created_at DESC,name) AS items
+			FROM test_counts GROUP BY class_id
 		)
 		SELECT jsonb_build_object('canRegister',a.admin,'canTeach',a.teacher,
+			'requests',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',e.id,'name',e.student_name,'guardianId',e.guardian_id,'dateOfBirth',e.date_of_birth,'notes',e.notes,'status',e.status) ORDER BY e.created_at,e.id) FROM catechism_enrollments e WHERE e.class_id=a.id AND e.status='pending' AND (a.teacher OR a.admin)),'[]'),
+			'materials',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',m.id,'kind',m.kind,'title',m.title,'description',m.description,'fileName',m.file_name,'externalUrl',m.external_url,'createdAt',m.created_at) ORDER BY m.created_at DESC,m.id DESC) FROM catechism_materials m WHERE m.class_id=a.id AND (a.teacher OR a.admin OR EXISTS(SELECT 1 FROM catechism_enrollments e WHERE e.class_id=a.id AND e.guardian_id=$2 AND e.status IN ('approved','completed')))),'[]'),
+			'tests',COALESCE((SELECT t.items FROM tests t WHERE t.class_id=a.id),'[]'),
 			'students',COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY s.name,s.id) FROM students s),'[]'),
 			'teachers',COALESCE((SELECT jsonb_agg(to_jsonb(t) ORDER BY t.name,t.id) FROM teachers t),'[]'),
 			'publications',COALESCE((SELECT jsonb_agg(to_jsonb(p) ORDER BY p.published_at DESC,p.id DESC) FROM publications p),'[]'),
@@ -159,7 +185,7 @@ func (h *Handler) studentHistory(w http.ResponseWriter, r *http.Request) {
 	h.workspaceJSON(w, r, `WITH access AS (`+workspacePermissions+`),
 		student AS (
 			SELECT e.id FROM access a JOIN catechism_enrollments e ON e.class_id=a.id
-			WHERE e.id=$5 AND e.status IN ('approved','completed') AND (a.teacher OR e.guardian_id=$2)
+			WHERE e.id=$5 AND e.status IN ('approved','completed') AND (a.teacher OR a.admin OR e.guardian_id=$2)
 		), attendance AS (
 			SELECT a.* FROM student e JOIN catechism_attendance a ON a.enrollment_id=e.id
 			ORDER BY a.lesson_date DESC LIMIT $6 OFFSET $7
@@ -319,6 +345,14 @@ func (r *Repository) saveStudentRecord(ctx context.Context, classID, userID, act
 		if assessment == "" || len(assessment) > 200 || in.Score == nil ||
 			*in.Score < 0 || in.Maximum < 1 || *in.Score > in.Maximum || in.Maximum > 2147483647 {
 			return invalid("enter an assessment and a score between zero and the maximum")
+		}
+		var allowed bool
+		err := r.pool.QueryRow(ctx, `INSERT INTO catechism_tests(class_id,name,maximum,created_by)
+			SELECT c.id,$3,$4,$2 FROM catechism_classes c WHERE c.id=$1 AND `+workspaceTeacher+`
+			ON CONFLICT (class_id,name) DO UPDATE SET maximum=EXCLUDED.maximum
+			RETURNING true`, classID, userID, assessment, in.Maximum).Scan(&allowed)
+		if err != nil {
+			return err
 		}
 		query = eligible + `INSERT INTO catechism_marks (enrollment_id,assessment,score,maximum)
 			SELECT id,$4::text,$5::integer,$6::integer FROM eligible ON CONFLICT (enrollment_id,assessment)

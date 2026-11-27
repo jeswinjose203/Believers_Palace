@@ -13,7 +13,7 @@ import 'church_bookings_screen.dart';
 import 'churches_screen.dart';
 import 'event_chat_screen.dart';
 import 'event_registrations_screen.dart';
-import '../features/catechism/screens/catechism_list_screen.dart';
+import '../features/catechism/screens/catechism_entry_screen.dart';
 import 'hall_detail_screen.dart';
 import 'marketplace_screen.dart';
 
@@ -269,7 +269,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
               onError: _showError,
               onSuccess: _showSuccess,
             ),
-            CatechismListScreen(churchId: widget.church.id),
+            CatechismEntryScreen(churchId: widget.church.id),
             const MarketplaceScreen(),
           ],
         ),

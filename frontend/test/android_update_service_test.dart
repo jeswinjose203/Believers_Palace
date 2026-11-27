@@ -17,6 +17,7 @@ void main() {
 
     expect(release?.build, 45);
     expect(release?.version, '1.2.3');
+    expect(release?.size, 1024);
     expect(release?.apk.host, 'github.com');
     expect(release?.apk.path, endsWith('/v1.2.3+45/believers-palace.apk'));
   });

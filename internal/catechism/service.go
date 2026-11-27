@@ -31,6 +31,12 @@ type Service struct {
 	churches churchGetter
 }
 
+func isAssignedTeacher(ctx context.Context, repo *Repository, userID, classID string) bool {
+	var allowed bool
+	_ = repo.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM catechism_teachers WHERE user_id=$1 AND class_id=$2) OR EXISTS(SELECT 1 FROM catechism_classes WHERE id=$2 AND teacher_user_id=$1)`, userID, classID).Scan(&allowed)
+	return allowed
+}
+
 // NewService creates a catechism service.
 func NewService(repo *Repository, churches churchGetter) *Service {
 	return &Service{repo: repo, churches: churches}
@@ -224,7 +230,7 @@ func (s *Service) UpdateEnrollmentStatus(ctx context.Context, id auth.Identity, 
 	if err != nil {
 		return nil, err
 	}
-	if !canManageChurch(id, cls.ChurchID) {
+	if !canManageChurch(id, cls.ChurchID) && !isAssignedTeacher(ctx, s.repo, id.UserID, cls.ID) {
 		return nil, ErrForbidden
 	}
 	if status == EnrollCompleted {

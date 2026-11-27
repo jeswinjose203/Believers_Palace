@@ -23,6 +23,14 @@ android/**
 !android/app/src/
 !android/app/src/main/
 !android/app/src/main/AndroidManifest.xml
+!android/app/src/main/kotlin/
+!android/app/src/main/kotlin/com/
+!android/app/src/main/kotlin/com/example/
+!android/app/src/main/kotlin/com/example/believers_palace/
+!android/app/src/main/kotlin/com/example/believers_palace/MainActivity.kt
+!android/app/src/main/res/
+!android/app/src/main/res/xml/
+!android/app/src/main/res/xml/update_paths.xml
 ios/
 linux/
 macos/

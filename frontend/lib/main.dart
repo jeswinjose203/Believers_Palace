@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/auth_provider.dart';
 import 'l10n/app_locale.dart';
-import 'features/catechism/screens/catechism_workspace_screen.dart';
 import 'providers/calendar_provider.dart';
 import 'services/calendar_notification_service.dart';
 import 'services/android_update_service.dart';
@@ -23,8 +22,7 @@ class BelieversPalaceApp extends ConsumerStatefulWidget {
 }
 
 class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
-  final _navigator = GlobalKey<NavigatorState>();
-  late final _updates = AndroidUpdatePrompter(_navigator);
+  late final _updates = ref.read(androidUpdateProvider);
 
   @override
   void initState() {
@@ -36,12 +34,6 @@ class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
       await ref.read(authProvider.notifier).init();
       await CalendarNotificationService.instance.init();
     });
-  }
-
-  @override
-  void dispose() {
-    _updates.dispose();
-    super.dispose();
   }
 
   void _onAuthSessionChange(AuthState? prev, AuthState next) {
@@ -63,22 +55,21 @@ class _BelieversPalaceAppState extends ConsumerState<BelieversPalaceApp> {
     ref.listen<AuthState>(authProvider, _onAuthSessionChange);
 
     return MaterialApp(
-      navigatorKey: _navigator,
+      navigatorKey: _updates.navigator,
       locale: ref.watch(appLocaleProvider),
       supportedLocales: supportedAppLocales,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       title: 'Believers Palace',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
+      fontFamily: 'Poppins',
+      colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+      useMaterial3: true,
       ),
       home: auth.isLoading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : auth.isAuthenticated
-              ? (auth.teacherMode
-                  ? const CatechismTeacherScreen()
-                  : const MainScreen())
+              ? const MainScreen()
               : const LoginScreen(),
     );
   }

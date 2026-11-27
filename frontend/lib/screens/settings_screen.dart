@@ -5,6 +5,7 @@ import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/calendar_models.dart';
 import '../services/api_service.dart';
+import '../services/android_update_service.dart';
 import 'profile_screen.dart';
  
 /// Settings page, opened from Profile > Settings.
@@ -306,8 +307,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     SettingsRow(
                       icon: Icons.download_outlined,
                       title: context.tr('App Update'),
-                      value: 'v$kAppVersion',
-                      onTap: () => _toast(context.tr('You are on version {0}', [kAppVersion])),
+                      subtitle: context.tr('Check for updates'),
+                      onTap: () => ref
+                          .read(androidUpdateProvider)
+                          .checkManually(context),
                     ),
                     SettingsRow(
                       icon: Icons.delete_outline,
@@ -335,4 +338,3 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 }
- 

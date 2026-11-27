@@ -18,9 +18,74 @@ class CatechismApi {
       _client.get('/catechism-teacher/classes', (json) => json,
           query: {'page': page, 'limit': 20});
 
+  Future<Map<String, dynamic>> teacherCandidates(String churchId, String? classId) =>
+      _client.get('/churches/$churchId/catechism-classes/teachers', (json) => json,
+          query: {if (classId != null) 'classId': classId});
+
+  Future<void> assignTeacher(String churchId, String classId, String userId,
+      {bool remove = false}) async {
+    await _client.post('/churches/$churchId/catechism-classes/teachers', (json) => json,
+        body: {'classId': classId, 'userId': userId, 'remove': remove});
+  }
+
   Future<Map<String, dynamic>> workspace(String classId, int page) =>
       _client.get('/catechism-classes/$classId/workspace', (json) => json,
           query: {'page': page, 'limit': 20});
+
+  Future<Map<String, dynamic>> materials(String classId) =>
+      _client.get('/catechism-classes/$classId/materials', (json) => json);
+
+  Future<Map<String, dynamic>> uploadNote(
+    String classId, {
+    required List<int> bytes,
+    required String fileName,
+    required String title,
+    required String description,
+  }) =>
+      _client.uploadBytesJson('/catechism-classes/$classId/materials',
+          bytes: bytes,
+          field: 'file',
+          fileName: fileName,
+          fields: {'title': title, 'description': description});
+
+  Future<Map<String, dynamic>> shareVideo(
+          String classId, Map<String, dynamic> body) =>
+      _client.post('/catechism-classes/$classId/materials/video', (json) => json,
+          body: body);
+
+  Future<void> deleteMaterial(String classId, String materialId) =>
+      _client.delete('/catechism-classes/$classId/materials/$materialId');
+
+  Future<int> downloadMaterial(
+          String classId, String materialId, String savePath) =>
+      _client.download(
+          '/catechism-classes/$classId/materials/$materialId/download',
+          savePath);
+
+  Future<List<Map<String, dynamic>>> listTests(String classId) =>
+      _client.get(
+        '/catechism-classes/$classId/tests',
+        (json) => (json['tests'] as List<dynamic>)
+            .cast<Map<String, dynamic>>(),
+      );
+
+  Future<Map<String, dynamic>> createTest(
+          String classId, String name, int maximum) =>
+      _client.post('/catechism-classes/$classId/tests', (json) => json,
+          body: {'name': name, 'maximum': maximum});
+
+  Future<Map<String, dynamic>> testMarks(String classId, String name) =>
+      _client.get(
+          '/catechism-classes/$classId/tests/${Uri.encodeComponent(name)}',
+          (json) => json);
+
+  Future<void> updateTestMark(
+      String classId, String name, String enrollmentId, int score) async {
+    await _client.put(
+        '/catechism-classes/$classId/tests/${Uri.encodeComponent(name)}/students/$enrollmentId',
+        (json) => json,
+        body: {'score': score});
+  }
 
   Future<Map<String, dynamic>> studentHistory(
     String classId,
@@ -34,6 +99,11 @@ class CatechismApi {
       );
   Future<void> saveWorkspace(String classId, String action, Map<String, dynamic> body) async {
     await _client.post("/catechism-classes/$classId/workspace/$action", (json) => json, body: body);
+  }
+
+  Future<void> decideAdmission(String enrollmentId, String status) async {
+    await _client.patch('/catechism-enrollments/$enrollmentId/status', (json) => json,
+        body: {'status': status});
   }
 
   Future<PaginatedResponse<CatechismClass>> listClasses(

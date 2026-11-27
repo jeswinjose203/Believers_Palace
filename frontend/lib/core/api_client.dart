@@ -236,12 +236,14 @@ class ApiClient {
     required List<int> bytes,
     required String field,
     required String fileName,
+    Map<String, String> fields = const {},
   }) =>
       _upload(
           path,
           () async => http.MultipartFile.fromBytes(field, bytes,
               filename: fileName.isEmpty ? 'upload' : fileName,
-              contentType: _imageMediaType(fileName)));
+              contentType: _imageMediaType(fileName)),
+          fields: fields);
 
   Future<Map<String, dynamic>> _upload(
     String path,
