@@ -167,8 +167,6 @@ service requests by name/deceased/description).
 | POST   | `/auth/logout`           | Revoke a single refresh token                 |
 | POST   | `/auth/forgot-password`  | Request a password reset (always 200)         |
 | POST   | `/auth/reset-password`   | Set a new password using a reset token        |
-| POST   | `/auth/verify-email`     | Verify an email address using a token         |
-| POST   | `/auth/resend-verification` | Re-send a verification token (always 200)  |
 | POST   | `/users/logout-all`      | Revoke all refresh tokens (authenticated)     |
 
 Register/login/refresh return `{accessToken, refreshToken, expiresIn, user}`.
@@ -179,15 +177,12 @@ token (the old one is revoked). A password reset revokes all of the user's
 refresh tokens.
 
 Password reset delivery uses a pluggable `Mailer`. The default development
-implementation (`MAIL_PROVIDER=log`) logs the reset/verification token to the
+implementation (`MAIL_PROVIDER=log`) logs the reset token to the
 server log; set `MAIL_PROVIDER=smtp` with the `SMTP_*`/`MAIL_FROM` vars to send
 real email (e.g. via Gmail).
 
-New users receive a six-digit email verification code on registration. In Profile,
-tap the email address to request or enter a code. The verified icon appears after
-confirmation. Codes expire after 10 minutes or five failed attempts, and a new
-code can be issued once per minute. The app passes the email and code (as
-`token`) to `/auth/verify-email`.
+Signup requires Firebase phone verification. Social posts and media uploads also
+require a verified phone number.
 
 ### Users
 | Method | Path                   | Access                         |
@@ -232,13 +227,10 @@ super_admin.
 
 **Event chat:** every event has a chat (`GET /events/{eventId}/messages`,
 paginated, oldest-first; `POST /events/{eventId}/messages` with `{content}`).
-Reading, posting, and deleting messages in event and community chats requires
-a verified email. The API returns `403 email_verification_required` for
-unverified accounts.
 If the event has `registrationRequired: true`, only users who registered
 (`POST /events/{eventId}/register`) and church staff of the owning church (plus
 super_admin) may read and post; anyone else gets `403` with code
-`not_registered`. If `registrationRequired` is false, any verified user may
+`not_registered`. If `registrationRequired` is false, any signed-in user may
 chat and registration is not offered in the app. Admins can see the attendee
 list and count via `GET /events/{eventId}/registrations` (`pagination.total`).
 Users can cancel their own registration with `DELETE /events/{eventId}/register`
@@ -583,7 +575,7 @@ workflow in place for public posts and direct messages.
    `CORS_ALLOWED_ORIGINS`, and `PUBLIC_BASE_URL`. Use a random URL-safe
    database password because Compose supplies it in the migration URL.
    Set `FIREBASE_AUTH_PROJECT_ID` to the Android build's Firebase project and
-   configure SMTP for live email verification and password resets.
+   configure SMTP to deliver password-reset emails.
 3. Point the API DNS name at the Droplet and configure an HTTPS reverse proxy
    to `127.0.0.1:8080`. The deployment binds the API and PostgreSQL to loopback.
    Set `TRUST_PROXY_HEADERS=true` when the proxy overwrites forwarded client
@@ -627,3 +619,36 @@ installed debug build signed with a different certificate must be replaced
 before it can receive future signed releases. Set up the public HTTPS backend
 and register the release signing fingerprints with Firebase before distributing
 a build that uses phone verification.
+
+
+
+
+{
+  "project_info": {
+    "project_number": "709761041745",
+    "project_id": "believers-palace",
+    "storage_bucket": "believers-palace.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:709761041745:android:6b9934ba7bc92c79b1bf70",
+        "android_client_info": {
+          "package_name": "com.example.believers_palace"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCV4TMs1hhli6JbkjMaXm55vnalZtvVfZc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

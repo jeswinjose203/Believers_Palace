@@ -9,7 +9,6 @@ import '../core/auth_provider.dart';
 import '../services/chat_live_service.dart';
 import '../services/social_api.dart';
 import 'social_post.dart' show SharedPostMessage;
-import '../widgets/chat_email_verification.dart';
 
 class DirectMessagesScreen extends ConsumerWidget {
   const DirectMessagesScreen({super.key});
@@ -21,9 +20,7 @@ class DirectMessagesScreen extends ConsumerWidget {
       appBar: AppBar(title: Text(context.tr('Direct messages'))),
       body: user == null
           ? const SizedBox.shrink()
-          : user.emailVerified
-              ? _Inbox(key: ValueKey(user.id), userId: user.id)
-              : const Center(child: ChatEmailVerification()),
+          : _Inbox(key: ValueKey(user.id), userId: user.id),
     );
   }
 }

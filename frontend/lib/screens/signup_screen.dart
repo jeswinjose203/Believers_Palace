@@ -22,6 +22,8 @@ class SignupScreen extends ConsumerStatefulWidget {
 
 class _SignupScreenState extends ConsumerState<SignupScreen> {
   bool _loading = false;
+  bool _showPassword = false;
+  bool _showRePassword = false;
   String? _error;
   String? _notice;
   bool _verifying = false;
@@ -669,12 +671,30 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         TextField(
                           controller: _passwordController,
                           enabled: !_loading,
-                          obscureText: true,
+                          obscureText: !_showPassword,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
                           ),
-                          decoration: _fieldDecoration('Password'),
+                          decoration: _fieldDecoration('Password').copyWith(
+                            suffixIcon: IconButton(
+                              iconSize: 18,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
+                              tooltip: _showPassword ? 'Hide password' : 'Show password',
+                              onPressed: () => setState(
+                                  () => _showPassword = !_showPassword),
+                              icon: Icon(
+                                _showPassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ),
                         ),
 
                         const SizedBox(height: 5),
@@ -683,13 +703,33 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         TextField(
                           controller: _rePasswordController,
                           enabled: !_loading,
-                          obscureText: true,
+                          obscureText: !_showRePassword,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
                           ),
                           decoration: _fieldDecoration(
                             'Re-enter Password',
+                          ).copyWith(
+                            suffixIcon: IconButton(
+                              iconSize: 18,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
+                              tooltip: _showRePassword
+                                  ? 'Hide password'
+                                  : 'Show password',
+                              onPressed: () => setState(
+                                  () => _showRePassword = !_showRePassword),
+                              icon: Icon(
+                                _showRePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                                color: Colors.white70,
+                              ),
+                            ),
                           ),
                         ),
                       ],

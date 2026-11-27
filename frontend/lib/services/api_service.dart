@@ -118,12 +118,6 @@ class ApiService {
       _client.postVoid('/auth/reset-password',
           body: {'token': token, 'newPassword': newPassword});
  
-  Future<void> verifyEmail(String email, String code) =>
-      _client.postVoid('/auth/verify-email', body: {'email': email, 'token': code});
- 
-  Future<void> resendVerification(String email) =>
-      _client.postVoid('/auth/resend-verification', body: {'email': email});
- 
   // Users
   Future<User> getMe() => _client.get('/users/me', User.fromJson);
  

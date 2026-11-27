@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_locale.dart';
 import '../config.dart';
-import '../core/auth_provider.dart';
 import '../services/api_service.dart';
 import '../services/chat_live_service.dart';
 import '../services/social_api.dart';
@@ -208,7 +207,6 @@ class _EngagementSheetState extends ConsumerState<_EngagementSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final canComment = ref.watch(authProvider).user?.emailVerified == true;
     return _sheet(
       context,
       title: widget.likes ? context.tr('Likes') : context.tr('Comments'),
@@ -252,28 +250,25 @@ class _EngagementSheetState extends ConsumerState<_EngagementSheet> {
           ),
         ),
         if (!widget.likes)
-          if (canComment)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                controller: _input,
-                enabled: !_sending,
-                textInputAction: TextInputAction.send,
-                maxLength: 1000,
-                onSubmitted: (_) => _send(),
-                decoration: InputDecoration(
-                  labelText: context.tr('Add a comment'),
-                  suffixIcon: IconButton(
-                    tooltip: context.tr('Post comment'),
-                    onPressed:
-                        _sending || _loading || _error != null ? null : _send,
-                    icon: const Icon(Icons.send_outlined),
-                  ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
+              controller: _input,
+              enabled: !_sending,
+              textInputAction: TextInputAction.send,
+              maxLength: 1000,
+              onSubmitted: (_) => _send(),
+              decoration: InputDecoration(
+                labelText: context.tr('Add a comment'),
+                suffixIcon: IconButton(
+                  tooltip: context.tr('Post comment'),
+                  onPressed:
+                      _sending || _loading || _error != null ? null : _send,
+                  icon: const Icon(Icons.send_outlined),
                 ),
               ),
-            )
-          else
-            ListTile(title: Text(context.tr('Verify your email to comment.'))),
+            ),
+          ),
       ],
     );
   }
@@ -401,7 +396,7 @@ class _ShareSheetState extends ConsumerState<_ShareSheet> {
   @override
   void initState() {
     super.initState();
-    if (ref.read(authProvider).user?.emailVerified == true) _load();
+    _load();
   }
 
   @override
@@ -484,10 +479,6 @@ class _ShareSheetState extends ConsumerState<_ShareSheet> {
 
   @override
   Widget build(BuildContext context) {
-    if (ref.watch(authProvider).user?.emailVerified != true) {
-      return ListTile(
-          title: Text(context.tr('Verify your email to share posts in chats.')));
-    }
     return _sheet(
       context,
       title: context.tr('Share post'),

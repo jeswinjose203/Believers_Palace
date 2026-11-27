@@ -30,13 +30,10 @@ Authentication:
     deprecated alias of accessToken.
   - Default access-token lifetime (ACCESS_TOKEN_TTL): 15m. Use /auth/refresh to
     obtain a new pair; the old refresh token is rotated (revoked).
-  - New accounts receive a six-digit email verification code on registration
-    (soft verification: the account is usable immediately; "emailVerified"
-    becomes true after POST /auth/verify-email).
+  - New accounts verify their phone number through Firebase.
 
 Email delivery:
-  - MAIL_PROVIDER=log (default) writes reset/verification tokens to the server
-    log: "[mailer] email verification for <email>: token=<tok>".
+  - MAIL_PROVIDER=log (default) writes password reset links to the server log.
   - MAIL_PROVIDER=smtp sends real email (SMTP_HOST/PORT/USERNAME/PASSWORD,
     MAIL_FROM). Gmail: smtp.gmail.com:587 with a 16-char App Password.
 
@@ -272,46 +269,6 @@ Success: 200 OK  -> { "message": "password updated" }
 
 Errors:
   400 bad_request   - token missing/invalid/expired, or password < 8 chars
-
---------------------------------------------------------------------------------
-1.7  Verify email
---------------------------------------------------------------------------------
-Method : POST
-URL    : /api/auth/verify-email
-Auth   : None (public)
-Headers:
-  Content-Type: application/json
-
-Request body:
-  { "email": "jane@example.com", "token": "012345" }
-
-Description:
-  Consumes the single-use verification code and sets the user's emailVerified
-  flag to true. A code expires after 10 minutes or five failed attempts.
-  Previously issued opaque tokens can still be submitted without an email.
-
-Success: 200 OK  -> { "message": "email verified" }
-
-Errors:
-  400 bad_request   - code missing/invalid/expired
-
---------------------------------------------------------------------------------
-1.8  Resend email verification
---------------------------------------------------------------------------------
-Method : POST
-URL    : /api/auth/resend-verification
-Auth   : None (public)
-Headers:
-  Content-Type: application/json
-
-Request body:
-  { "email": "jane@example.com" }    // required
-
-Description:
-  If the email is registered and unverified, a code is sent subject to a
-  one-minute cooldown. The development mailer writes the code to the API log.
-
-Success: 200 OK  -> { "message": "check your inbox for a recent verification code" }
 
 ================================================================================
 2. USERS
@@ -1255,7 +1212,7 @@ Errors: 403 forbidden, 404 not_found
 Errors: 403 forbidden, 404 not_found
 
 11.6 Community messages
-Requires a verified email address and community membership.
+Requires an active community membership.
   GET    /api/communities/{communityId}/messages?latest=1&limit=50
   GET    /api/communities/{communityId}/messages?before={seq}&limit=50
   GET    /api/communities/{communityId}/messages?after={seq}&limit=50
@@ -1266,7 +1223,7 @@ Requires a verified email address and community membership.
        -> 201 Created -> message object
   DELETE /api/communities/{communityId}/messages/{messageId}
        -> 204 No Content (message author or community admin)
-Errors: 400 bad_request, 403 email_verification_required/not_member/forbidden,
+Errors: 400 bad_request, 403 not_member/forbidden,
         404 not_found
 
 ================================================================================

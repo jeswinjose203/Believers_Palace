@@ -84,14 +84,3 @@ type ResetPasswordInput struct {
 	Token       string `json:"token"`
 	NewPassword string `json:"newPassword"`
 }
-
-// VerifyEmailInput is the payload for verifying an email address.
-type VerifyEmailInput struct {
-	Email string `json:"email"`
-	Token string `json:"token"`
-}
-
-// ResendVerificationInput is the payload for re-issuing a verification token.
-type ResendVerificationInput struct {
-	Email string `json:"email"`
-}

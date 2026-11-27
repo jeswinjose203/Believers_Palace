@@ -22,9 +22,8 @@ func NewHandler(svc *Service) *Handler {
 }
 
 // EventRoutes returns routes nested under /events/{eventId}/messages.
-func (h *Handler) EventRoutes(requireVerifiedEmail func(http.Handler) http.Handler) chi.Router {
+func (h *Handler) EventRoutes() chi.Router {
 	r := chi.NewRouter()
-	r.Use(requireVerifiedEmail)
 	r.Get("/", h.list)
 	r.Post("/", h.post)
 	r.Delete("/{messageId}", h.delete)

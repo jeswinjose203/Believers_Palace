@@ -19,8 +19,6 @@ func passwordResetLink(baseURL, token string) string {
 type Mailer interface {
 	// SendPasswordReset delivers a password reset link/token to the given email.
 	SendPasswordReset(ctx context.Context, email, resetToken string) error
-	// SendEmailVerification delivers a verification code to the given email.
-	SendEmailVerification(ctx context.Context, email, code string) error
 }
 
 // LogMailer is a development Mailer that writes messages to the standard logger
@@ -39,11 +37,5 @@ func NewLogMailer(baseURL string) *LogMailer {
 func (m *LogMailer) SendPasswordReset(_ context.Context, email, resetToken string) error {
 	log.Printf("[mailer] password reset for %s: token=%s link=%s",
 		email, resetToken, passwordResetLink(m.baseURL, resetToken))
-	return nil
-}
-
-// SendEmailVerification logs the email verification code.
-func (m *LogMailer) SendEmailVerification(_ context.Context, email, code string) error {
-	log.Printf("[mailer] email verification for %s: code=%s", email, code)
 	return nil
 }

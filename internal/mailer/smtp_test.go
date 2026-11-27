@@ -22,7 +22,7 @@ func TestSMTPExitsWhenRequestIsCanceled(t *testing.T) {
 	mailer := NewSMTPMailer(SMTPConfig{Host: host, Port: port, From: "sender@example.test"})
 	result := make(chan error, 1)
 	go func() {
-		result <- mailer.SendEmailVerification(ctx, "recipient@example.test", "123456")
+		result <- mailer.SendPasswordReset(ctx, "recipient@example.test", "reset-token")
 	}()
 	_ = listener.(*net.TCPListener).SetDeadline(time.Now().Add(2 * time.Second))
 	conn, err := listener.Accept()

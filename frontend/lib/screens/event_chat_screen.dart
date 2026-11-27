@@ -12,12 +12,10 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/chat_live_service.dart';
 import '../services/chat_notification_service.dart';
-import '../widgets/chat_email_verification.dart';
 import '../widgets/chat_notification_button.dart';
 import '../widgets/group_chat_bubble.dart';
 
-/// Per-event chat requires a verified email. Registration rules also apply
-/// when the event requires registration.
+/// Event chat follows the event's registration rules.
 /// A message can be deleted by its author or by a church admin / super admin.
 ///
 /// Loading uses a cursor (`seq`) instead of fixed pages:
@@ -81,7 +79,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _scroll.addListener(_onScroll);
-    if (_emailVerified) _loadLatest();
+    _loadLatest();
   }
 
   @override
@@ -112,8 +110,6 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
 
   ApiService get _api => ref.read(apiServiceProvider);
 
-  bool get _emailVerified => ref.read(authProvider).user?.emailVerified == true;
-
   bool get _atBottom => !_scroll.hasClients || _scroll.position.pixels <= 40;
 
   void _stopWatchingMessages() {
@@ -123,10 +119,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
   }
 
   void _watchMessages() {
-    if (_notRegistered ||
-        !_emailVerified ||
-        !_appResumed ||
-        _liveSubscription != null) {
+    if (_notRegistered || !_appResumed || _liveSubscription != null) {
       return;
     }
     _liveSubscription = ref
@@ -209,7 +202,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
 
   void _scheduleNext() {
     _timer?.cancel();
-    if (!mounted || _notRegistered || !_appResumed || !_emailVerified) return;
+    if (!mounted || _notRegistered || !_appResumed) return;
     if (_catchUp && _failures == 0) {
       _catchUp = false;
       _timer = Timer(Duration.zero, _pollNow);
@@ -232,8 +225,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
         !mounted ||
         _notRegistered ||
         _loading ||
-        !_appResumed ||
-        !_emailVerified) {
+        !_appResumed) {
       return;
     }
     _polling = true;
@@ -410,22 +402,6 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(authProvider).user;
-    ref.listen(
-      authProvider.select((state) => state.user?.emailVerified == true),
-      (_, verified) {
-        if (verified) {
-          _loadLatest();
-        } else {
-          _stopWatchingMessages();
-        }
-      },
-    );
-    if (me?.emailVerified != true) {
-      return Scaffold(
-        appBar: AppBar(title: Text(widget.event.title)),
-        body: const ChatEmailVerification(),
-      );
-    }
     final timeFmt = DateFormat.MMMd(context.dateLocale).add_jm();
 
     return Scaffold(

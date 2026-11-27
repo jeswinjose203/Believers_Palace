@@ -177,7 +177,7 @@ func (h *Handler) saveMessage(ctx context.Context, sender, peer, body, clientID 
 	}
 	defer tx.Rollback(ctx)
 	if _, err = tx.Exec(ctx, `INSERT INTO direct_threads(user_a,user_b)
-		SELECT least($1::uuid,u.id),greatest($1::uuid,u.id) FROM users u WHERE u.id=$2 AND u.email_verified
+		SELECT least($1::uuid,u.id),greatest($1::uuid,u.id) FROM users u WHERE u.id=$2
 		ON CONFLICT (user_a,user_b) DO NOTHING`, sender, peer); err != nil {
 		return "", err
 	}

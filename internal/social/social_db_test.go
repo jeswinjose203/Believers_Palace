@@ -15,7 +15,6 @@ import (
 
 	"believers_palace/internal/auth"
 	"believers_palace/internal/media"
-	"believers_palace/internal/user"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -35,8 +34,8 @@ func TestSocialWorkflowsDB(t *testing.T) {
 	account := func(label string, verified bool) string {
 		t.Helper()
 		var id string
-		err := db.QueryRow(ctx, `INSERT INTO users(name,email,password_hash,email_verified,phone,phone_verified,username)
-            VALUES($1,$2,'unused',true,$3,$4,$5) RETURNING id`,
+		err := db.QueryRow(ctx, `INSERT INTO users(name,email,password_hash,phone,phone_verified,username)
+            VALUES($1,$2,'unused',$3,$4,$5) RETURNING id`,
 			label, label+suffix+"@example.test", "+1"+suffix[len(suffix)-12:], verified, label+"_"+suffix).Scan(&id)
 		if err != nil {
 			t.Fatal(err)
@@ -50,7 +49,7 @@ func TestSocialWorkflowsDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	mediaService := media.NewService(storage, "https://example.test", 1<<20)
-	router := auth.DebugMiddleware()(New(db, mediaService).Routes(user.NewRepository(db).RequireVerifiedEmail))
+	router := auth.DebugMiddleware()(New(db, mediaService).Routes())
 	call := func(who, method, path, body string, status int) map[string]any {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))

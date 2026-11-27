@@ -193,17 +193,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(user: user, isLoading: false);
   }
 
-  /// Re-fetches the current user (e.g. to pick up a changed emailVerified flag).
+  /// Re-fetches the current user after phone verification.
   Future<void> refreshUser() async {
     final user = await _api.getMe();
     state = state.copyWith(user: user, isLoading: false);
-  }
-
-  /// Requests an email verification code for the current user's address.
-  Future<void> resendVerification() async {
-    final email = state.user?.email;
-    if (email == null) return;
-    await _api.resendVerification(email);
   }
 }
 
