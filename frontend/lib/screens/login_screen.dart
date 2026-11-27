@@ -73,20 +73,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 children: [
-                  const Align(
+                  Align(
                     alignment: Alignment.centerRight,
-                    child: LanguagePickerButton(),
+                    child: Transform.translate(
+                      offset: const Offset(0, -60),
+                      child: const LanguagePickerButton(),
+                    ),
                   ),
 
-                  // Logo moved higher
                   const SizedBox(height: 10),
 
                   SizedBox(
                     width: 100,
                     height: 100,
-                    child: Image.asset(
-                      'assets/images/logo.png',
-                      fit: BoxFit.contain,
+                    child: Transform.translate(
+                      offset: const Offset(0, -48),
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
 
