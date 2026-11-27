@@ -10,7 +10,6 @@ import '../services/chat_live_service.dart';
 import '../services/social_api.dart';
 import 'direct_messages_screen.dart';
 import 'signup_screen.dart';
-import 'verify_email_screen.dart';
 
 class SocialScreen extends ConsumerStatefulWidget {
   const SocialScreen({super.key});
@@ -87,38 +86,23 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
   Future<void> _compose() async {
     final user = ref.read(authProvider).user;
     if (user == null) return;
-    if (!user.emailVerified || !user.phoneVerified) {
+    if (!user.phoneVerified) {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text(dialogContext.tr('Verify your account to post')),
-          content: Text(
-            'Email ${user.emailVerified ? 'verified' : 'unverified'}\n'
-            'Phone ${user.phoneVerified ? 'verified' : 'unverified'}',
-          ),
+          title: Text(dialogContext.tr('Verify your phone number to post.')),
           actions: [
-            if (!user.emailVerified)
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                  Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => const VerifyEmailScreen(),
-                  ));
-                },
-                child: Text(dialogContext.tr('Verify email')),
-              ),
-            if (!user.phoneVerified)
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                  Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) =>
-                        const SignupScreen(verifyingExistingAccount: true),
-                  ));
-                },
-                child: Text(dialogContext.tr('Verify phone')),
-              ),
             TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) =>
+                      const SignupScreen(verifyingExistingAccount: true),
+                ));
+              },
+              child: Text(dialogContext.tr('Verify phone')),
+            ),
+              TextButton(
               onPressed: () => Navigator.pop(dialogContext),
               child: Text(dialogContext.tr('Close')),
             ),
@@ -281,7 +265,7 @@ class _ComposeScreenState extends ConsumerState<_ComposeScreen> {
         appBar: AppBar(
           title: Text(context.tr('New post')),
           actions: [
-            TextButton(
+              TextButton(
               onPressed: _busy ? null : _publish,
               child: Text(_busy ? context.tr('Posting…') : context.tr('Publish')),
             ),

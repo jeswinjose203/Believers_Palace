@@ -45,14 +45,6 @@ func (m *SMTPMailer) SendPasswordReset(ctx context.Context, email, resetToken st
 	return m.send(ctx, email, "Believers Palace - Password Reset", body)
 }
 
-// SendEmailVerification sends an email verification email.
-func (m *SMTPMailer) SendEmailVerification(ctx context.Context, email, code string) error {
-	body := "Your Believers Palace verification code is " + code + ".\r\n\r\n" +
-		"Enter this code in the app within 10 minutes to verify your email.\r\n\r\n" +
-		"If you did not request this code, you can ignore this email."
-	return m.send(ctx, email, "Believers Palace - Verify Your Email", body)
-}
-
 // send composes and delivers a plain-text message to a single recipient.
 func (m *SMTPMailer) send(ctx context.Context, to, subject, body string) error {
 	if strings.ContainsAny(to, "\r\n") || strings.ContainsAny(m.cfg.From, "\r\n") {

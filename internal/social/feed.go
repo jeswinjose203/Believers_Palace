@@ -54,7 +54,7 @@ type post struct {
 }
 
 func verificationRequired(w http.ResponseWriter) {
-	httpx.ErrorCode(w, 403, "Verify your email and phone number to post.", "post_verification_required")
+	httpx.ErrorCode(w, 403, "Verify your phone number to post.", "post_verification_required")
 }
 
 func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +71,7 @@ func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
 	var verified, owns bool
 	var id *string
 	err := h.db.QueryRow(r.Context(), `WITH account AS (
-        SELECT id,church_id,(email_verified AND phone_verified) AS verified,
+        SELECT id,church_id,phone_verified AS verified,
             ($3='' OR EXISTS(SELECT 1 FROM social_media WHERE key=$3 AND owner_id=$1)) AS owns
         FROM users WHERE id=$1
     ), inserted AS (
@@ -122,7 +122,7 @@ func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var verified bool
-	if err := h.db.QueryRow(r.Context(), `SELECT email_verified AND phone_verified FROM users WHERE id=$1`, viewer(r)).Scan(&verified); err != nil {
+	if err := h.db.QueryRow(r.Context(), `SELECT phone_verified FROM users WHERE id=$1`, viewer(r)).Scan(&verified); err != nil {
 		failure(w, err)
 		return
 	}

@@ -172,54 +172,6 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
-  /auth/verify-email:
-    post:
-      tags: [Authentication]
-      summary: Verify an email address
-      description: >
-        Verifies an email using a single-use six-digit code. Pass the email
-        address with the code. Previously issued opaque tokens are also accepted.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VerifyEmailRequest'
-      responses:
-        '200':
-          description: Email verified
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-
-  /auth/resend-verification:
-    post:
-      tags: [Authentication]
-      summary: Request an email verification code
-      description: >
-        If the email is registered and unverified, a code is sent subject to
-        a one-minute resend cooldown. Accepted requests return the same response.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ResendVerificationRequest'
-      responses:
-        '200':
-          description: Request accepted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-
   /users/logout-all:
     post:
       tags: [Users]
@@ -1477,26 +1429,6 @@ components:
           type: string
           format: password
           minLength: 8
-
-    VerifyEmailRequest:
-      type: object
-      required: [token]
-      properties:
-        email:
-          type: string
-          format: email
-          description: Required with a six-digit code.
-        token:
-          type: string
-          description: Six-digit verification code or a previously issued opaque token.
-
-    ResendVerificationRequest:
-      type: object
-      required: [email]
-      properties:
-        email:
-          type: string
-          format: email
 
     MessageResponse:
       type: object

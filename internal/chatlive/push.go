@@ -131,7 +131,7 @@ func (p *PushWorker) eligible(ctx context.Context, d delivery) (bool, error) {
 	err := p.Pool.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM users u JOIN chat_push_devices d ON d.user_id=u.id
-			WHERE u.id=$1 AND d.token=$2 AND u.email_verified
+			WHERE u.id=$1 AND d.token=$2
 			  AND NOT EXISTS (SELECT 1 FROM chat_notification_preferences p
 				WHERE p.user_id=u.id AND p.kind=$3 AND p.room_id=$4 AND p.muted)
 			  AND (
