@@ -176,11 +176,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
               _MenuRow(
-                icon: Icons.help_outline,
-                title: context.tr('Help & Support'),
-                onTap: () => _comingSoon('Help & Support'),
-              ),
-              _MenuRow(
                 icon: Icons.info_outline,
                 title: context.tr('About'),
                 onTap: () => showAboutDialog(
