@@ -109,7 +109,22 @@ class _TeacherAssignmentsState extends ConsumerState<_TeacherAssignments> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(context.tr('Assign Catechism teachers'))),
+        appBar: AppBar(
+          title: Text(context.tr('Assign Catechism teachers')),
+          actions: [
+            IconButton(
+              tooltip: context.tr('Teacher requests'),
+              icon: const Icon(Icons.mark_email_unread_outlined),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      _TeacherRequestsScreen(churchId: widget.churchId),
+                ),
+              ),
+            ),
+          ],
+        ),
         body: FutureBuilder<PaginatedResponse<CatechismClass>>(
           future: _classes,
           builder: (context, classes) {
@@ -185,6 +200,155 @@ class _TeacherAssignmentsState extends ConsumerState<_TeacherAssignments> {
                         ]);
                       }))
             ]);
+          },
+        ),
+      );
+}
+
+class _TeacherRequestsScreen extends ConsumerStatefulWidget {
+  const _TeacherRequestsScreen({required this.churchId});
+  final String churchId;
+
+  @override
+  ConsumerState<_TeacherRequestsScreen> createState() =>
+      _TeacherRequestsScreenState();
+}
+
+class _TeacherRequestsScreenState
+    extends ConsumerState<_TeacherRequestsScreen> {
+  late Future<Map<String, dynamic>> _requests;
+  late Future<PaginatedResponse<CatechismClass>> _classes;
+  final Map<String, String?> _classByRequest = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() {
+    final api = ref.read(catechismApiProvider);
+    _requests = api.teacherRequests(widget.churchId);
+    _classes = api.listClasses(widget.churchId, limit: 100);
+  }
+
+  Future<void> _review(String id, String status, String? classId) async {
+    try {
+      await ref.read(catechismApiProvider).reviewTeacherRequest(
+            widget.churchId,
+            id,
+            status: status,
+            classId: classId,
+          );
+      if (mounted) setState(_load);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(context.tr('Teacher requests'))),
+        body: FutureBuilder<Map<String, dynamic>>(
+          future: _requests,
+          builder: (context, requestsSnapshot) {
+            if (requestsSnapshot.hasError) {
+              return Center(child: Text(requestsSnapshot.error.toString()));
+            }
+            if (!requestsSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final requests =
+                (requestsSnapshot.data!['requests'] as List<dynamic>? ?? [])
+                    .cast<Map<String, dynamic>>();
+            if (requests.isEmpty) {
+              return Center(
+                  child: Text(context.tr('No pending teacher requests')));
+            }
+            return FutureBuilder<PaginatedResponse<CatechismClass>>(
+              future: _classes,
+              builder: (context, classesSnapshot) {
+                if (classesSnapshot.hasError) {
+                  return Center(child: Text(classesSnapshot.error.toString()));
+                }
+                if (!classesSnapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final classes = classesSnapshot.data!.data;
+                return ListView(
+                  padding: const EdgeInsets.all(12),
+                  children: [
+                    for (final request in requests)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.person_outline),
+                                title: Text(request['name'] as String? ?? ''),
+                                subtitle:
+                                    Text(request['email'] as String? ?? ''),
+                              ),
+                              if (classes.isNotEmpty)
+                                DropdownButtonFormField<String>(
+                                  initialValue:
+                                      _classByRequest[request['id']] ??
+                                          classes.first.id,
+                                  decoration: InputDecoration(
+                                      labelText: context.tr('Assign to class')),
+                                  items: [
+                                    for (final cls in classes)
+                                      DropdownMenuItem(
+                                          value: cls.id, child: Text(cls.name)),
+                                  ],
+                                  onChanged: (value) => setState(() =>
+                                      _classByRequest[request['id'] as String] =
+                                          value),
+                                )
+                              else
+                                Text(context.tr(
+                                    'Create a class before approving this request')),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                children: [
+                                  FilledButton.icon(
+                                    onPressed: classes.isEmpty
+                                        ? null
+                                        : () => _review(
+                                              request['id'] as String,
+                                              'approved',
+                                              _classByRequest[request['id']] ??
+                                                  classes.first.id,
+                                            ),
+                                    icon: const Icon(Icons.check),
+                                    label: Text(context.tr('Approve')),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _review(
+                                        request['id'] as String,
+                                        'rejected',
+                                        null),
+                                    icon: const Icon(Icons.close),
+                                    label: Text(context.tr('Reject')),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            );
           },
         ),
       );

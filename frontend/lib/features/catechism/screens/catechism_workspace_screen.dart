@@ -63,10 +63,60 @@ class _CatechismTeacherScreenState
           retry: () => setState(_load),
           builder: (data) {
             final classes = _rows(data, 'classes');
+            final user = ref.watch(authProvider).user;
+            final requestStatus = data['requestStatus'] as String? ?? 'none';
             return ListView(
               children: [
-                if (classes.isEmpty)
+                if (classes.isEmpty) ...[
                   ListTile(title: Text(context.tr('No assigned classes'))),
+                  if (user?.churchId == null)
+                    ListTile(
+                      leading: const Icon(Icons.info_outline),
+                      title: Text(context
+                          .tr('Select your church to request teacher access')),
+                    )
+                  else if (requestStatus == 'pending')
+                    ListTile(
+                      leading: const Icon(Icons.hourglass_top),
+                      title: Text(
+                          context.tr('Teacher request pending admin approval')),
+                    )
+                  else ...[
+                    if (requestStatus == 'rejected')
+                      ListTile(
+                        leading: const Icon(Icons.info_outline),
+                        title: Text(
+                            context.tr('Your teacher request was rejected')),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: FilledButton.icon(
+                        onPressed: () async {
+                          try {
+                            await ref
+                                .read(catechismApiProvider)
+                                .requestTeacherApproval();
+                            if (!context.mounted) return;
+                            setState(_load);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content: Text(context.tr(
+                                      'Teacher request sent to Church Admin'))),
+                            );
+                          } catch (error) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(_errorMessage(error))),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.person_add_alt_1),
+                        label: Text(context.tr('Request to become a teacher')),
+                      ),
+                    ),
+                  ],
+                ],
                 for (final cls in classes.take(_pageSize))
                   ListTile(
                     leading: const Icon(Icons.school_outlined),
