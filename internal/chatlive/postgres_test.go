@@ -183,3 +183,89 @@ func TestDistributedChat(t *testing.T) {
 		t.Fatalf("expected one push to an unmuted recipient, got %d", sent.Load())
 	}
 }
+
+func TestDirectChatPush(t *testing.T) {
+	dsn := os.Getenv("CHAT_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("requires a migrated disposable database")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	const (
+		sender    = "10000000-0000-4000-8000-000000000037"
+		recipient = "20000000-0000-4000-8000-000000000037"
+		other     = "30000000-0000-4000-8000-000000000037"
+		room      = "40000000-0000-4000-8000-000000000037"
+	)
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, query, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec(`INSERT INTO users (id,name,email,password_hash) VALUES
+		($1,'Sender','direct-sender@example.test','unused'),
+		($2,'Recipient','direct-recipient@example.test','unused'),
+		($3,'Other','direct-other@example.test','unused')`, sender, recipient, other)
+	defer pool.Exec(context.Background(), "DELETE FROM users WHERE id IN ($1,$2,$3)", sender, recipient, other)
+	exec(`INSERT INTO direct_threads (id,user_a,user_b) VALUES ($1,$2,$3)`, room, sender, recipient)
+	exec(`INSERT INTO chat_push_devices (token,user_id) VALUES
+		('dm-sender',$1), ('dm-recipient-a',$2), ('dm-recipient-b',$2), ('dm-other',$3)`, sender, recipient, other)
+
+	tokens := make(chan string, 8)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Message struct {
+				FID     string
+				Data    map[string]string
+				Android struct {
+					Notification struct {
+						DefaultSound bool `json:"default_sound"`
+					}
+				}
+				APNS struct {
+					Payload struct {
+						APS struct{ Sound string }
+					}
+				}
+			}
+		}
+		if json.NewDecoder(r.Body).Decode(&payload) != nil ||
+			payload.Message.Data["kind"] != "direct" || payload.Message.Data["roomId"] != room {
+			t.Error("unexpected direct push payload")
+		}
+		if !payload.Message.Android.Notification.DefaultSound || payload.Message.APNS.Payload.APS.Sound != "default" {
+			t.Error("direct push did not request the default notification sound")
+		}
+		tokens <- payload.Message.FID
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer provider.Close()
+	worker := PushWorker{Postgres: Postgres{Pool: pool}, client: provider.Client(), endpoint: provider.URL}
+	const insert = `INSERT INTO direct_messages (thread_id,seq,sender_id,body,client_id)
+		VALUES ($1,$2,$3,'Direct message',$4) ON CONFLICT (thread_id,sender_id,client_id) DO NOTHING`
+	exec(insert, room, 1, sender, "first")
+	exec(insert, room, 2, sender, "first")
+	exec(insert, room, 2, sender, "second")
+	if count, err := worker.expand(ctx); err != nil || count != 2 {
+		t.Fatalf("expanded %d push jobs, want 2: %v", count, err)
+	}
+	exec(`UPDATE direct_threads SET hidden_b=1 WHERE id=$1`, room)
+	if count, err := worker.deliverBatch(ctx); err != nil || count != 4 {
+		t.Fatalf("processed %d deliveries, want 4: %v", count, err)
+	}
+	close(tokens)
+	var got []string
+	for token := range tokens {
+		got = append(got, token)
+	}
+	sort.Strings(got)
+	if strings.Join(got, ",") != "dm-recipient-a,dm-recipient-b" {
+		t.Fatalf("expected the visible message once on each recipient device, got %v", got)
+	}
+}

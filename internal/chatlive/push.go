@@ -75,6 +75,10 @@ func (p *PushWorker) expand(ctx context.Context) (int64, error) {
 			FROM claimed j JOIN chat_notification_preferences pref
 			  ON pref.kind='event' AND pref.room_id=j.room_id AND NOT pref.muted
 			WHERE j.kind='event' AND j.created_at > now()-interval '1 hour'
+			UNION ALL
+			SELECT j.*, CASE WHEN j.sender_id=t.user_a THEN t.user_b ELSE t.user_a END
+			FROM claimed j JOIN direct_threads t ON t.id=j.room_id AND j.sender_id IN (t.user_a,t.user_b)
+			WHERE j.kind='direct' AND j.created_at > now()-interval '1 hour'
 		), expanded AS (
 			INSERT INTO chat_push_deliveries (message_id, kind, room_id, user_id, token)
 			SELECT a.message_id, a.kind, a.room_id, a.recipient, d.token
@@ -144,6 +148,12 @@ func (p *PushWorker) eligible(ctx context.Context, d delivery) (bool, error) {
 					OR (u.church_id=e.church_id AND u.role IN ('church_admin','priest','associate_priest'))
 					OR EXISTS (SELECT 1 FROM event_registrations r WHERE r.event_id=e.id AND r.user_id=u.id)))
 					AND EXISTS (SELECT 1 FROM event_messages WHERE id=$5))
+				OR
+				($3='direct' AND EXISTS (
+					SELECT 1 FROM direct_messages m JOIN direct_threads t ON t.id=m.thread_id
+					WHERE m.push_id=$5 AND t.id=$4 AND u.id IN (t.user_a,t.user_b)
+						AND m.sender_id<>u.id
+						AND m.seq>CASE WHEN u.id=t.user_a THEN t.hidden_a ELSE t.hidden_b END))
 			  )
 		)`, d.userID, d.token, d.kind, d.roomID, d.messageID).Scan(&allowed)
 	return allowed, err
@@ -171,12 +181,20 @@ func (p *PushWorker) deliver(ctx context.Context, d delivery) error {
 
 func (p *PushWorker) send(ctx context.Context, d delivery) (retry, unregister bool, delay time.Duration) {
 	delay = time.Minute * time.Duration(1<<min(d.attempts-1, 5))
+	body := "New chat message"
+	android := map[string]any{"tag": d.messageID, "channel_id": "chat_messages"}
+	apns := map[string]any{"headers": map[string]string{"apns-collapse-id": d.messageID}}
+	if d.kind == "direct" {
+		body = "New direct message"
+		android["default_sound"] = true
+		apns["payload"] = map[string]any{"aps": map[string]string{"sound": "default"}}
+	}
 	payload, _ := json.Marshal(map[string]any{"message": map[string]any{
 		"fid":          d.token,
-		"notification": map[string]string{"title": "Believers Palace", "body": "New chat message"},
+		"notification": map[string]string{"title": "Believers Palace", "body": body},
 		"data":         map[string]string{"kind": d.kind, "roomId": d.roomID, "messageId": d.messageID},
-		"android":      map[string]any{"notification": map[string]string{"tag": d.messageID, "channel_id": "chat_messages"}},
-		"apns":         map[string]any{"headers": map[string]string{"apns-collapse-id": d.messageID}},
+		"android":      map[string]any{"notification": android},
+		"apns":         apns,
 	}})
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint, bytes.NewReader(payload))
 	if err != nil {

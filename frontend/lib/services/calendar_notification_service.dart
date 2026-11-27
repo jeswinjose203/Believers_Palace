@@ -110,6 +110,7 @@ class CalendarNotificationService {
           'Chat messages',
           importance: Importance.high,
           priority: Priority.high,
+          playSound: true,
         ),
       ),
     );
