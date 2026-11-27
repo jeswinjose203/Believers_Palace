@@ -21,7 +21,7 @@ String _publicationRequestId() {
 }
 
 List<_Row> _rows(_Row data, String key) =>
-    (data[key] as List<dynamic>).cast<_Row>();
+    ((data[key] as List<dynamic>?) ?? const <dynamic>[]).cast<_Row>();
 
 class CatechismTeacherScreen extends ConsumerStatefulWidget {
   const CatechismTeacherScreen({super.key});
@@ -46,6 +46,54 @@ class _CatechismTeacherScreenState
     _classes = ref.read(catechismApiProvider).teacherClasses(_page);
   }
 
+  Future<void> _leaveClass(_Row cls) async {
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('Leave this class?')),
+        content: Text(cls['name'] as String? ?? ''),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.tr('Cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(context.tr('Leave class')),
+          ),
+        ],
+      ),
+    );
+    if (leave != true) return;
+    try {
+      await ref
+          .read(catechismApiProvider)
+          .leaveTeacherClass(cls['id'] as String);
+      if (mounted) setState(_load);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage(error))),
+        );
+      }
+    }
+  }
+
+  Future<void> _requestClass(_Row cls) async {
+    try {
+      await ref
+          .read(catechismApiProvider)
+          .requestTeacherApproval(cls['id'] as String);
+      if (mounted) setState(_load);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage(error))),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
@@ -63,60 +111,15 @@ class _CatechismTeacherScreenState
           retry: () => setState(_load),
           builder: (data) {
             final classes = _rows(data, 'classes');
-            final user = ref.watch(authProvider).user;
-            final requestStatus = data['requestStatus'] as String? ?? 'none';
+            final available = _rows(data, 'availableClasses');
             return ListView(
               children: [
-                if (classes.isEmpty) ...[
-                  ListTile(title: Text(context.tr('No assigned classes'))),
-                  if (user?.churchId == null)
-                    ListTile(
-                      leading: const Icon(Icons.info_outline),
-                      title: Text(context
-                          .tr('Select your church to request teacher access')),
-                    )
-                  else if (requestStatus == 'pending')
-                    ListTile(
-                      leading: const Icon(Icons.hourglass_top),
-                      title: Text(
-                          context.tr('Teacher request pending admin approval')),
-                    )
-                  else ...[
-                    if (requestStatus == 'rejected')
-                      ListTile(
-                        leading: const Icon(Icons.info_outline),
-                        title: Text(
-                            context.tr('Your teacher request was rejected')),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: FilledButton.icon(
-                        onPressed: () async {
-                          try {
-                            await ref
-                                .read(catechismApiProvider)
-                                .requestTeacherApproval();
-                            if (!context.mounted) return;
-                            setState(_load);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content: Text(context.tr(
-                                      'Teacher request sent to Church Admin'))),
-                            );
-                          } catch (error) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(_errorMessage(error))),
-                              );
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.person_add_alt_1),
-                        label: Text(context.tr('Request to become a teacher')),
-                      ),
-                    ),
-                  ],
-                ],
+                ListTile(
+                  title: Text(context.tr('Your assigned classes')),
+                  subtitle: classes.isEmpty
+                      ? Text(context.tr('No assigned classes'))
+                      : null,
+                ),
                 for (final cls in classes.take(_pageSize))
                   ListTile(
                     leading: const Icon(Icons.school_outlined),
@@ -124,7 +127,17 @@ class _CatechismTeacherScreenState
                     subtitle: Text(
                       "${cls['church']} · ${cls['substitute'] == true ? 'Substitute' : 'Teacher'}",
                     ),
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: Wrap(
+                      spacing: 4,
+                      children: [
+                        IconButton(
+                          tooltip: context.tr('Leave class'),
+                          icon: const Icon(Icons.logout_outlined),
+                          onPressed: () => _leaveClass(cls),
+                        ),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => CatechismWorkspaceScreen(
@@ -134,6 +147,30 @@ class _CatechismTeacherScreenState
                       ),
                     ),
                   ),
+                if (available.isNotEmpty) ...[
+                  ListTile(
+                    title: Text(context.tr('Request access to more classes')),
+                    subtitle: Text(context
+                        .tr('Requests are reviewed by your Church Admin')),
+                  ),
+                  for (final cls in available)
+                    if (cls['requestStatus'] != 'approved')
+                      ListTile(
+                        leading: const Icon(Icons.school_outlined),
+                        title: Text(cls['name'] as String? ?? ''),
+                        subtitle: Text(switch (cls['requestStatus']) {
+                          'pending' => context.tr('Request pending'),
+                          'rejected' => context.tr('Request rejected'),
+                          _ => context.tr('Available to request'),
+                        }),
+                        trailing: cls['requestStatus'] == 'pending'
+                            ? const Icon(Icons.hourglass_top)
+                            : TextButton(
+                                onPressed: () => _requestClass(cls),
+                                child: Text(context.tr('Request')),
+                              ),
+                      ),
+                ],
                 _PageControls(
                   page: _page,
                   hasMore: classes.length > _pageSize,

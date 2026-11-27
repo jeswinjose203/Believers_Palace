@@ -7,6 +7,7 @@ import '../../../models/models.dart';
 import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
 import 'catechism_student_dashboard_screen.dart';
+import 'catechism_list_screen.dart';
 import 'catechism_workspace_screen.dart';
 
 class CatechismEntryScreen extends ConsumerWidget {
@@ -44,6 +45,18 @@ class CatechismEntryScreen extends ConsumerWidget {
                     MaterialPageRoute(
                         builder: (_) => CatechismStudentDashboardScreen(
                             churchId: churchId))))),
+        if (isAdmin)
+          Card(
+              child: ListTile(
+                  leading: const Icon(Icons.class_outlined),
+                  title: Text(context.tr('Manage Catechism classes')),
+                  subtitle:
+                      Text(context.tr('Create and manage church classes')),
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              CatechismListScreen(churchId: churchId))))),
         if (isAdmin)
           Card(
               child: ListTile(
@@ -293,10 +306,16 @@ class _TeacherRequestsScreenState
                                 contentPadding: EdgeInsets.zero,
                                 leading: const Icon(Icons.person_outline),
                                 title: Text(request['name'] as String? ?? ''),
-                                subtitle:
-                                    Text(request['email'] as String? ?? ''),
+                                subtitle: Text([
+                                  request['email'] as String? ?? '',
+                                  if ((request['className'] as String? ?? '')
+                                      .isNotEmpty)
+                                    '${context.tr('Requested class')}: ${request['className']}',
+                                ].join('\n')),
                               ),
-                              if (classes.isNotEmpty)
+                              if ((request['classId'] as String? ?? '')
+                                      .isEmpty &&
+                                  classes.isNotEmpty)
                                 DropdownButtonFormField<String>(
                                   initialValue:
                                       _classByRequest[request['id']] ??
@@ -312,7 +331,8 @@ class _TeacherRequestsScreenState
                                       _classByRequest[request['id'] as String] =
                                           value),
                                 )
-                              else
+                              else if ((request['classId'] as String? ?? '')
+                                  .isEmpty)
                                 Text(context.tr(
                                     'Create a class before approving this request')),
                               const SizedBox(height: 8),
@@ -320,12 +340,17 @@ class _TeacherRequestsScreenState
                                 spacing: 8,
                                 children: [
                                   FilledButton.icon(
-                                    onPressed: classes.isEmpty
+                                    onPressed: classes.isEmpty &&
+                                            (request['classId'] as String? ??
+                                                    '')
+                                                .isEmpty
                                         ? null
                                         : () => _review(
                                               request['id'] as String,
                                               'approved',
-                                              _classByRequest[request['id']] ??
+                                              request['classId'] as String? ??
+                                                  _classByRequest[
+                                                      request['id']] ??
                                                   classes.first.id,
                                             ),
                                     icon: const Icon(Icons.check),
