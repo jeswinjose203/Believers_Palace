@@ -133,10 +133,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   }
 
   Future<FirebaseAuth> _firebaseAuth() async {
-    if (!FirebaseAppConfig.canInitialize) {
+    final options = FirebaseAppConfig.options;
+    if (options == null) {
       throw const _PhoneSetupUnavailable();
     }
-    final app = await FirebaseAppConfig.initialize();
+    final app = await FirebaseAppConfig.initialize(options);
     return FirebaseAuth.instanceFor(app: app);
   }
 

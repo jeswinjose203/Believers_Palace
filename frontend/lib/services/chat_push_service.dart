@@ -29,15 +29,15 @@ class ChatPushService {
   bool get registered => _registered;
 
   Future<void> start(String userId) async {
-    if (!FirebaseAppConfig.canInitialize ||
-        _starting ||
-        (_registered && _userId == userId)) {
+    if (_starting || (_registered && _userId == userId)) {
       return;
     }
+    final options = FirebaseAppConfig.options;
+    if (options == null) return;
     _starting = true;
     _userId = userId;
     try {
-      await FirebaseAppConfig.initialize();
+      await FirebaseAppConfig.initialize(options);
       if (_userId != userId) return;
       final messaging = FirebaseMessaging.instance;
       final permission = await messaging.requestPermission();
@@ -102,7 +102,7 @@ class ChatPushService {
       // Invalidating the Firebase token also stops alerts if the API is offline.
     }
     try {
-      if (FirebaseAppConfig.canInitialize && Firebase.apps.isNotEmpty) {
+      if (FirebaseAppConfig.options != null && Firebase.apps.isNotEmpty) {
         await FirebaseMessaging.instance.unregister();
       }
     } catch (_) {}
