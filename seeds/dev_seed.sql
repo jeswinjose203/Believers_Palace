@@ -20,6 +20,17 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
+-- Additional development superadmin for testing with a separate login.
+INSERT INTO users (name, email, phone, password_hash, role)
+VALUES (
+    'Bpalace',
+    'bpalace@yopmail.com',
+    '+913344277677',
+    '$2a$12$vb8i.itcw8WjXDzcuRpXZugfsHANsNMGWpW5yEj9XZgXFRVoXX4O2',
+    'super_admin'
+)
+ON CONFLICT (email) DO NOTHING;
+
 -- Sample church for local catechism testing (fixed ID).
 INSERT INTO churches (id, name, address)
 VALUES (
@@ -62,6 +73,9 @@ VALUES (
     '2016-05-15',
     'Dev seed enrollment',
     'pending'
+)
+ON CONFLICT (id) DO NOTHING;
+
 -- Marketplace sample categories (idempotent).
 INSERT INTO marketplace_categories (id, name, scope, sort_order, active)
 VALUES
