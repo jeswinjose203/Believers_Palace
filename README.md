@@ -619,3 +619,36 @@ installed debug build signed with a different certificate must be replaced
 before it can receive future signed releases. Set up the public HTTPS backend
 and register the release signing fingerprints with Firebase before distributing
 a build that uses phone verification.
+
+
+
+
+{
+  "project_info": {
+    "project_number": "709761041745",
+    "project_id": "believers-palace",
+    "storage_bucket": "believers-palace.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:709761041745:android:6b9934ba7bc92c79b1bf70",
+        "android_client_info": {
+          "package_name": "com.example.believers_palace"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCV4TMs1hhli6JbkjMaXm55vnalZtvVfZc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
