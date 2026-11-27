@@ -37,18 +37,31 @@ type workspaceInput struct {
 func (h *Handler) TeacherRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.teacherClasses)
+	r.Post("/requests", h.requestTeacher)
 	return r
 }
 
 func (h *Handler) teacherClasses(w http.ResponseWriter, r *http.Request) {
 	id := auth.MustFromContext(r.Context())
 	var assigned bool
-	if err := h.svc.repo.pool.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM catechism_teachers WHERE user_id=$1) OR EXISTS(SELECT 1 FROM catechism_classes WHERE teacher_user_id=$1)`, id.UserID).Scan(&assigned); err != nil {
+	if err := h.svc.repo.pool.QueryRow(r.Context(), `SELECT EXISTS(
+		SELECT 1 FROM catechism_teachers t JOIN catechism_classes c ON c.id=t.class_id
+		WHERE t.user_id=$1 AND c.church_id=NULLIF($2,'')::uuid
+	) OR EXISTS(
+		SELECT 1 FROM catechism_classes c WHERE c.teacher_user_id=$1 AND c.church_id=NULLIF($2,'')::uuid
+	)`, id.UserID, id.ChurchID).Scan(&assigned); err != nil {
 		h.writeError(w, err)
 		return
 	}
 	if !assigned {
-		h.writeError(w, ErrForbidden)
+		var requestStatus string
+		if err := h.svc.repo.pool.QueryRow(r.Context(), `SELECT COALESCE((
+			SELECT status FROM catechism_teacher_requests WHERE user_id=$1 AND church_id=NULLIF($2,'')::uuid
+			ORDER BY created_at DESC LIMIT 1),'none')`, id.UserID, id.ChurchID).Scan(&requestStatus); err != nil {
+			h.writeError(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"classes": []any{}, "requestStatus": requestStatus})
 		return
 	}
 	p := httpx.ParsePageParams(r)
@@ -62,7 +75,7 @@ func (h *Handler) teacherClasses(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN catechism_teachers t ON t.class_id=c.id AND t.user_id=$1
 		ORDER BY ch.name, c.name, c.id LIMIT $2 OFFSET $3
 	)
-	SELECT jsonb_build_object('classes', COALESCE(jsonb_agg(to_jsonb(classes)
+	SELECT jsonb_build_object('requestStatus','approved','classes', COALESCE(jsonb_agg(to_jsonb(classes)
 		ORDER BY church,name,id), '[]')) FROM classes`, id.UserID, p.Limit+1, p.Offset)
 }
 func (h *Handler) workspaceJSON(w http.ResponseWriter, r *http.Request, query string, args ...any) {

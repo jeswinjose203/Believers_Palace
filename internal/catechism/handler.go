@@ -32,6 +32,8 @@ func (h *Handler) ChurchRoutes() chi.Router {
 	r.Post("/", h.createClass)
 	r.Get("/teachers", h.listTeacherCandidates)
 	r.Post("/teachers", h.assignTeacher)
+	r.Get("/teacher-requests", h.listTeacherRequests)
+	r.Patch("/teacher-requests/{requestId}", h.reviewTeacherRequest)
 	return r
 }
 

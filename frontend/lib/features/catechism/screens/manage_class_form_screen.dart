@@ -10,10 +10,12 @@ class ManageClassFormScreen extends ConsumerStatefulWidget {
   final String churchId;
   final CatechismClass? existing;
 
-  const ManageClassFormScreen({super.key, required this.churchId, this.existing});
+  const ManageClassFormScreen(
+      {super.key, required this.churchId, this.existing});
 
   @override
-  ConsumerState<ManageClassFormScreen> createState() => _ManageClassFormScreenState();
+  ConsumerState<ManageClassFormScreen> createState() =>
+      _ManageClassFormScreenState();
 }
 
 class _ManageClassFormScreenState extends ConsumerState<ManageClassFormScreen> {
@@ -61,19 +63,23 @@ class _ManageClassFormScreenState extends ConsumerState<ManageClassFormScreen> {
     final cap = int.tryParse(_capacity.text.trim()) ?? 0;
     return {
       'name': _name.text.trim(),
-      'description': _description.text.trim().isEmpty ? null : _description.text.trim(),
+      'description':
+          _description.text.trim().isEmpty ? null : _description.text.trim(),
       'level': _level,
       'teacherName': _teacher.text.trim().isEmpty ? null : _teacher.text.trim(),
       'teacherUserId': widget.existing?.teacherUserId,
       'location': _location.text.trim().isEmpty ? null : _location.text.trim(),
       'schedule': <Map<String, String>>[],
-      'startDate': _start.toIso8601String().split('T').first,
-      'endDate': _end.toIso8601String().split('T').first,
+      'startDate': _jsonDate(_start),
+      'endDate': _jsonDate(_end),
       'capacity': cap,
       'status': _status,
       'image': (_image == null || _image!.isEmpty) ? null : _image,
     };
   }
+
+  String _jsonDate(DateTime date) =>
+      DateTime.utc(date.year, date.month, date.day).toIso8601String();
 
   Future<void> _save() async {
     if (_name.text.trim().isEmpty) {
@@ -125,11 +131,16 @@ class _ManageClassFormScreenState extends ConsumerState<ManageClassFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.existing == null ? context.tr('New class') : context.tr('Edit class'))),
+      appBar: AppBar(
+          title: Text(widget.existing == null
+              ? context.tr('New class')
+              : context.tr('Edit class'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(controller: _name, decoration: InputDecoration(labelText: context.tr('Name *'))),
+          TextField(
+              controller: _name,
+              decoration: InputDecoration(labelText: context.tr('Name *'))),
           TextField(
             controller: _description,
             decoration: InputDecoration(labelText: context.tr('Description')),
@@ -139,12 +150,22 @@ class _ManageClassFormScreenState extends ConsumerState<ManageClassFormScreen> {
             initialValue: _level,
             decoration: InputDecoration(labelText: context.tr('Level')),
             items: [
-              DropdownMenuItem(value: 'first_communion', child: Text(context.tr('First Communion'))),
-              DropdownMenuItem(value: 'confirmation', child: Text(context.tr('Confirmation'))),
-              DropdownMenuItem(value: 'baptism_prep', child: Text(context.tr('Baptism prep'))),
-              DropdownMenuItem(value: 'sunday_school', child: Text(context.tr('Sunday school'))),
-              DropdownMenuItem(value: 'adult', child: Text(context.tr('Adult'))),
-              DropdownMenuItem(value: 'other', child: Text(context.tr('Other'))),
+              DropdownMenuItem(
+                  value: 'first_communion',
+                  child: Text(context.tr('First Communion'))),
+              DropdownMenuItem(
+                  value: 'confirmation',
+                  child: Text(context.tr('Confirmation'))),
+              DropdownMenuItem(
+                  value: 'baptism_prep',
+                  child: Text(context.tr('Baptism prep'))),
+              DropdownMenuItem(
+                  value: 'sunday_school',
+                  child: Text(context.tr('Sunday school'))),
+              DropdownMenuItem(
+                  value: 'adult', child: Text(context.tr('Adult'))),
+              DropdownMenuItem(
+                  value: 'other', child: Text(context.tr('Other'))),
             ],
             onChanged: (v) => setState(() => _level = v ?? _level),
           ),
@@ -152,26 +173,36 @@ class _ManageClassFormScreenState extends ConsumerState<ManageClassFormScreen> {
             initialValue: _status,
             decoration: InputDecoration(labelText: context.tr('Status')),
             items: [
-              DropdownMenuItem(value: 'draft', child: Text(context.tr('Draft'))),
+              DropdownMenuItem(
+                  value: 'draft', child: Text(context.tr('Draft'))),
               DropdownMenuItem(value: 'open', child: Text(context.tr('Open'))),
-              DropdownMenuItem(value: 'closed', child: Text(context.tr('Closed'))),
-              DropdownMenuItem(value: 'completed', child: Text(context.tr('Completed'))),
+              DropdownMenuItem(
+                  value: 'closed', child: Text(context.tr('Closed'))),
+              DropdownMenuItem(
+                  value: 'completed', child: Text(context.tr('Completed'))),
             ],
             onChanged: (v) => setState(() => _status = v ?? _status),
           ),
-          TextField(controller: _teacher, decoration: InputDecoration(labelText: context.tr('Teacher name'))),
-          TextField(controller: _location, decoration: InputDecoration(labelText: context.tr('Location'))),
+          TextField(
+              controller: _teacher,
+              decoration:
+                  InputDecoration(labelText: context.tr('Teacher name'))),
+          TextField(
+              controller: _location,
+              decoration: InputDecoration(labelText: context.tr('Location'))),
           TextField(
             controller: _capacity,
             decoration: InputDecoration(labelText: context.tr('Capacity *')),
             keyboardType: TextInputType.number,
           ),
           ListTile(
-            title: Text(context.tr('Start: {0}', [_start.toLocal().toString().split(' ').first])),
+            title: Text(context.tr(
+                'Start: {0}', [_start.toLocal().toString().split(' ').first])),
             onTap: () => _pickDate(true),
           ),
           ListTile(
-            title: Text(context.tr('End: {0}', [_end.toLocal().toString().split(' ').first])),
+            title: Text(context
+                .tr('End: {0}', [_end.toLocal().toString().split(' ').first])),
             onTap: () => _pickDate(false),
           ),
           ImagePickerField(
