@@ -219,7 +219,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _edit(User user) async {
     final name = TextEditingController(text: user.name);
-    final unit = TextEditingController(text: user.unit ?? '');
+    final mobile = TextEditingController(text: user.phone ?? '');
+    final email = TextEditingController(text: user.email);
     String? profilePic = user.profilePic;
 
     await showDialog(
@@ -235,8 +236,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 decoration: InputDecoration(labelText: dialogContext.tr('Name')),
               ),
               TextField(
-                controller: unit,
-                decoration: InputDecoration(labelText: dialogContext.tr('Unit')),
+                controller: mobile,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: dialogContext.tr('Mobile'),
+                  helperText: dialogContext.tr('Changing mobile requires verification.'),
+                ),
+              ),
+              TextField(
+                controller: email,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(labelText: dialogContext.tr('Email')),
               ),
               ImagePickerField(
                 label: dialogContext.tr('Profile picture'),
@@ -256,7 +266,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               try {
                 await ref.read(authProvider.notifier).updateProfile({
                   'name': name.text,
-                  'unit': unit.text.isEmpty ? null : unit.text,
+                  'phone': mobile.text.trim().isEmpty ? null : mobile.text.trim(),
+                  'email': email.text.trim(),
                   'profilePic':
                       (profilePic == null || profilePic!.isEmpty)
                           ? null
