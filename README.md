@@ -572,6 +572,36 @@ video volume, provision direct object uploads with asset scanning and video
 transcoding before publication. Put reporting, blocking, and a moderation
 workflow in place for public posts and direct messages.
 
+## Deploy the release branch to a DigitalOcean Droplet
+
+1. Connect with `ssh root@DROPLET_IP` using the SSH key selected when creating
+   the Droplet. Install Docker Engine and the Docker Compose plugin. Create a
+   deployment user with Docker access and add a dedicated Actions SSH public
+   key to that user's `~/.ssh/authorized_keys`.
+2. As that user, create `~/believers-palace/.env` with mode `600`. Set
+   `DB_USER`, `DB_NAME`, `DB_PASSWORD`, `JWT_SECRET`,
+   `CORS_ALLOWED_ORIGINS`, and `PUBLIC_BASE_URL`. Use a random URL-safe
+   database password because Compose supplies it in the migration URL.
+   Set `FIREBASE_AUTH_PROJECT_ID` to the Android build's Firebase project and
+   configure SMTP for live email verification and password resets.
+3. Point the API DNS name at the Droplet and configure an HTTPS reverse proxy
+   to `127.0.0.1:8080`. The deployment binds the API and PostgreSQL to loopback.
+   Set `TRUST_PROXY_HEADERS=true` when the proxy overwrites forwarded client
+   headers. Allow SSH and web traffic through the Droplet firewall.
+4. In GitHub, create a `production` environment and add `DROPLET_HOST`,
+   `DROPLET_USER`, `DROPLET_SSH_KEY`, and `DROPLET_KNOWN_HOSTS` as secrets.
+   Use the dedicated SSH private key and a known-hosts line verified against
+   the Droplet's host key using the DigitalOcean console.
+5. Promote reviewed code from `master` to `release` with a pull request or a
+   fast-forward push. In the Actions tab, check **Deploy release to DigitalOcean**,
+   then check `https://YOUR_API_DOMAIN/health`.
+
+The workflow copies the pushed commit over SSH, builds the API, runs migrations,
+and waits for the replacement API to pass its health check. The Compose project
+name stays fixed so PostgreSQL and uploaded files keep their volumes across
+deployments. The server configuration lives outside each release directory.
+Use database backups before schema changes. The development seed is omitted.
+
 ## Android APK distribution
 
 The Android download page and the Android app check the latest published GitHub

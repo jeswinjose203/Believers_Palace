@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-believers_palace}
     ports:
-      - "${DB_HOST_PORT:-5433}:5432"
+      - "${DB_BIND_ADDRESS:-0.0.0.0}:${DB_HOST_PORT:-5433}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -78,7 +78,7 @@ services:
       MAIL_FROM: ${MAIL_FROM}
       FIREBASE_AUTH_PROJECT_ID: ${FIREBASE_AUTH_PROJECT_ID:-}
     ports:
-      - "${HTTP_PORT:-8080}:8080"
+      - "${HTTP_BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-8080}:8080"
     volumes:
       # Persist uploaded images (MEDIA_DIR) and certificates (STORAGE_DIR)
       # across container rebuilds/restarts. Both live under /app/storage.

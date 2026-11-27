@@ -1,0 +1,45 @@
+name: Deploy release to DigitalOcean
+
+on:
+  push:
+    branches: [release]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-droplet
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Deploy checked-out commit
+        shell: bash
+        env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DROPLET_KNOWN_HOSTS: ${{ secrets.DROPLET_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${DROPLET_HOST:?Missing DROPLET_HOST}" "${DROPLET_USER:?Missing DROPLET_USER}"
+          : "${DROPLET_SSH_KEY:?Missing DROPLET_SSH_KEY}" "${DROPLET_KNOWN_HOSTS:?Missing DROPLET_KNOWN_HOSTS}"
+          umask 077
+          ssh_dir=$(mktemp -d)
+          trap 'rm -rf "$ssh_dir"' EXIT
+          printf '%s\n' "$DROPLET_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$DROPLET_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          release_id="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          git archive --format=tar.gz "$GITHUB_SHA" |
+            ssh -i "$ssh_dir/key" -o IdentitiesOnly=yes -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts" \
+              -l "$DROPLET_USER" -- "$DROPLET_HOST" \
+              "set -eu; dir=\$HOME/believers-palace/releases/$release_id; mkdir -p \"\$dir\"; tar -xzf - -C \"\$dir\"; bash \"\$dir/deploy/deploy-droplet.sh\""
