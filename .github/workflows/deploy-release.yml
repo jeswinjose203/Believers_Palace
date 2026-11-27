@@ -17,10 +17,23 @@ jobs:
     timeout-minutes: 30
     environment: production
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-      - name: Deploy checked-out commit
+      - name: Archive release commit
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The backend archive does not depend on the APK download gitlink.
+          git init --bare "$RUNNER_TEMP/release.git"
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader \
+            GIT_CONFIG_VALUE_0="Authorization: Basic $auth" \
+            git -C "$RUNNER_TEMP/release.git" fetch --depth=1 --no-tags \
+              --no-recurse-submodules "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" "$GITHUB_SHA"
+          git -C "$RUNNER_TEMP/release.git" archive --format=tar.gz \
+            --output="$RUNNER_TEMP/release.tar.gz" "$GITHUB_SHA"
+      - name: Deploy release archive
         shell: bash
         env:
           DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
@@ -38,8 +51,8 @@ jobs:
           printf '%s\n' "$DROPLET_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
           release_id="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
-          git archive --format=tar.gz "$GITHUB_SHA" |
-            ssh -i "$ssh_dir/key" -o IdentitiesOnly=yes -o BatchMode=yes \
+          ssh -i "$ssh_dir/key" -o IdentitiesOnly=yes -o BatchMode=yes \
               -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts" \
               -l "$DROPLET_USER" -- "$DROPLET_HOST" \
-              "set -eu; dir=\$HOME/believers-palace/releases/$release_id; mkdir -p \"\$dir\"; tar -xzf - -C \"\$dir\"; bash \"\$dir/deploy/deploy-droplet.sh\""
+              "set -eu; dir=\$HOME/believers-palace/releases/$release_id; mkdir -p \"\$dir\"; tar -xzf - -C \"\$dir\"; bash \"\$dir/deploy/deploy-droplet.sh\"" \
+              < "$RUNNER_TEMP/release.tar.gz"
