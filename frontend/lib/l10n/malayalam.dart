@@ -333,7 +333,7 @@ const malayalam = <String, String>{
   'Membership request': 'അംഗത്വ അപേക്ഷ',
   'Message': 'സന്ദേശം',
   'Mobile (unverified)': 'മൊബൈൽ നമ്പർ (സ്ഥിരീകരിച്ചിട്ടില്ല)',
-  'Mobile (verified)': 'മൊബൈൽ നമ്പർ (സ്ഥിരീകരിച്ചു)',
+  'Mobile verified': 'മൊബൈൽ നമ്പർ സ്ഥിരീകരിച്ചു',
   'Mobile number with country code': 'രാജ്യകോഡ് സഹിതമുള്ള മൊബൈൽ നമ്പർ',
   'Mobile verification is temporarily unavailable.':
       'മൊബൈൽ നമ്പർ സ്ഥിരീകരണം താൽക്കാലികമായി ലഭ്യമല്ല.',

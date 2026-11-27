@@ -91,6 +91,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     final isMember = user.role == 'user';
     final isSuperAdmin = user.role == 'super_admin';
+    final hasPhone = user.phone?.isNotEmpty ?? false;
     final churchValue = user.churchId == null
         ? (isMember ? 'Select a church' : '-')
         : (_churchName ?? 'Loading...');
@@ -132,12 +133,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               _InfoRow(
                 icon: Icons.phone_outlined,
-                label: (user.phone ?? '').isEmpty
+                label: !hasPhone || user.phoneVerified
                     ? context.tr('Mobile')
-                    : user.phoneVerified
-                        ? context.tr('Mobile (verified)')
-                        : context.tr('Mobile (unverified)'),
-                value: (user.phone ?? '').isEmpty ? '-' : user.phone!,
+                    : context.tr('Mobile (unverified)'),
+                value: hasPhone ? user.phone! : '-',
+                trailing: hasPhone && user.phoneVerified
+                    ? Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Tooltip(
+                          message: context.tr('Mobile verified'),
+                          child: const Icon(Icons.verified, color: Colors.green),
+                        ),
+                      )
+                    : null,
               ),
               _InfoRow(
                 icon: Icons.church_outlined,
