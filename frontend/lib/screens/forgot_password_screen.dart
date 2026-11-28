@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/app_locale.dart';
 import '../services/api_service.dart';
 import 'reset_password_screen.dart';
+import '../widgets/user_error.dart';
 
 /// Lets a user request a password reset token for their email address.
 /// The backend always responds success (no account enumeration); the reset
@@ -37,7 +38,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
       await ref.read(apiServiceProvider).forgotPassword(_email.text.trim());
       setState(() => _sent = true);
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = userErrorMessage(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

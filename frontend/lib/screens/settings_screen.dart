@@ -7,6 +7,7 @@ import '../models/calendar_models.dart';
 import '../services/api_service.dart';
 import '../services/android_update_service.dart';
 import 'profile_screen.dart';
+import '../widgets/user_error.dart';
  
 /// Settings page, opened from Profile > Settings.
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -27,7 +28,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     try {
       prefs = await ref.read(apiServiceProvider).getCalendarPreferences();
     } catch (e) {
-      if (mounted) _toast('$e');
+      if (mounted) showUserError(context, e);
       return;
     }
     if (!mounted) return;
@@ -84,7 +85,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       });
       if (mounted) _toast(context.tr('Calendar preferences saved'));
     } catch (e) {
-      _toast('$e');
+      if (mounted) showUserError(context, e);
     }
   }
  
@@ -120,7 +121,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await ref.read(apiServiceProvider).forgotPassword(email);
       if (mounted) _toast(context.tr('Password reset email sent to {0}', [email]));
     } catch (e) {
-      if (mounted) _toast(e.toString());
+      if (mounted) showUserError(context, e);
     }
   }
  
@@ -150,7 +151,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // main.dart swaps to the login screen; drop this pushed route.
       if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
     } catch (e) {
-      _toast(e.toString());
+      if (mounted) showUserError(context, e);
     }
   }
  

@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
+import '../widgets/user_error.dart';
 
 class CommunityAdDetailScreen extends ConsumerStatefulWidget {
   final String adId;
@@ -43,7 +44,7 @@ class _CommunityAdDetailScreenState extends ConsumerState<CommunityAdDetailScree
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = userErrorMessage(e);
         _loading = false;
       });
     }

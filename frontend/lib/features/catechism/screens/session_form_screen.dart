@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/app_locale.dart';
 import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
+import '../../../widgets/user_error.dart';
 
 class SessionFormScreen extends ConsumerStatefulWidget {
   final String classId;
@@ -71,7 +72,7 @@ class _SessionFormScreenState extends ConsumerState<SessionFormScreen> {
       }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      _msg(e.toString());
+      if (mounted) showUserError(context, e);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

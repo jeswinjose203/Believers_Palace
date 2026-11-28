@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_locale.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../widgets/user_error.dart';
 
 /// Admin view of everyone registered for an event: shows the total count and
 /// the list of attendees. The backend restricts this to staff of the event's
@@ -51,7 +52,7 @@ class _EventRegistrationsScreenState
             return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError) {
-            return Center(child: Text(context.tr('Error: {0}', [snap.error])));
+            return Center(child: Text(context.tr(userErrorMessage(snap.error))));
           }
           final res = snap.data!;
           final total = res.pagination.total;

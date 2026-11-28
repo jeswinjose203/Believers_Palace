@@ -50,7 +50,10 @@ func (h *Handler) Routes() chi.Router {
 		})
 	})
 	r.Get("/feed", h.feed)
+	r.Get("/me/posts", h.myPosts)
 	r.Post("/posts", h.createPost)
+	r.Patch("/posts/{id}", h.editPost)
+	r.Delete("/posts/{id}", h.deletePost)
 	r.Put("/posts/{id}/like", h.like)
 	r.Delete("/posts/{id}/like", h.unlike)
 	r.Post("/media", h.upload)
@@ -64,6 +67,7 @@ func (h *Handler) Routes() chi.Router {
 	r.Get("/threads", h.inbox)
 	r.Post("/messages", h.send)
 	r.Get("/threads/{id}/messages", h.messages)
+	r.Put("/threads/{id}/read", h.markDirectRead)
 	r.Delete("/threads/{id}", h.hide)
 	return r
 }

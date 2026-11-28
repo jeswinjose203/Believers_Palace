@@ -407,6 +407,18 @@ class ApiService {
             if (image != null && image.isNotEmpty) 'image': image,
           });
 
+  Future<Community> updateCommunity(
+    String id,
+    String name,
+    String description, {
+    String? image,
+  }) =>
+      _client.put('/communities/$id', Community.fromJson, body: {
+        'name': name,
+        'description': description,
+        'image': image,
+      });
+
   Future<CommunityMembership> requestCommunityMembership(String id) =>
       _client.post('/communities/$id/requests', CommunityMembership.fromJson);
 

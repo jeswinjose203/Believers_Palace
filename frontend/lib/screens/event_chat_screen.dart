@@ -14,6 +14,7 @@ import '../services/chat_live_service.dart';
 import '../services/chat_notification_service.dart';
 import '../widgets/chat_notification_button.dart';
 import '../widgets/group_chat_bubble.dart';
+import '../widgets/user_error.dart';
 
 /// Event chat follows the event's registration rules.
 /// A message can be deleted by its author or by a church admin / super admin.
@@ -180,7 +181,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
       if (_handleNotRegistered(e)) return;
       setState(() {
         _loading = false;
-        _error = e.toString();
+        _error = userErrorMessage(e);
       });
       _failures++;
       _scheduleNext();
@@ -384,8 +385,7 @@ class _EventChatScreenState extends ConsumerState<EventChatScreen>
       setState(() => _messages = _messages.where((x) => x.id != m.id).toList());
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+        showUserError(context, e);
       }
     }
   }

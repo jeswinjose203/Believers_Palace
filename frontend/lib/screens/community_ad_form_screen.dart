@@ -5,6 +5,7 @@ import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
 import '../widgets/multi_image_picker_field.dart';
+import '../widgets/user_error.dart';
 
 class CommunityAdFormScreen extends ConsumerStatefulWidget {
   final CommunityAd? existing;
@@ -116,7 +117,7 @@ class _CommunityAdFormScreenState extends ConsumerState<CommunityAdFormScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = userErrorMessage(e);
         _saving = false;
       });
     }

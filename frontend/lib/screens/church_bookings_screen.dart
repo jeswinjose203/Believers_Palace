@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_locale.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../widgets/user_error.dart';
 
 /// Admin view of all bookings for a church, with approve/reject controls.
 class ChurchBookingsScreen extends ConsumerStatefulWidget {
@@ -64,7 +65,7 @@ class _ChurchBookingsScreenState extends ConsumerState<ChurchBookingsScreen> {
       if (mounted) _show(context.tr('Booking {0}', [context.tr(status)]));
       _refresh();
     } catch (e) {
-      _show(e.toString());
+      if (mounted) showUserError(context, e);
     }
   }
 
@@ -178,7 +179,7 @@ class _ChurchBookingsScreenState extends ConsumerState<ChurchBookingsScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text(context.tr('Error: {0}', [snapshot.error])));
+            return Center(child: Text(context.tr(userErrorMessage(snapshot.error))));
           }
           final bookings = snapshot.data?.data ?? [];
           if (bookings.isEmpty) {

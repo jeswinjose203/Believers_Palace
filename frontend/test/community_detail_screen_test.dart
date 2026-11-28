@@ -34,6 +34,7 @@ class _CommunityApiService extends ApiService {
 
   final List<CommunityMessage> incomingMessages;
   final List<Community> communities;
+  Community? updatedCommunity;
   final List<int?> afterCursors = [];
   bool _initialLatestRequested = false;
 
@@ -95,6 +96,24 @@ class _CommunityApiService extends ApiService {
   }
 
   @override
+  Future<Community> updateCommunity(
+    String id,
+    String name,
+    String description, {
+    String? image,
+  }) async =>
+      updatedCommunity = Community(
+        id: id,
+        creatorId: 'owner-1',
+        name: name,
+        description: description,
+        image: image,
+        createdAt: DateTime.utc(2026),
+        status: 'active',
+        isAdmin: true,
+      );
+
+  @override
   Future<List<CommunityMembership>> listCommunityRequests(String id) async =>
       [];
 
@@ -129,6 +148,89 @@ class _TestAuthNotifier extends AuthNotifier {
 }
 
 void main() {
+  testWidgets('community info opens from chat and saves admin edits',
+      (tester) async {
+    final api = _CommunityApiService(communities: [
+      Community(
+        id: 'community-1',
+        creatorId: 'owner-1',
+        name: 'Choir',
+        description: 'Original description',
+        image: 'https://example.test/choir.jpg',
+        createdAt: DateTime.utc(2026),
+        status: 'active',
+        isAdmin: true,
+      ),
+    ]);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        apiServiceProvider.overrideWithValue(api),
+        authProvider.overrideWith((ref) => _TestAuthNotifier(api)),
+        chatLiveProvider.overrideWith((_) => _TestChatLiveService(api)),
+      ],
+      child: const MaterialApp(home: CommunitiesScreen()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choir'));
+    await tester.pumpAndSettle();
+    expect(find.text('Original description'), findsNothing);
+
+    await tester.tap(find.text('Choir'));
+    await tester.pumpAndSettle();
+    expect(find.text('Community info'), findsOneWidget);
+    expect(find.text('Original description'), findsOneWidget);
+    await tester.tap(find.text('Edit community'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextField, 'Choir'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).at(0), 'Sunday Choir');
+    await tester.enterText(find.byType(TextField).at(1), 'Practice on Sundays');
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(api.updatedCommunity?.name, 'Sunday Choir');
+    expect(api.updatedCommunity?.image, isNull);
+    expect(find.text('Practice on Sundays'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Sunday Choir'), findsOneWidget);
+    expect(find.text('Practice on Sundays'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Sunday Choir'), findsOneWidget);
+  });
+
+  testWidgets('members can read community info without editing it',
+      (tester) async {
+    final api = _CommunityApiService();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        apiServiceProvider.overrideWithValue(api),
+        authProvider.overrideWith((ref) => _TestAuthNotifier(api)),
+        chatLiveProvider.overrideWith((_) => _TestChatLiveService(api)),
+      ],
+      child: MaterialApp(
+        home: CommunityDetailScreen(
+          community: Community(
+            id: 'community-1',
+            creatorId: 'another-user',
+            name: 'Choir',
+            description: 'Practice on Sundays',
+            createdAt: DateTime.utc(2026),
+            status: 'active',
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choir'));
+    await tester.pumpAndSettle();
+    expect(find.text('Practice on Sundays'), findsOneWidget);
+    expect(find.text('Edit community'), findsNothing);
+  });
+
   testWidgets('Joined shows active memberships and administered communities',
       (tester) async {
     final api = _CommunityApiService(communities: [

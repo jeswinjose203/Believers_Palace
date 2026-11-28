@@ -5,6 +5,7 @@ import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import 'forgot_password_screen.dart';
 import 'signup_screen.dart';
+import '../widgets/user_error.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -44,7 +45,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // the home widget to MainScreen.
       await ref.read(authProvider.notifier).login(email, password);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = userErrorMessage(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

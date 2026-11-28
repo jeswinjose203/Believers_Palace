@@ -1187,6 +1187,14 @@ URL here.
 Success: 201 Created -> community object; the creator is made an active admin.
 Errors: 400 bad_request
 
+11.2a Edit community details (admin only)
+Method: PUT  URL: /api/communities/{communityId}
+Body: { "name": "Choir", "description": "Updated description",
+        "image": "https://.../community-image.jpg" }
+Send a null image to remove the current picture.
+Success: 200 OK -> updated community object
+Errors: 400 bad_request, 403 forbidden
+
 11.3 Request membership
 Method: POST  URL: /api/communities/{communityId}/requests
 Success: 201 Created -> pending membership request

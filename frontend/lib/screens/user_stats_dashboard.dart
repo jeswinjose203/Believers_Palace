@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/app_locale.dart';
 import '../services/api_service.dart';
 import 'admin_users_screen.dart' show roleLabel;
+import '../widgets/user_error.dart';
 
 /// A small dashboard summarizing user counts by role, shown at the top of the
 /// admin Users tab. Counts are derived from the paginated `/users` endpoint's
@@ -66,7 +67,10 @@ class _UserStatsDashboardState extends ConsumerState<UserStatsDashboard> {
         if (snapshot.hasError) {
           return Padding(
             padding: const EdgeInsets.all(16),
-            child: Text(context.tr('Could not load stats: {0}', [snapshot.error])),
+            child: Text(context.tr(userErrorMessage(
+              snapshot.error,
+              fallback: 'Could not load stats. Please try again.',
+            ))),
           );
         }
         final stats = snapshot.data!;

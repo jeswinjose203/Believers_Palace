@@ -5,6 +5,7 @@ import '../../../l10n/app_locale.dart';
 import '../../../core/api_client.dart';
 import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
+import '../../../widgets/user_error.dart';
 
 class EnrollFormScreen extends ConsumerStatefulWidget {
   final CatechismClass catechismClass;
@@ -73,10 +74,10 @@ class _EnrollFormScreenState extends ConsumerState<EnrollFormScreen> {
       } else if (e.statusCode == 403) {
         _msg('You do not have permission to enroll.');
       } else {
-        _msg(e.message);
+        if (mounted) showUserError(context, e);
       }
     } catch (e) {
-      _msg(e.toString());
+      if (mounted) showUserError(context, e);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

@@ -1,14 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/api_client.dart';
 import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../services/chat_live_service.dart';
 import '../services/social_api.dart';
 import 'social_post.dart' show SharedPostMessage;
+import '../widgets/user_error.dart';
 
 class DirectMessagesScreen extends ConsumerWidget {
   const DirectMessagesScreen({super.key});
@@ -112,7 +116,7 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
         if (mounted) setState(() => _account = account);
       }
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = userErrorMessage(error));
     } finally {
       if (mounted) {
         setState(() {
@@ -143,7 +147,7 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
       }
     } catch (error) {
       if (mounted && version == _searchVersion) {
-        setState(() => _searchError = error.toString());
+        setState(() => _searchError = userErrorMessage(error));
       }
     } finally {
       if (mounted && version == _searchVersion) {
@@ -196,7 +200,7 @@ class _InboxState extends ConsumerState<_Inbox> with WidgetsBindingObserver {
         await _load();
       }
     } catch (error) {
-      if (mounted) _showError(context, error);
+      if (mounted) showUserError(context, error);
     }
   }
 
@@ -330,6 +334,10 @@ class _Conversation extends ConsumerStatefulWidget {
 class _ConversationState extends ConsumerState<_Conversation>
     with WidgetsBindingObserver {
   final _text = TextEditingController();
+  final _scroll = ScrollController();
+  final _outbox = <SocialRow>[];
+  late final Future<SharedPreferences> _outboxReady;
+  String get _outboxKey => 'direct.outbox.${widget.userId}.${widget.peerId}';
   late String _threadId = widget.threadId;
   List<SocialRow> _messages = [];
   int? _before;
@@ -339,14 +347,20 @@ class _ConversationState extends ConsumerState<_Conversation>
   bool _refreshPending = false;
   bool _reset = false;
   String? _error;
-  ({String body, String id})? _retry;
+  int _peerReadThrough = 0;
+  int _markedReadThrough = 0;
+  bool _markingRead = false;
   Timer? _poll;
+  Timer? _retrySend;
   late final StreamSubscription<ChatChange?> _live;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _scroll.addListener(_markVisibleRead);
+    _outboxReady = _restoreOutbox();
+    unawaited(_flushOutbox());
     _load();
     _startFallback();
     _live = ref.read(chatLiveProvider).watch('direct', widget.userId).listen(
@@ -374,6 +388,7 @@ class _ConversationState extends ConsumerState<_Conversation>
     if (state == AppLifecycleState.resumed) {
       _reset = true;
       _load();
+      unawaited(_flushOutbox());
     }
   }
 
@@ -381,7 +396,9 @@ class _ConversationState extends ConsumerState<_Conversation>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _text.dispose();
+    _scroll.dispose();
     _poll?.cancel();
+    _retrySend?.cancel();
     unawaited(_live.cancel());
     super.dispose();
   }
@@ -407,6 +424,9 @@ class _ConversationState extends ConsumerState<_Conversation>
           await api.messages(_threadId, before: older ? _before : null);
       if (!mounted) return;
       setState(() {
+        if (page.peerReadThrough > _peerReadThrough) {
+          _peerReadThrough = page.peerReadThrough;
+        }
         final newest = page.items;
         final prior = _messages;
         final keepTail = !reset &&
@@ -422,8 +442,9 @@ class _ConversationState extends ConsumerState<_Conversation>
         if (older || !keepTail) _before = page.before;
         _error = null;
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _markVisibleRead());
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = userErrorMessage(error));
     } finally {
       if (mounted) {
         setState(() {
@@ -441,27 +462,112 @@ class _ConversationState extends ConsumerState<_Conversation>
   Future<void> _send() async {
     final draft = _text.text;
     final body = draft.trim();
-    if (_sending || body.isEmpty) return;
-    final attempt = _retry ??= (body: body, id: newChatMessageId());
-    final pending =
-        attempt.body == body ? attempt : (body: body, id: newChatMessageId());
-    _retry = pending;
-    setState(() => _sending = true);
+    if (body.isEmpty) return;
+    final prefs = await _outboxReady;
+    if (!mounted || _text.text != draft) return;
+    _text.clear();
+    setState(() => _outbox.add({
+          'clientId': newChatMessageId(),
+          'senderId': widget.userId,
+          'body': body,
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
+        }));
+    await _saveOutbox(prefs);
+    unawaited(_flushOutbox());
+  }
+
+  Future<SharedPreferences> _restoreOutbox() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_outboxKey);
+    if (mounted && raw != null) {
+      setState(() => _outbox.addAll((jsonDecode(raw) as List).cast<SocialRow>()));
+    }
+    return prefs;
+  }
+
+  Future<void> _saveOutbox(SharedPreferences prefs) => _outbox.isEmpty
+      ? prefs.remove(_outboxKey)
+      : prefs.setString(_outboxKey, jsonEncode(_outbox));
+
+  Future<void> _flushOutbox() async {
+    final prefs = await _outboxReady;
+    if (!mounted || _sending || _outbox.isEmpty) return;
+    _retrySend?.cancel();
+    _sending = true;
     try {
-      final id = await ref.read(socialApiProvider).send(
-            widget.peerId,
-            pending.body,
-            pending.id,
-          );
-      if (!mounted) return;
-      _threadId = id;
-      _retry = null;
-      if (_text.text == draft) _text.clear();
-      await _load();
-    } catch (error) {
-      if (mounted) _showError(context, error);
+      while (mounted && _outbox.isNotEmpty) {
+        final pending = _outbox.first;
+        try {
+          final result = await ref
+              .read(socialApiProvider)
+              .sendMessage(
+                widget.peerId,
+                pending['body'] as String,
+                pending['clientId'] as String,
+              )
+              .timeout(const Duration(seconds: 10));
+          if (!mounted) return;
+          _threadId = result['id'] as String;
+          setState(() {
+            _outbox.removeAt(0);
+            if (result['message'] case final SocialRow message) {
+              if (!_messages.any((row) => row['seq'] == message['seq'])) {
+                _messages = [message, ..._messages];
+              }
+              _loaded = true;
+            }
+          });
+          await _saveOutbox(prefs);
+          if (mounted) unawaited(_load());
+        } on ApiException catch (error) {
+          if (!mounted) return;
+          if (error.statusCode >= 500 ||
+              error.statusCode == 429 ||
+              error.statusCode == 408) {
+            _retrySend = Timer(const Duration(seconds: 10), _flushOutbox);
+            return;
+          }
+          setState(() => _outbox.removeAt(0));
+          if (_text.text.isEmpty) _text.text = pending['body'] as String;
+          showUserError(context, error);
+          await _saveOutbox(prefs);
+        } catch (_) {
+          if (mounted) {
+            _retrySend = Timer(const Duration(seconds: 5), _flushOutbox);
+          }
+          return;
+        }
+      }
     } finally {
-      if (mounted) setState(() => _sending = false);
+      _sending = false;
+    }
+  }
+
+  Future<void> _markVisibleRead() async {
+    if (!mounted ||
+        _markingRead ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        (WidgetsBinding.instance.lifecycleState != null &&
+            WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) ||
+        !_scroll.hasClients ||
+        _scroll.offset > 48) {
+      return;
+    }
+    final latestIncoming = _messages
+        .where((message) => message['senderId'] != widget.userId)
+        .firstOrNull?['seq'] as int?;
+    if (latestIncoming == null || latestIncoming <= _markedReadThrough) return;
+    _markingRead = true;
+    var marked = false;
+    try {
+      await ref.read(socialApiProvider).markRead(_threadId, latestIncoming);
+      _markedReadThrough = latestIncoming;
+      marked = true;
+    } catch (_) {
+      // Retry when the conversation refreshes or returns to the newest messages.
+    } finally {
+      _markingRead = false;
+      if (mounted && marked) unawaited(_markVisibleRead());
     }
   }
 
@@ -487,17 +593,24 @@ class _ConversationState extends ConsumerState<_Conversation>
                       TextButton(onPressed: _load, child: Text(context.tr('Retry'))),
                 ),
               Expanded(
-                child: !_loaded
+                child: !_loaded && _outbox.isEmpty
                     ? const Center(child: CircularProgressIndicator())
-                    : _messages.isEmpty
+                    : _messages.isEmpty && _outbox.isEmpty
                         ? Center(child: Text(context.tr('Start the conversation.')))
                         : ListView.builder(
+                            controller: _scroll,
                             reverse: true,
                             padding: const EdgeInsets.all(12),
                             itemCount:
-                                _messages.length + (_before == null ? 0 : 1),
+                                _outbox.length + _messages.length +
+                                    (_before == null ? 0 : 1),
                             itemBuilder: (context, index) {
-                              if (index == _messages.length) {
+                              if (index < _outbox.length) {
+                                return _bubble(
+                                    context, _outbox[_outbox.length - 1 - index]);
+                              }
+                              final messageIndex = index - _outbox.length;
+                              if (messageIndex == _messages.length) {
                                 return TextButton(
                                   onPressed: _loading
                                       ? null
@@ -505,7 +618,7 @@ class _ConversationState extends ConsumerState<_Conversation>
                                   child: Text(context.tr('Load earlier messages')),
                                 );
                               }
-                              return _bubble(context, _messages[index]);
+                              return _bubble(context, _messages[messageIndex]);
                             },
                           ),
               ),
@@ -528,7 +641,7 @@ class _ConversationState extends ConsumerState<_Conversation>
                     ),
                     IconButton(
                       tooltip: context.tr('Send message'),
-                      onPressed: _sending ? null : _send,
+                      onPressed: _send,
                       icon: const Icon(Icons.send),
                     ),
                   ],
@@ -541,10 +654,12 @@ class _ConversationState extends ConsumerState<_Conversation>
 
   Widget _bubble(BuildContext context, SocialRow message) {
     final mine = message['senderId'] == widget.userId;
+    final seq = message['seq'] as int?;
+    final seen = seq != null && seq <= _peerReadThrough;
     final colors = Theme.of(context).colorScheme;
     final sent = DateTime.parse(message['createdAt'] as String).toLocal();
     return Align(
-      key: ValueKey(message['seq']),
+      key: ValueKey(seq ?? message['clientId']),
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -558,8 +673,23 @@ class _ConversationState extends ConsumerState<_Conversation>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SharedPostMessage(message['body'] as String),
-                Text(DateFormat.MMMd(context.dateLocale).add_jm().format(sent),
-                    style: Theme.of(context).textTheme.labelSmall),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(DateFormat.MMMd(context.dateLocale).add_jm().format(sent),
+                        style: Theme.of(context).textTheme.labelSmall),
+                    if (mine) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        seq == null ? Icons.check : Icons.done_all,
+                        color: seen ? Colors.blue : colors.onSurfaceVariant,
+                        size: 16,
+                        semanticLabel: context.tr(
+                            seen ? 'Seen' : (seq == null ? 'Pending' : 'Sent')),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
@@ -567,10 +697,4 @@ class _ConversationState extends ConsumerState<_Conversation>
       ),
     );
   }
-}
-
-void _showError(BuildContext context, Object error) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(error.toString())),
-  );
 }

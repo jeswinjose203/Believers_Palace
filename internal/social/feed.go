@@ -11,6 +11,7 @@ import (
 	"believers_palace/internal/httpx"
 	"believers_palace/internal/media"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 )
 
 type pageCursor struct {
@@ -55,6 +56,91 @@ type post struct {
 
 func verificationRequired(w http.ResponseWriter) {
 	httpx.ErrorCode(w, 403, "Verify your phone number to post.", "post_verification_required")
+}
+
+func (h *Handler) myPosts(w http.ResponseWriter, r *http.Request) {
+	cursor, ok := readCursor(w, r)
+	if !ok {
+		return
+	}
+	var at *time.Time
+	var id *string
+	if cursor.ID != "" {
+		at, id = &cursor.At, &cursor.ID
+	}
+	rows, err := h.db.Query(r.Context(), `SELECT `+postColumns+`
+		FROM social_posts p JOIN users u ON u.id=p.author_id
+		WHERE p.author_id=$1 AND ($2::timestamptz IS NULL OR (p.created_at,p.id)<($2,$3::uuid))
+		ORDER BY p.created_at DESC,p.id DESC LIMIT $4`, viewer(r), at, id, feedPageSize+1)
+	if err != nil {
+		failure(w, err)
+		return
+	}
+	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (post, error) {
+		return h.scanPost(row)
+	})
+	if err != nil {
+		failure(w, err)
+		return
+	}
+	result := map[string]any{"data": items}
+	if len(items) > feedPageSize {
+		last := items[feedPageSize-1]
+		result["data"] = items[:feedPageSize]
+		result["nextCursor"] = (pageCursor{last.CreatedAt, last.ID}).encode()
+	}
+	httpx.JSON(w, 200, result)
+}
+
+func (h *Handler) editPost(w http.ResponseWriter, r *http.Request) {
+	id := postID(w, r)
+	if id == "" {
+		return
+	}
+	var in struct{ Body, MediaKey string }
+	if !decode(w, r, &in) {
+		return
+	}
+	body := strings.TrimSpace(in.Body)
+	if utf8.RuneCountInString(body) > 4000 || (body == "" && in.MediaKey == "") ||
+		(in.MediaKey != "" && !mediaPattern.MatchString(in.MediaKey)) {
+		bad(w, "Enter up to 4,000 characters or attach an image or video.")
+		return
+	}
+	var updated string
+	err := h.db.QueryRow(r.Context(), `UPDATE social_posts SET body=$3,media_key=NULLIF($4,'')
+		WHERE id=$1 AND author_id=$2 AND ($4='' OR media_key=$4 OR EXISTS(
+			SELECT 1 FROM social_media WHERE key=$4 AND owner_id=$2))
+		RETURNING id`, id, viewer(r), body, in.MediaKey).Scan(&updated)
+	if err != nil {
+		failure(w, err)
+		return
+	}
+	changes := post{Body: body}
+	if in.MediaKey != "" {
+		changes.MediaKey = &in.MediaKey
+		changes.MediaURL = h.media.CDNURL(in.MediaKey)
+	}
+	httpx.JSON(w, 200, map[string]any{
+		"id": updated, "body": changes.Body, "mediaKey": changes.MediaKey, "mediaUrl": changes.MediaURL,
+	})
+}
+
+func (h *Handler) deletePost(w http.ResponseWriter, r *http.Request) {
+	id := postID(w, r)
+	if id == "" {
+		return
+	}
+	result, err := h.db.Exec(r.Context(), `DELETE FROM social_posts WHERE id=$1 AND author_id=$2`, id, viewer(r))
+	if err != nil {
+		failure(w, err)
+		return
+	}
+	if result.RowsAffected() == 0 {
+		failure(w, pgx.ErrNoRows)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {

@@ -11,6 +11,7 @@ import 'certificates_screen.dart';
 import 'churches_screen.dart';
 import 'my_bookings_screen.dart';
 import 'settings_screen.dart';
+import '../widgets/user_error.dart';
 
 const kProfilePurple = Color(0xFF5B2A91);
 const kProfilePurpleLight = Color(0xFF7B3FB5);
@@ -293,7 +294,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 if (dialogContext.mounted) Navigator.of(dialogContext).pop();
                 if (mounted) _toast(context.tr('Profile updated'));
               } catch (e) {
-                if (mounted) _toast(e.toString());
+                if (mounted) showUserError(context, e);
               }
             },
             child: Text(dialogContext.tr('Save')),
@@ -362,7 +363,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                     _toast(context.tr('Profile updated'));
                                   }
                                 } catch (e) {
-                                  if (mounted) _toast(e.toString());
+                                  if (mounted) showUserError(context, e);
                                 }
                               },
                         child: Text(dialogContext.tr('Save')),

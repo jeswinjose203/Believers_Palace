@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_locale.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../widgets/user_error.dart';
 
 const _kPurple = Color(0xFF702078);
 const _kPurpleDark = Color(0xFF55204F);
@@ -108,7 +109,7 @@ class _HallDetailScreenState extends ConsumerState<HallDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _booking = false);
-      _toast(e.toString());
+      if (mounted) showUserError(context, e);
     }
   }
 

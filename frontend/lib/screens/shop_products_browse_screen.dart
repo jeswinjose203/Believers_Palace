@@ -5,6 +5,7 @@ import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
 import 'shop_product_detail_screen.dart';
+import '../widgets/user_error.dart';
 
 class ShopProductsBrowseScreen extends ConsumerStatefulWidget {
   const ShopProductsBrowseScreen({super.key});
@@ -56,7 +57,7 @@ class _ShopProductsBrowseScreenState extends ConsumerState<ShopProductsBrowseScr
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = userErrorMessage(e);
         _loading = false;
       });
     }

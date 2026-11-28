@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"believers_palace/internal/auth"
 )
@@ -19,6 +20,7 @@ const (
 
 type store interface {
 	Create(context.Context, string, string, string, *string) (*Community, error)
+	Update(context.Context, string, string, CreateRequest) (*Community, error)
 	List(context.Context, string, ...ListOptions) ([]Community, error)
 	Get(context.Context, string) (*Community, error)
 	Membership(context.Context, string, string) (string, bool, error)
@@ -47,26 +49,41 @@ func NewService(repo store, users displayResolver) *Service {
 }
 
 func (s *Service) Create(ctx context.Context, id auth.Identity, in CreateRequest) (*Community, error) {
-	name := strings.TrimSpace(in.Name)
-	if name == "" {
-		return nil, &ValidationError{"community name is required"}
+	details, err := normalizeDetails(in)
+	if err != nil {
+		return nil, err
 	}
-	if len(name) > 100 {
-		return nil, &ValidationError{"community name is too long"}
+	return s.repo.Create(ctx, id.UserID, details.Name, details.Description, details.Image)
+}
+
+func (s *Service) Update(ctx context.Context, id auth.Identity, cid string, in CreateRequest) (*Community, error) {
+	details, err := normalizeDetails(in)
+	if err != nil {
+		return nil, err
 	}
-	if len(in.Description) > 2000 {
-		return nil, &ValidationError{"community description is too long"}
+	return s.repo.Update(ctx, cid, id.UserID, details)
+}
+
+func normalizeDetails(in CreateRequest) (CreateRequest, error) {
+	in.Name = strings.TrimSpace(in.Name)
+	in.Description = strings.TrimSpace(in.Description)
+	switch {
+	case in.Name == "":
+		return in, &ValidationError{"Enter a community name."}
+	case utf8.RuneCountInString(in.Name) > 100:
+		return in, &ValidationError{"Use up to 100 characters for the community name."}
+	case utf8.RuneCountInString(in.Description) > 2000:
+		return in, &ValidationError{"Use up to 2,000 characters for the description."}
 	}
-	image := in.Image
-	if image != nil {
-		trimmed := strings.TrimSpace(*image)
+	if in.Image != nil {
+		trimmed := strings.TrimSpace(*in.Image)
 		if trimmed == "" {
-			image = nil
+			in.Image = nil
 		} else {
-			image = &trimmed
+			in.Image = &trimmed
 		}
 	}
-	return s.repo.Create(ctx, id.UserID, name, strings.TrimSpace(in.Description), image)
+	return in, nil
 }
 
 func (s *Service) List(ctx context.Context, id auth.Identity, options ...ListOptions) ([]Community, error) {

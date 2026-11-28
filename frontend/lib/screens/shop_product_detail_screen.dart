@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
+import '../widgets/user_error.dart';
 
 class ShopProductDetailScreen extends ConsumerStatefulWidget {
   final String productId;
@@ -37,7 +38,7 @@ class _ShopProductDetailScreenState extends ConsumerState<ShopProductDetailScree
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = userErrorMessage(e);
         _loading = false;
       });
     }

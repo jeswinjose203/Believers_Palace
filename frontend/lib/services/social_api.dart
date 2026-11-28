@@ -43,6 +43,15 @@ class SocialApi {
 
   Future<SocialRow> me() => _client.getRaw('/social/me');
 
+  Future<SocialPage> myPosts({String? cursor}) =>
+      _page('/me/posts', {'cursor': cursor});
+
+  Future<SocialRow> editPost(String id, String body, String? mediaKey) =>
+      _client.patch('/social/posts/$id', (json) => json,
+          body: {'body': body, 'mediaKey': mediaKey ?? ''});
+
+  Future<void> deletePost(String id) => _client.delete('/social/posts/$id');
+
   Future<SocialRow> getPost(String id) => _client.getRaw('/social/posts/$id');
 
   Future<SocialPage> engagement(String id,
@@ -90,12 +99,27 @@ class SocialApi {
   Future<String> findThread(String peerId) => _client.get(
       '/social/people/$peerId/thread', (json) => json['id'] as String);
 
-  Future<SocialPage> messages(String threadId, {int? before}) => _page(
-      '/threads/$threadId/messages', {if (before != null) 'before': before});
+  Future<({List<SocialRow> items, int? before, int peerReadThrough})> messages(
+      String threadId, {int? before}) async {
+    final json = await _client.getRaw('/social/threads/$threadId/messages',
+        query: {if (before != null) 'before': before});
+    return (
+      items: (json['data'] as List).cast<SocialRow>(),
+      before: json['before'] as int?,
+      peerReadThrough: json['peerReadThrough'] as int? ?? 0,
+    );
+  }
 
-  Future<String> send(String peerId, String body, String clientId) =>
-      _client.post('/social/messages', (json) => json['id'] as String,
+  Future<void> markRead(String threadId, int through) => _client.put<void>(
+      '/social/threads/$threadId/read', (_) {},
+      body: {'through': through});
+
+  Future<SocialRow> sendMessage(String peerId, String body, String clientId) =>
+      _client.post('/social/messages', (json) => json,
           body: {'peerId': peerId, 'body': body, 'clientId': clientId});
+
+  Future<String> send(String peerId, String body, String clientId) async =>
+      (await sendMessage(peerId, body, clientId))['id'] as String;
 
   Future<void> deleteThread(String id) => _client.delete('/social/threads/$id');
 }

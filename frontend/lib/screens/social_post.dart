@@ -1,28 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_locale.dart';
 import '../config.dart';
 import '../services/api_service.dart';
 import '../services/chat_live_service.dart';
 import '../services/social_api.dart';
+import '../widgets/inline_post_video.dart';
+import '../widgets/user_error.dart';
 
 class SocialPostCard extends StatelessWidget {
   const SocialPostCard(
-      {super.key, required this.post, required this.react, this.onComment});
+      {super.key, required this.post, required this.react, this.onComment,
+      this.actions});
 
   final SocialRow post;
   final VoidCallback? react;
   final VoidCallback? onComment;
+  final Widget? actions;
 
   @override
   Widget build(BuildContext context) {
     final key = post['mediaKey'] as String?;
+    final mediaUrl = post['mediaUrl'] as String?;
     final url = key == null
         ? null
-        : Uri.parse(post['mediaUrl'] as String? ?? '$apiBaseUrl/media/$key');
+        : Uri.parse(mediaUrl == null || mediaUrl.isEmpty
+            ? '$apiBaseUrl/media/$key' : mediaUrl);
     final video =
         key?.endsWith('.mp4') == true || key?.endsWith('.webm') == true;
     final liked = post['liked'] as bool;
@@ -36,6 +41,7 @@ class SocialPostCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ListTile(
+            trailing: actions,
             leading: const CircleAvatar(child: Icon(Icons.person_outline)),
             title: Text(post['name'] as String),
             subtitle: Text(
@@ -58,19 +64,7 @@ class SocialPostCard extends StatelessWidget {
               ),
             ),
           if (url != null && video)
-            ListTile(
-              leading: const Icon(Icons.play_circle_outline, size: 32),
-              title: Text(context.tr('Play video')),
-              onTap: () async {
-                try {
-                  if (!await launchUrl(url) && context.mounted) {
-                    _showError(context, 'Could not open video.');
-                  }
-                } catch (error) {
-                  if (context.mounted) _showError(context, error);
-                }
-              },
-            ),
+            InlinePostVideo(key: ValueKey(url), url: url),
           Wrap(
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
@@ -169,7 +163,7 @@ class _EngagementSheetState extends ConsumerState<_EngagementSheet> {
         _cursor = page.cursor;
       });
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = userErrorMessage(error));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -199,7 +193,7 @@ class _EngagementSheetState extends ConsumerState<_EngagementSheet> {
       _input.clear();
       _draft = null;
     } catch (error) {
-      if (mounted) _showError(context, error);
+      if (mounted) showUserError(context, error);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -325,7 +319,7 @@ class _SharedPostScreenState extends ConsumerState<_SharedPostScreen> {
       await api.setLike(widget.id, post['liked'] != true);
       if (mounted) _reload();
     } catch (error) {
-      if (mounted) _showError(context, error);
+      if (mounted) showUserError(context, error);
     } finally {
       if (mounted) setState(() => _reacting = false);
     }
@@ -449,7 +443,7 @@ class _ShareSheetState extends ConsumerState<_ShareSheet> {
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = userErrorMessage(error));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -471,7 +465,7 @@ class _ShareSheetState extends ConsumerState<_ShareSheet> {
       }
       if (mounted) setState(() => _sent.add(key));
     } catch (error) {
-      if (mounted) _showError(context, error);
+      if (mounted) showUserError(context, error);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -595,8 +589,3 @@ Widget _sheet(BuildContext context,
         ),
       ),
     );
-
-void _showError(BuildContext context, Object error) {
-  ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(context.tr(error.toString()))));
-}

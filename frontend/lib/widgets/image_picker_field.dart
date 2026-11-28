@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/app_locale.dart';
 import '../services/api_service.dart';
+import 'user_error.dart';
 
 /// A reusable form field that lets the user pick an image from their device and
 /// uploads it to the backend. The resulting public URL (or null) is surfaced
@@ -67,12 +68,13 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
         type: FileType.image,
         withData: true, // load bytes so upload works on all platforms
       );
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
-      setState(() => _error = context.tr('Could not open picker: {0}', [e]));
+      setState(() => _error = userErrorMessage(error,
+          fallback: 'Could not open your files. Please try again.'));
       return;
     }
-    if (result == null || result.files.isEmpty) return; // cancelled
+    if (!mounted || result == null || result.files.isEmpty) return;
 
     final picked = result.files.single;
     final bytes = picked.bytes;
@@ -98,7 +100,7 @@ class _ImagePickerFieldState extends ConsumerState<ImagePickerField> {
       if (!mounted) return;
       setState(() {
         _uploading = false;
-        _error = e.toString();
+        _error = userErrorMessage(e);
       });
       widget.onUploadingChanged?.call(false);
     }

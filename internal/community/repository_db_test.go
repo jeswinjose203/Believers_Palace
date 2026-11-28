@@ -109,6 +109,47 @@ func TestDBCommunityImagePersists(t *testing.T) {
 	t.Fatal("created community is missing from the list")
 }
 
+func TestDBCommunityDetailsRequireActiveAdmin(t *testing.T) {
+	pool := newCommunityTestPool(t)
+	t.Cleanup(pool.Close)
+	cid, uid := seedCommunity(t, pool)
+	ctx := context.Background()
+	repo := NewRepository(pool)
+	image := "https://example.test/updated-community.jpg"
+	details := CreateRequest{Name: "Updated choir", Description: "Practice on Sundays", Image: &image}
+
+	if _, err := pool.Exec(ctx, `UPDATE community_memberships SET is_admin=false
+		WHERE community_id=$1 AND user_id=$2`, cid, uid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Update(ctx, cid, uid, details); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("regular member edited community: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE community_memberships SET is_admin=true
+		WHERE community_id=$1 AND user_id=$2`, cid, uid); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := repo.Update(ctx, cid, uid, details)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Name != details.Name || updated.Description != details.Description ||
+		updated.Image == nil || *updated.Image != image || !updated.IsAdmin || updated.Status != "active" {
+		t.Fatalf("unexpected update: %+v", updated)
+	}
+	details.Image = nil
+	if _, err := repo.Update(ctx, cid, uid, details); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := repo.Get(ctx, cid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Name != details.Name || persisted.Description != details.Description || persisted.Image != nil {
+		t.Fatalf("unexpected persisted details: %+v", persisted)
+	}
+}
+
 func TestDBConcurrentCommunityMessagesHaveGaplessCursor(t *testing.T) {
 	pool := newCommunityTestPool(t)
 	t.Cleanup(pool.Close)

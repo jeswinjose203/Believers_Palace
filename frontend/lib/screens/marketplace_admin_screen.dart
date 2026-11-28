@@ -5,6 +5,7 @@ import '../l10n/app_locale.dart';
 import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
 import '../widgets/multi_image_picker_field.dart';
+import '../widgets/user_error.dart';
 
 class MarketplaceAdminScreen extends StatefulWidget {
   const MarketplaceAdminScreen({super.key});
@@ -188,7 +189,7 @@ class _CategoriesTabState extends ConsumerState<_CategoriesTab> {
       _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        showUserError(context, e);
       }
     }
   }

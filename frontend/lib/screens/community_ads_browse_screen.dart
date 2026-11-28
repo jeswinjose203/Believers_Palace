@@ -6,6 +6,7 @@ import '../models/marketplace_models.dart';
 import '../services/api_service.dart';
 import 'community_ad_detail_screen.dart';
 import 'community_ad_form_screen.dart';
+import '../widgets/user_error.dart';
 
 class CommunityAdsBrowseScreen extends ConsumerStatefulWidget {
   const CommunityAdsBrowseScreen({super.key});
@@ -64,7 +65,7 @@ class _CommunityAdsBrowseScreenState extends ConsumerState<CommunityAdsBrowseScr
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = userErrorMessage(e);
         _loading = false;
       });
     }

@@ -16,6 +16,7 @@ import 'event_registrations_screen.dart';
 import '../features/catechism/screens/catechism_entry_screen.dart';
 import 'hall_detail_screen.dart';
 import 'marketplace_screen.dart';
+import '../widgets/user_error.dart';
 
 const _kPurple = Color(0xFF702078);
 const _kPurpleDark = Color(0xFF55204F);
@@ -87,12 +88,12 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loadError = e.toString());
+      setState(() => _loadError = userErrorMessage(e));
     }
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr(message))));
+    if (mounted) showUserError(context, message);
   }
 
   void _showSuccess(String message) {
@@ -363,7 +364,7 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
                   _showSuccess('Registered for event');
                 }
               } catch (e) {
-                _showError(e.toString());
+                _showError(userErrorMessage(e));
               }
             },
             child: Text(context.tr('Register')),
@@ -529,7 +530,7 @@ class _AnnouncementsTabState extends ConsumerState<_AnnouncementsTab> {
       widget.onSuccess('Saved');
       _refresh();
     } catch (e) {
-      widget.onError(e.toString());
+      widget.onError(userErrorMessage(e));
     }
   }
 
@@ -540,7 +541,7 @@ class _AnnouncementsTabState extends ConsumerState<_AnnouncementsTab> {
       widget.onSuccess('Deleted');
       _refresh();
     } catch (e) {
-      widget.onError(e.toString());
+      widget.onError(userErrorMessage(e));
     }
   }
 
@@ -772,7 +773,7 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
       widget.onSuccess('Saved');
       _refresh();
     } catch (e) {
-      widget.onError(e.toString());
+      widget.onError(userErrorMessage(e));
     }
   }
 
@@ -783,7 +784,7 @@ class _HallsTabState extends ConsumerState<_HallsTab> {
       widget.onSuccess('Deleted');
       _refresh();
     } catch (e) {
-      widget.onError(e.toString());
+      widget.onError(userErrorMessage(e));
     }
   }
 
@@ -1109,7 +1110,7 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
       widget.onSuccess('Saved');
       _refresh();
     } catch (e) {
-      widget.onError(e.toString());
+      widget.onError(userErrorMessage(e));
     }
   }
 
@@ -1142,7 +1143,7 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
       widget.onSuccess('Registration cancelled');
       _refresh();
     } catch (err) {
-      widget.onError(err.toString());
+      widget.onError(userErrorMessage(err));
     }
   }
 
@@ -1153,7 +1154,7 @@ class _EventsTabState extends ConsumerState<_EventsTab> {
       widget.onSuccess('Deleted');
       _refresh();
     } catch (err) {
-      widget.onError(err.toString());
+      widget.onError(userErrorMessage(err));
     }
   }
 
@@ -1401,7 +1402,7 @@ class _ManagedList<T> extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          return Center(child: Text(context.tr('Error: {0}', [snapshot.error])));
+          return Center(child: Text(context.tr(userErrorMessage(snapshot.error))));
         }
         final items = snapshot.data?.data ?? [];
         return Stack(
@@ -1510,7 +1511,7 @@ Future<bool> _showNewBookingDialog(
     final res = await ref.read(apiServiceProvider).listHalls(churchId, limit: 100);
     halls = res.data;
   } catch (e) {
-    onError(e.toString());
+    onError(userErrorMessage(e));
     return false;
   }
   if (!context.mounted) return false;
@@ -1593,7 +1594,7 @@ Future<bool> _showNewBookingDialog(
     onSuccess('Booking requested');
     return true;
   } catch (e) {
-    onError(e.toString());
+    onError(userErrorMessage(e));
     return false;
   }
 }
@@ -1949,7 +1950,7 @@ class _AboutTabState extends ConsumerState<_AboutTab> {
           );
         }
         if (snap.hasError) {
-          return Text(context.tr('Error: {0}', [snap.error]),
+          return Text(context.tr(userErrorMessage(snap.error)),
               style: const TextStyle(color: Colors.red));
         }
         final items = snap.data?.data ?? <T>[];

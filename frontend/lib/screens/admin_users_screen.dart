@@ -5,6 +5,7 @@ import '../l10n/app_locale.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import 'user_stats_dashboard.dart';
+import '../widgets/user_error.dart';
 
 const _roles = [
   'user',
@@ -99,7 +100,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
       _show(context.tr('Role updated to {0}', [context.tr(roleLabel(result))]));
       _refresh();
     } catch (e) {
-      _show(e.toString());
+      if (mounted) showUserError(context, e);
     }
   }
 
@@ -171,7 +172,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
-                      child: Center(child: Text(context.tr('Error: {0}', [snapshot.error]))),
+                      child: Center(child: Text(context.tr(userErrorMessage(snapshot.error)))),
                     ),
                   )
                 else if (users.isEmpty)

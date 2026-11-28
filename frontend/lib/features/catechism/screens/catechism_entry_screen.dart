@@ -9,6 +9,7 @@ import '../services/catechism_api.dart';
 import 'catechism_student_dashboard_screen.dart';
 import 'catechism_list_screen.dart';
 import 'catechism_workspace_screen.dart';
+import '../../../widgets/user_error.dart';
 
 class CatechismEntryScreen extends ConsumerWidget {
   const CatechismEntryScreen({super.key, required this.churchId});
@@ -139,7 +140,7 @@ class _TeacherAssignmentsState extends ConsumerState<_TeacherAssignments> {
           future: _classes,
           builder: (context, classes) {
             if (classes.hasError) {
-              return Center(child: Text(classes.error.toString()));
+              return Center(child: Text(userErrorMessage(classes.error)));
             }
             if (!classes.hasData) {
               return const Center(child: CircularProgressIndicator());
@@ -174,7 +175,7 @@ class _TeacherAssignmentsState extends ConsumerState<_TeacherAssignments> {
                       future: _members,
                       builder: (context, members) {
                         if (members.hasError) {
-                          return Center(child: Text(members.error.toString()));
+                          return Center(child: Text(userErrorMessage(members.error)));
                         }
                         if (!members.hasData) {
                           return const Center(
@@ -203,7 +204,7 @@ class _TeacherAssignmentsState extends ConsumerState<_TeacherAssignments> {
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(SnackBar(
-                                              content: Text(e.toString())));
+                                              content: Text(userErrorMessage(e))));
                                     }
                                   }
                                 })
@@ -257,9 +258,7 @@ class _TeacherRequestsScreenState
       if (mounted) setState(_load);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
-        );
+        showUserError(context, error);
       }
     }
   }
@@ -269,7 +268,7 @@ class _TeacherRequestsScreenState
           future: _requests,
           builder: (context, requestsSnapshot) {
             if (requestsSnapshot.hasError) {
-              return Center(child: Text(requestsSnapshot.error.toString()));
+              return Center(child: Text(userErrorMessage(requestsSnapshot.error)));
             }
             if (!requestsSnapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
@@ -285,7 +284,7 @@ class _TeacherRequestsScreenState
               future: _classes,
               builder: (context, classesSnapshot) {
                 if (classesSnapshot.hasError) {
-                  return Center(child: Text(classesSnapshot.error.toString()));
+                  return Center(child: Text(userErrorMessage(classesSnapshot.error)));
                 }
                 if (!classesSnapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/app_locale.dart';
 import '../services/api_service.dart';
+import '../widgets/user_error.dart';
 
 /// Completes a password reset: the user supplies the token they received plus a
 /// new password. On success all existing sessions are invalidated server-side,
@@ -63,7 +64,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       // Pop back to the login screen (root of the auth stack).
       Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = userErrorMessage(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

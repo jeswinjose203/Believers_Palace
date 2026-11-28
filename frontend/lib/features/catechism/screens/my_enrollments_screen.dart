@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../l10n/app_locale.dart';
-import '../../../core/api_client.dart';
 import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
 import '../widgets/status_chip.dart';
+import '../../../widgets/user_error.dart';
 
 class MyEnrollmentsScreen extends ConsumerStatefulWidget {
   const MyEnrollmentsScreen({super.key});
@@ -50,9 +50,9 @@ class _MyEnrollmentsScreenState extends ConsumerState<MyEnrollmentsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('Withdrawn'))));
         setState(_reload);
       }
-    } on ApiException catch (err) {
+    } catch (err) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err.message)));
+        showUserError(context, err);
       }
     }
   }
@@ -76,7 +76,7 @@ class _MyEnrollmentsScreenState extends ConsumerState<MyEnrollmentsScreen> {
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       children: [
-                        Text(context.tr('Error: {0}', [snap.error])),
+                        Text(context.tr(userErrorMessage(snap.error))),
                         FilledButton(onPressed: () => setState(_reload), child: Text(context.tr('Retry'))),
                       ],
                     ),

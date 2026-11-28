@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_locale.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../widgets/user_error.dart';
 
 class MyBookingsScreen extends ConsumerStatefulWidget {
   const MyBookingsScreen({super.key});
@@ -41,11 +42,11 @@ class _MyBookingsScreenState extends ConsumerState<MyBookingsScreen> {
       if (mounted) _show(context.tr('Booking cancelled'));
       _refresh();
     } catch (e) {
-      _show(e.toString(), isError: true);
+      if (mounted) showUserError(context, e);
     }
   }
 
-  void _show(String msg, {bool isError = false}) {
+  void _show(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg)),
     );
@@ -62,7 +63,7 @@ class _MyBookingsScreenState extends ConsumerState<MyBookingsScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text(context.tr('Error: {0}', [snapshot.error])));
+            return Center(child: Text(context.tr(userErrorMessage(snapshot.error))));
           }
           final bookings = snapshot.data?.data ?? [];
           if (bookings.isEmpty) {

@@ -8,6 +8,7 @@ import '../services/api_service.dart';
 import '../widgets/image_picker_field.dart';
 import '../widgets/multi_image_picker_field.dart';
 import 'church_detail_screen.dart';
+import '../widgets/user_error.dart';
 
 class ChurchesScreen extends ConsumerStatefulWidget {
   /// When true, shows a prompt and a "Select" action so the user can choose
@@ -62,7 +63,7 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      _show(e.toString());
+      if (mounted) showUserError(context, e);
     }
   }
 
@@ -111,7 +112,7 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
       if (mounted) _show(context.tr('Church deleted'));
       _refresh();
     } catch (e) {
-      _show(e.toString());
+      if (mounted) showUserError(context, e);
     }
   }
 
@@ -188,7 +189,7 @@ class _ChurchesScreenState extends ConsumerState<ChurchesScreen> {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
-                      child: Text(context.tr('Error: {0}', [snapshot.error])),
+                      child: Text(context.tr(userErrorMessage(snapshot.error))),
                     ),
                   );
                 }
@@ -386,7 +387,7 @@ class _ChurchFormDialogState extends ConsumerState<ChurchFormDialog> {
     } catch (e) {
       setState(() {
         _saving = false;
-        _error = e.toString();
+        _error = userErrorMessage(e);
       });
     }
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'core/auth_provider.dart';
 import 'l10n/app_locale.dart';
@@ -11,6 +12,8 @@ import 'screens/login_screen.dart';
 import 'screens/main_screen.dart';
 
 void main() {
+  VisibilityDetectorController.instance.updateInterval =
+      const Duration(milliseconds: 100);
   runApp(const ProviderScope(child: BelieversPalaceApp()));
 }
 

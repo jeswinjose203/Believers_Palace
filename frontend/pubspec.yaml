@@ -18,6 +18,9 @@ dependencies:
   file_picker: ^10.3.10
   path_provider: ^2.1.4
   url_launcher: ^6.3.1
+  video_player: ^2.11.1
+  video_player_win: ^3.3.2
+  visibility_detector: ^0.4.0+2
   table_calendar: ^3.2.0
   flutter_local_notifications: ^18.0.1
   timezone: ^0.9.4
@@ -31,6 +34,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.14.1
+  video_player_platform_interface: ^6.9.0
 
 flutter:
   uses-material-design: true

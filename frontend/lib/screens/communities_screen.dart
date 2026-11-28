@@ -14,6 +14,7 @@ import '../services/chat_notification_service.dart';
 import '../widgets/chat_notification_button.dart';
 import '../widgets/group_chat_bubble.dart';
 import '../widgets/image_picker_field.dart';
+import '../widgets/user_error.dart';
 
 class CommunitiesScreen extends ConsumerStatefulWidget {
   const CommunitiesScreen({super.key});
@@ -62,7 +63,7 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
       setState(() {
         _loading = false;
         _refreshing = false;
-        _error = e.toString();
+        _error = userErrorMessage(e);
       });
     }
   }
@@ -86,7 +87,7 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
       if (!mounted || version != _loadVersion) return;
       setState(() {
         _pages[joined] = (
-          items: [...page.items, ...next.items],
+          items: [..._pages[joined]!.items, ...next.items],
           nextCursor: next.nextCursor,
         );
       });
@@ -100,25 +101,19 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
   }
 
   Future<void> _create() async {
-    final values = await showDialog<_CreateCommunityValues>(
+    final api = ref.read(apiServiceProvider);
+    final community = await showDialog<Community>(
       context: context,
-      builder: (_) => const _CreateCommunityDialog(),
+      builder: (_) => _CommunityEditorDialog(
+        save: (name, description, image) =>
+            api.createCommunity(name, description, image: image),
+      ),
     );
-    if (values == null || values.name.isEmpty) return;
-    try {
-      final community = await ref.read(apiServiceProvider).createCommunity(
-            values.name,
-            values.description,
-            image: values.image,
-          );
-      if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => CommunityDetailScreen(community: community),
-      ));
-      _load();
-    } catch (e) {
-      if (mounted) _showError(e);
-    }
+    if (community == null || !mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => CommunityDetailScreen(community: community),
+    ));
+    _load();
   }
 
   Future<void> _open(Community community) async {
@@ -126,7 +121,10 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
     final notifications = ref.read(chatNotificationServiceProvider);
     if (user != null) notifications.markCommunityRead(user.id, community.id);
     final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => CommunityDetailScreen(community: community),
+      builder: (_) => CommunityDetailScreen(
+        community: community,
+        onCommunityChanged: _communityChanged,
+      ),
     ));
     if (mounted) {
       if (user != null) notifications.markCommunityRead(user.id, community.id);
@@ -134,8 +132,23 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
     }
   }
 
-  void _showError(Object error) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(error.toString())));
+  void _communityChanged(Community community) {
+    if (!mounted) return;
+    setState(() {
+      _pages.updateAll((_, page) => (
+            items: [
+              for (final current in page.items)
+                current.id == community.id ? community : current,
+            ],
+            nextCursor: page.nextCursor,
+          ));
+    });
+    if (_refreshing) _load();
+  }
+
+  void _showError(Object error) {
+    showUserError(context, error);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -230,13 +243,9 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
                   leading: _CommunityAvatar(community: community),
                   title: Text(community.name),
                   subtitle: preview == null
-                      ? Text(community.description.isEmpty
-                          ? label
-                          : '${community.description}\n$label')
+                      ? Text(context.tr(label))
                       : Text('${preview.author}: ${preview.text}',
                           maxLines: 1, overflow: TextOverflow.ellipsis),
-                  isThreeLine:
-                      preview == null && community.description.isNotEmpty,
                   trailing: preview == null
                       ? const Icon(Icons.chevron_right)
                       : Column(
@@ -268,18 +277,47 @@ class _CommunitiesScreenState extends ConsumerState<CommunitiesScreen> {
   }
 }
 
-class _CreateCommunityDialog extends StatefulWidget {
-  const _CreateCommunityDialog();
+class _CommunityEditorDialog extends StatefulWidget {
+  const _CommunityEditorDialog({this.community, required this.save});
+
+  final Community? community;
+  final Future<Community> Function(
+      String name, String description, String? image) save;
 
   @override
-  State<_CreateCommunityDialog> createState() => _CreateCommunityDialogState();
+  State<_CommunityEditorDialog> createState() => _CommunityEditorDialogState();
 }
 
-class _CreateCommunityDialogState extends State<_CreateCommunityDialog> {
-  final _name = TextEditingController();
-  final _description = TextEditingController();
-  String? _image;
+class _CommunityEditorDialogState extends State<_CommunityEditorDialog> {
+  late final _name = TextEditingController(text: widget.community?.name);
+  late final _description =
+      TextEditingController(text: widget.community?.description);
+  late String? _image = widget.community?.image;
   bool _imageUploading = false;
+  bool _saving = false;
+  String? _nameError;
+
+  Future<void> _save() async {
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      setState(() => _nameError = 'Enter a community name.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _nameError = null;
+    });
+    try {
+      final community =
+          await widget.save(name, _description.text.trim(), _image);
+      if (mounted) Navigator.pop(context, community);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      showUserError(context, error,
+          fallback: 'Could not save the community. Please try again.');
+    }
+  }
 
   @override
   void dispose() {
@@ -289,81 +327,88 @@ class _CreateCommunityDialogState extends State<_CreateCommunityDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(context.tr('Create community')),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _name,
-                maxLength: 100,
-                decoration: InputDecoration(labelText: context.tr('Name')),
-              ),
-              TextField(
-                controller: _description,
-                maxLength: 2000,
-                maxLines: 3,
-                decoration: InputDecoration(labelText: context.tr('Description')),
-              ),
-              ImagePickerField(
-                label: context.tr('Community picture (optional)'),
-                onChanged: (value) => setState(() => _image = value),
-                onUploadingChanged: (value) =>
-                    setState(() => _imageUploading = value),
-              ),
-            ],
+  Widget build(BuildContext context) => PopScope(
+        canPop: !_saving,
+        child: AlertDialog(
+          title: Text(context.tr(widget.community == null
+              ? 'Create community'
+              : 'Edit community')),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _name,
+                  enabled: !_saving,
+                  maxLength: 100,
+                  onChanged: (_) {
+                    if (_nameError != null) setState(() => _nameError = null);
+                  },
+                  decoration: InputDecoration(
+                    labelText: context.tr('Name'),
+                    errorText:
+                        _nameError == null ? null : context.tr(_nameError!),
+                  ),
+                ),
+                TextField(
+                  controller: _description,
+                  enabled: !_saving,
+                  maxLength: 2000,
+                  maxLines: 3,
+                  decoration:
+                      InputDecoration(labelText: context.tr('Description')),
+                ),
+                IgnorePointer(
+                  ignoring: _saving,
+                  child: ImagePickerField(
+                    label: context.tr('Community picture (optional)'),
+                    initialUrl: widget.community?.image,
+                    onChanged: (value) => setState(() => _image = value),
+                    onUploadingChanged: (value) =>
+                        setState(() => _imageUploading = value),
+                  ),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+                onPressed: _saving ? null : () => Navigator.pop(context),
+                child: Text(context.tr('Cancel'))),
+            FilledButton(
+                onPressed: _imageUploading || _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(context
+                        .tr(widget.community == null ? 'Create' : 'Save'))),
+          ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(context.tr('Cancel'))),
-          FilledButton(
-              onPressed: _imageUploading
-                  ? null
-                  : () => Navigator.pop(
-                        context,
-                        _CreateCommunityValues(
-                          name: _name.text.trim(),
-                          description: _description.text,
-                          image: _image,
-                        ),
-                      ),
-              child: Text(context.tr('Create'))),
-        ],
       );
-}
-
-class _CreateCommunityValues {
-  final String name;
-  final String description;
-  final String? image;
-
-  const _CreateCommunityValues({
-    required this.name,
-    required this.description,
-    this.image,
-  });
 }
 
 class _CommunityAvatar extends StatelessWidget {
   final Community community;
+  final double radius;
 
-  const _CommunityAvatar({required this.community});
+  const _CommunityAvatar({required this.community, this.radius = 20});
 
   @override
   Widget build(BuildContext context) {
     final image = community.image;
-    final initial = community.name.isEmpty ? '?' : community.name[0];
+    final initial =
+        community.name.isEmpty ? '?' : community.name.characters.first;
     return CircleAvatar(
+      radius: radius,
       child: image == null || image.isEmpty
           ? Text(initial.toUpperCase())
           : ClipOval(
               child: Image.network(
                 image,
-                width: 40,
-                height: 40,
+                width: radius * 2,
+                height: radius * 2,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Text(initial.toUpperCase()),
               ),
@@ -372,10 +417,88 @@ class _CommunityAvatar extends StatelessWidget {
   }
 }
 
+class _CommunityInfoScreen extends StatefulWidget {
+  const _CommunityInfoScreen({
+    required this.community,
+    required this.api,
+    required this.onChanged,
+  });
+
+  final Community community;
+  final ApiService api;
+  final ValueChanged<Community> onChanged;
+
+  @override
+  State<_CommunityInfoScreen> createState() => _CommunityInfoScreenState();
+}
+
+class _CommunityInfoScreenState extends State<_CommunityInfoScreen> {
+  late Community _community = widget.community;
+
+  Future<void> _edit() async {
+    final updated = await showDialog<Community>(
+      context: context,
+      builder: (_) => _CommunityEditorDialog(
+        community: _community,
+        save: (name, description, image) => widget.api.updateCommunity(
+          _community.id,
+          name,
+          description,
+          image: image,
+        ),
+      ),
+    );
+    if (updated == null || !mounted) return;
+    setState(() => _community = updated);
+    widget.onChanged(updated);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(context.tr('Community info'))),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Center(child: _CommunityAvatar(community: _community, radius: 44)),
+            const SizedBox(height: 12),
+            Text(
+              _community.name,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            if (_community.isAdmin && _community.status == 'active') ...[
+              const SizedBox(height: 12),
+              Center(
+                child: FilledButton.tonalIcon(
+                  onPressed: _edit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: Text(context.tr('Edit community')),
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            Text(context.tr('Description'),
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 6),
+            SelectableText(
+              _community.description.isEmpty
+                  ? context.tr('No description yet.')
+                  : _community.description,
+            ),
+          ],
+        ),
+      );
+}
+
 class CommunityDetailScreen extends ConsumerStatefulWidget {
   final Community community;
+  final ValueChanged<Community>? onCommunityChanged;
 
-  const CommunityDetailScreen({super.key, required this.community});
+  const CommunityDetailScreen({
+    super.key,
+    required this.community,
+    this.onCommunityChanged,
+  });
 
   @override
   ConsumerState<CommunityDetailScreen> createState() =>
@@ -405,6 +528,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
   int _unseen = 0;
   int _nextLocalId = 0;
   String? _error;
+  late Community _community = widget.community;
   late final bool _active =
       widget.community.status == 'active' || widget.community.isAdmin;
   Timer? _timer;
@@ -509,7 +633,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e.toString();
+        _error = userErrorMessage(e);
         _failures++;
       });
       _scheduleNext();
@@ -629,7 +753,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
         setState(() {
           _failures++;
           _offline = _failures >= 2;
-          if (_messages.isEmpty) _error = e.toString();
+          if (_messages.isEmpty) _error = userErrorMessage(e);
         });
       }
     } finally {
@@ -760,8 +884,24 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
         (user != null && message.userId == user.id);
   }
 
-  void _showError(Object error) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(error.toString())));
+  void _showError(Object error) {
+    showUserError(context, error);
+  }
+
+  void _openInfo() {
+    final api = _api;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _CommunityInfoScreen(
+        community: _community,
+        api: api,
+        onChanged: (updated) {
+          if (!mounted) return;
+          setState(() => _community = updated);
+          widget.onCommunityChanged?.call(updated);
+        },
+      ),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -775,21 +915,29 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
             : 'Request to join';
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            _CommunityAvatar(community: widget.community),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(widget.community.name,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text(subtitle, style: Theme.of(context).textTheme.labelSmall),
-                ],
-              ),
+        title: Tooltip(
+          message: context.tr('Community info'),
+          child: InkWell(
+            onTap: _openInfo,
+            borderRadius: BorderRadius.circular(8),
+            child: Row(
+              children: [
+                _CommunityAvatar(community: _community),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_community.name,
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(subtitle,
+                          style: Theme.of(context).textTheme.labelSmall),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
         actions: [
           if (_active)
@@ -847,15 +995,6 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                 )
               : const SizedBox(width: double.infinity),
         ),
-        if (widget.community.description.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(widget.community.description,
-                  style: Theme.of(context).textTheme.bodySmall),
-            ),
-          ),
         if (widget.community.isAdmin) _adminPanel(),
         Expanded(child: _chat()),
         _composer(),
@@ -870,9 +1009,7 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
     }
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(widget.community.description.isEmpty
-            ? context.tr('Request to join this community.')
-            : widget.community.description),
+        Text(context.tr('Request to join this community.')),
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: _join,

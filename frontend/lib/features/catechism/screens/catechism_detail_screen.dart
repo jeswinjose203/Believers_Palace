@@ -12,6 +12,7 @@ import 'catechism_workspace_screen.dart';
 import 'manage_class_form_screen.dart';
 import 'manage_enrollments_screen.dart';
 import 'session_form_screen.dart';
+import '../../../widgets/user_error.dart';
 
 class CatechismDetailScreen extends ConsumerStatefulWidget {
   final String classId;
@@ -104,7 +105,7 @@ class _CatechismDetailScreenState extends ConsumerState<CatechismDetailScreen> {
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       children: [
-                        Text(context.tr('Error: {0}', [snapshot.error])),
+                        Text(context.tr(userErrorMessage(snapshot.error))),
                         const SizedBox(height: 12),
                         FilledButton(onPressed: _refresh, child: Text(context.tr('Retry'))),
                       ],

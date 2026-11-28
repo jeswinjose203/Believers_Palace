@@ -133,6 +133,20 @@ func TestSocialWorkflowsDB(t *testing.T) {
 	if !found {
 		t.Fatal("Expected the liked post with its attachment")
 	}
+	if rows := call(bob, "GET", "/me/posts", "", 200)["data"].([]any); len(rows) != 0 {
+		t.Fatalf("Another author's post appeared in My Posts: %v", rows)
+	}
+	if rows := call(alice, "GET", "/me/posts", "", 200)["data"].([]any); len(rows) != 1 || rows[0].(map[string]any)["id"] != first {
+		t.Fatalf("Author's post missing from My Posts: %v", rows)
+	}
+	edit := fmt.Sprintf(`{"body":"Updated post","mediaKey":%q}`, asset.FileName)
+	call(bob, "PATCH", postPath, edit, 404)
+	call(bob, "DELETE", postPath, "", 404)
+	call(alice, "PATCH", postPath, `{"body":" "}`, 400)
+	call(alice, "PATCH", postPath, edit, 200)
+	if post := call(alice, "GET", postPath, "", 200); post["body"] != "Updated post" || post["mediaKey"] != asset.FileName || post["comments"] != float64(1) {
+		t.Fatalf("Unexpected edited post: %v", post)
+	}
 	call(bob, "DELETE", postPath+"/like", "", 200)
 	call(bob, "DELETE", postPath+"/like", "", 200)
 	if post := call(alice, "GET", postPath, "", 200); post["likes"] != float64(0) {
@@ -199,6 +213,8 @@ func TestSocialWorkflowsDB(t *testing.T) {
 	if len(moreComments["data"].([]any)) != concurrentComments+1-30 {
 		t.Fatalf("Unexpected second comment page size: %v", moreComments)
 	}
+	call(alice, "DELETE", postPath, "", 204)
+	call(alice, "GET", postPath, "", 404)
 
 	send := func(who, peer, body string, key int) string {
 		t.Helper()
@@ -210,6 +226,18 @@ func TestSocialWorkflowsDB(t *testing.T) {
 		t.Fatal("Expected the same thread on retry")
 	}
 	history := "/threads/" + thread + "/messages"
+	readPath := "/threads/" + thread + "/read"
+	call(other, "PUT", readPath, `{"through":9}`, 200)
+	if got := call(alice, "GET", history, "", 200)["peerReadThrough"]; got != float64(0) {
+		t.Fatalf("a non-participant changed the read receipt: %v", got)
+	}
+	call(bob, "PUT", readPath, `{"through":9}`, 200)
+	if got := call(alice, "GET", history, "", 200)["peerReadThrough"]; got != float64(1) {
+		t.Fatalf("expected recipient read receipt to stop at message 1, got %v", got)
+	}
+	if got := call(bob, "GET", history, "", 200)["peerReadThrough"]; got != float64(0) {
+		t.Fatalf("expected sender and recipient receipts to be independent, got %v", got)
+	}
 	size := func(who, path string) int {
 		return len(call(who, "GET", path, "", 200)["data"].([]any))
 	}

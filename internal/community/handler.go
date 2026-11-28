@@ -21,6 +21,7 @@ func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.list)
 	r.Post("/", h.create)
+	r.Put("/{communityId}", h.update)
 	r.Post("/{communityId}/requests", h.request)
 	r.Get("/{communityId}/requests", h.requests)
 	r.Post("/{communityId}/requests/{requestId}/approve", h.approve)
@@ -68,6 +69,24 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, c)
+}
+
+func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
+	var in CreateRequest
+	if err := httpx.DecodeJSON(r, &in); err != nil {
+		httpx.ErrorCode(w, http.StatusBadRequest, "Enter valid community details.", "bad_request")
+		return
+	}
+	c, err := h.svc.Update(r.Context(), auth.MustFromContext(r.Context()), chi.URLParam(r, "communityId"), in)
+	if errors.Is(err, ErrForbidden) {
+		httpx.ErrorCode(w, http.StatusForbidden, "Only community admins can edit this community.", "forbidden")
+		return
+	}
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, c)
 }
 func (h *Handler) request(w http.ResponseWriter, r *http.Request) {
 	m, err := h.svc.Request(r.Context(), auth.MustFromContext(r.Context()), chi.URLParam(r, "communityId"))

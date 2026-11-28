@@ -9,6 +9,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import 'church_detail_screen.dart';
 import 'churches_screen.dart';
+import '../widgets/user_error.dart';
 
 const _ink = Color(0xFF302039);
 const _purple = Color(0xFF51205D);
@@ -65,9 +66,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        showUserError(context, e);
       }
     }
   }
@@ -153,7 +152,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           return const Padding(padding: EdgeInsets.all(36), child: Center(child: CircularProgressIndicator()));
                         }
                         if (snapshot.hasError) {
-                          return Padding(padding: const EdgeInsets.all(20), child: Center(child: Text(context.tr('Could not load churches: {0}', [snapshot.error]))));
+                          return Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Center(
+                              child: Text(context.tr(userErrorMessage(
+                                snapshot.error,
+                                fallback: 'Could not load churches. Please try again.',
+                              ))),
+                            ),
+                          );
                         }
                         final churches = snapshot.data?.data ?? const <Church>[];
                         if (churches.isEmpty) return Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(context.tr('No churches found.'))));

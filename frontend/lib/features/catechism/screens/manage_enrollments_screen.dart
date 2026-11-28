@@ -6,6 +6,7 @@ import '../../../l10n/app_locale.dart';
 import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
 import '../widgets/status_chip.dart';
+import '../../../widgets/user_error.dart';
 
 class ManageEnrollmentsScreen extends ConsumerStatefulWidget {
   final String classId;
@@ -42,7 +43,7 @@ class _ManageEnrollmentsScreenState extends ConsumerState<ManageEnrollmentsScree
       }
     } catch (err) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err.toString())));
+        showUserError(context, err);
       }
     }
   }
@@ -63,7 +64,7 @@ class _ManageEnrollmentsScreenState extends ConsumerState<ManageEnrollmentsScree
               return ListView(children: [
                 Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Text(context.tr('Error: {0}', [snap.error])),
+                  child: Text(context.tr(userErrorMessage(snap.error))),
                 ),
               ]);
             }

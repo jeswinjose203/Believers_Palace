@@ -8,6 +8,7 @@ import '../services/catechism_api.dart';
 import '../widgets/status_chip.dart';
 import 'catechism_list_screen.dart';
 import 'catechism_workspace_screen.dart';
+import '../../../widgets/user_error.dart';
 
 class CatechismStudentDashboardScreen extends ConsumerStatefulWidget {
   const CatechismStudentDashboardScreen({super.key, required this.churchId});
@@ -44,7 +45,7 @@ class _CatechismStudentDashboardScreenState
             if (snapshot.hasError) {
               return Center(
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text(snapshot.error.toString()),
+                  Text(userErrorMessage(snapshot.error)),
                   TextButton(
                     onPressed: () => setState(_load),
                     child: Text(context.tr('Retry')),

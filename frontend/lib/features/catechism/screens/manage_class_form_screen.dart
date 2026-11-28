@@ -5,6 +5,7 @@ import '../../../l10n/app_locale.dart';
 import '../../../widgets/image_picker_field.dart';
 import '../models/catechism_models.dart';
 import '../services/catechism_api.dart';
+import '../../../widgets/user_error.dart';
 
 class ManageClassFormScreen extends ConsumerStatefulWidget {
   final String churchId;
@@ -100,7 +101,7 @@ class _ManageClassFormScreenState extends ConsumerState<ManageClassFormScreen> {
       }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      _show(e.toString());
+      if (mounted) showUserError(context, e);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

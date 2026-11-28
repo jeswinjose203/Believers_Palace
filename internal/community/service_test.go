@@ -26,6 +26,17 @@ func (s *memoryStore) Create(_ context.Context, user, name, description string, 
 	s.members[c.ID][user] = &Membership{ID: "creator", CommunityID: c.ID, UserID: user, Status: "active", IsAdmin: true}
 	return c, nil
 }
+func (s *memoryStore) Update(ctx context.Context, cid, uid string, details CreateRequest) (*Community, error) {
+	status, admin, err := s.Membership(ctx, cid, uid)
+	if err != nil || status != "active" || !admin {
+		return nil, ErrForbidden
+	}
+	c := s.communities[cid]
+	c.Name, c.Description, c.Image = details.Name, details.Description, details.Image
+	updated := *c
+	updated.Status, updated.IsAdmin = status, admin
+	return &updated, nil
+}
 func (s *memoryStore) List(context.Context, string, ...ListOptions) ([]Community, error) {
 	out := make([]Community, 0, len(s.communities))
 	for _, c := range s.communities {

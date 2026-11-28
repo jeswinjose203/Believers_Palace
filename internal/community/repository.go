@@ -52,6 +52,28 @@ func (r *Repository) Create(ctx context.Context, userID, name, description strin
 	return &c, nil
 }
 
+func (r *Repository) Update(ctx context.Context, cid, userID string, details CreateRequest) (*Community, error) {
+	// Lock the admin membership for the duration of the update so a concurrent
+	// departure cannot revoke permission between authorization and the write.
+	c, err := scanCommunity(r.pool.QueryRow(ctx, `WITH admin AS MATERIALIZED (
+		SELECT community_id FROM community_memberships
+		WHERE community_id=$1 AND user_id=$2 AND status='active' AND is_admin
+		FOR SHARE
+	)
+	UPDATE communities c SET name=$3,description=$4,image=$5 FROM admin
+	WHERE c.id=admin.community_id
+	RETURNING c.id,c.creator_id,c.name,c.description,c.image,c.created_at`,
+		cid, userID, details.Name, details.Description, details.Image))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrForbidden
+	}
+	if err != nil {
+		return nil, fmt.Errorf("update community: %w", err)
+	}
+	c.Status, c.IsAdmin = "active", true
+	return c, nil
+}
+
 func (r *Repository) List(ctx context.Context, userID string, options ...ListOptions) ([]Community, error) {
 	query := `SELECT c.id,c.creator_id,c.name,c.description,c.image,c.created_at,
 		COALESCE(m.status,''),COALESCE(m.is_admin,false) FROM communities c

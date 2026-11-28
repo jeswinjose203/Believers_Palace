@@ -9,6 +9,7 @@ import '../l10n/app_locale.dart';
 import '../core/auth_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../widgets/user_error.dart';
 
 class CertificatesScreen extends ConsumerStatefulWidget {
   const CertificatesScreen({super.key});
@@ -36,12 +37,9 @@ class _CertificatesScreenState extends ConsumerState<CertificatesScreen> {
     await _future;
   }
 
-  void _show(String msg, {bool isError = false}) {
+  void _show(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: isError ? Colors.red.shade800 : null,
-      ),
+      SnackBar(content: Text(msg)),
     );
   }
 
@@ -52,7 +50,7 @@ class _CertificatesScreenState extends ConsumerState<CertificatesScreen> {
       await ref.read(apiServiceProvider).downloadCertificate(c.id, path);
       if (mounted) _show(context.tr('Saved to {0}', [path]));
     } catch (e) {
-      _show(e.toString(), isError: true);
+      if (mounted) showUserError(context, e);
     }
   }
 
@@ -78,7 +76,7 @@ class _CertificatesScreenState extends ConsumerState<CertificatesScreen> {
               _refresh();
             }
           } catch (e) {
-            _show(e.toString(), isError: true);
+            if (mounted) showUserError(this.context, e);
           }
         },
       ),
@@ -101,7 +99,7 @@ class _CertificatesScreenState extends ConsumerState<CertificatesScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text(context.tr('Error: {0}', [snapshot.error])));
+            return Center(child: Text(context.tr(userErrorMessage(snapshot.error))));
           }
           final certificates = snapshot.data?.data ?? [];
           if (certificates.isEmpty) {

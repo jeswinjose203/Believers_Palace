@@ -10,6 +10,7 @@ import '../models/calendar_models.dart';
 import '../providers/calendar_provider.dart';
 import '../services/api_service.dart';
 import '../services/calendar_reminder_sync.dart';
+import '../widgets/user_error.dart';
  
 class CalendarScreen extends ConsumerStatefulWidget {
   const CalendarScreen({super.key});
@@ -264,7 +265,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await _syncNotifications();
       if (mounted) _toast(context.tr('Event created'));
     } catch (e) {
-      _toast('$e');
+      if (mounted) showUserError(context, e);
     }
   }
  
@@ -311,7 +312,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await _syncNotifications();
       if (mounted) _toast(context.tr('Task updated'));
     } catch (e) {
-      _toast('$e');
+      if (mounted) showUserError(context, e);
     }
   }
 
@@ -358,7 +359,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await _syncNotifications();
       if (mounted) _toast(context.tr('Task added'));
     } catch (e) {
-      _toast('$e');
+      if (mounted) showUserError(context, e);
     }
   }
  
@@ -397,7 +398,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await ref.read(calendarProvider.notifier).refreshSchedule();
       if (mounted) _toast(context.tr('Goal created'));
     } catch (e) {
-      _toast('$e');
+      if (mounted) showUserError(context, e);
     }
   }
  
@@ -437,7 +438,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await ref.read(calendarProvider.notifier).refreshSchedule();
       if (mounted) _toast(context.tr('Goal updated'));
     } catch (e) {
-      _toast('$e');
+      if (mounted) showUserError(context, e);
     }
   }
  
@@ -480,7 +481,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         );
       }
     } catch (e) {
-      _toast('$e');
+      if (mounted) showUserError(context, e);
     }
   }
  
@@ -787,7 +788,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
     try {
       e = await api.getCalendarEvent(id);
     } catch (err) {
-      _toast('$err');
+      if (mounted) showUserError(context, err);
       return;
     }
     if (!mounted) return;
@@ -890,7 +891,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
       await _syncNotifications();
       if (mounted) _toast(context.tr('Event updated'));
     } catch (err) {
-      _toast('$err');
+      if (mounted) showUserError(context, err);
     }
   }
 

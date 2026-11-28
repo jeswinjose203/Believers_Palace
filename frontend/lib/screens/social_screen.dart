@@ -8,6 +8,7 @@ import 'social_post.dart';
 import '../core/auth_provider.dart';
 import '../services/chat_live_service.dart';
 import '../services/social_api.dart';
+import '../widgets/user_error.dart';
 import 'direct_messages_screen.dart';
 import 'signup_screen.dart';
 
@@ -24,6 +25,8 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
   String? _cursor;
   bool _busy = false;
   bool _started = false;
+  bool _mine = false;
+  bool _deleting = false;
   String? _error;
 
   @override
@@ -36,9 +39,11 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final page = await ref.read(socialApiProvider).feed(
-            cursor: more ? _cursor : null,
-          );
+      final api = ref.read(socialApiProvider);
+      final cursor = more ? _cursor : null;
+      final page = await (_mine
+          ? api.myPosts(cursor: cursor)
+          : api.feed(cursor: cursor));
       if (mounted) {
         setState(() {
           _posts = more ? [..._posts, ...page.items] : page.items;
@@ -47,7 +52,14 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) {
+        final message = userErrorMessage(error,
+            fallback: 'Could not load posts. Please try again.');
+        setState(() => _error = message);
+        if (_posts.isNotEmpty && ModalRoute.of(context)?.isCurrent == true) {
+          showUserError(context, message);
+        }
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -56,6 +68,68 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
         });
       }
     }
+  }
+
+  void _selectFeed(bool mine) {
+    if (_busy || _deleting || _mine == mine) return;
+    setState(() {
+      _mine = mine;
+      _posts = [];
+      _cursor = null;
+      _error = null;
+      _started = false;
+    });
+    _load();
+  }
+
+  Future<void> _delete(SocialRow post) async {
+    if (_deleting || _busy) return;
+    setState(() => _deleting = true);
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(context.tr('Delete post?')),
+          content:
+              Text(context.tr('Your post and its comments will be removed.')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(context.tr('Cancel')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(context.tr('Delete')),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      await ref.read(socialApiProvider).deletePost(post['id'] as String);
+      if (mounted) {
+        setState(() => _posts.removeWhere((item) => item['id'] == post['id']));
+        await _load();
+      }
+    } catch (error) {
+      if (mounted) {
+        showUserError(context, error,
+            fallback: 'Could not delete your post. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  Future<void> _edit(SocialRow post) async {
+    final changes = await Navigator.of(context).push<SocialRow>(
+      MaterialPageRoute(builder: (_) => _ComposeScreen(post: post)),
+    );
+    if (!mounted || changes == null) return;
+    setState(() {
+      for (final item in _posts.where((item) => item['id'] == post['id'])) {
+        item.addAll(changes);
+      }
+    });
   }
 
   Future<void> _react(SocialRow post) async {
@@ -77,7 +151,10 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
         });
       }
     } catch (error) {
-      if (mounted) showSocialError(context, error);
+      if (mounted) {
+        showUserError(context, error,
+            fallback: 'Could not update your like. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _reacting.remove(id));
     }
@@ -102,7 +179,7 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
               },
               child: Text(dialogContext.tr('Verify phone')),
             ),
-              TextButton(
+            TextButton(
               onPressed: () => Navigator.pop(dialogContext),
               child: Text(dialogContext.tr('Close')),
             ),
@@ -111,10 +188,10 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
       );
       return;
     }
-    final posted = await Navigator.of(context).push<bool>(
+    final posted = await Navigator.of(context).push<SocialRow>(
       MaterialPageRoute(builder: (_) => const _ComposeScreen()),
     );
-    if (posted == true && mounted) await _load();
+    if (posted != null && mounted) await _load();
   }
 
   @override
@@ -132,73 +209,121 @@ class _SocialScreenState extends ConsumerState<SocialScreen> {
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: _compose,
+          onPressed: _busy || _deleting ? null : _compose,
           icon: const Icon(Icons.add),
           label: Text(context.tr('Post')),
         ),
-        body: !_started
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: _load,
-                child: ListView.builder(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
-                  itemCount: _posts.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index < _posts.length) {
-                      final post = _posts[index];
-                      return SocialPostCard(
-                        key: ValueKey(post['id']),
-                        post: post,
-                        onComment: () {
-                          if (!mounted) return;
-                          setState(() {
-                            for (final current in _posts
-                                .where((entry) => entry['id'] == post['id'])) {
-                              current['comments'] =
-                                  (current['comments'] as int? ?? 0) + 1;
-                            }
-                          });
-                        },
-                        react: _reacting.contains(post['id'])
-                            ? null
-                            : () => _react(post),
-                      );
-                    }
-                    if (_error != null) {
-                      return ListTile(
-                        title: Text(context.tr(_error!)),
-                        trailing: TextButton(
-                          onPressed:
-                              _busy ? null : () => _load(more: _cursor != null),
-                          child: Text(context.tr('Retry')),
-                        ),
-                      );
-                    }
-                    if (_posts.isEmpty) {
-                      return ListTile(title: Text(context.tr('No posts yet.')));
-                    }
-                    if (_cursor != null) {
-                      return TextButton(
-                        onPressed: _busy ? null : () => _load(more: true),
-                        child: Text(_busy ? context.tr('Loading…') : context.tr('Load more')),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
-                ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: SegmentedButton<bool>(
+                segments: [
+                  ButtonSegment(value: false, label: Text(context.tr('Feed'))),
+                  ButtonSegment(
+                      value: true, label: Text(context.tr('My Posts'))),
+                ],
+                selected: {_mine},
+                onSelectionChanged: _busy || _deleting
+                    ? null
+                    : (value) => _selectFeed(value.single),
               ),
+            ),
+            Expanded(
+                child: !_started
+                    ? const Center(child: CircularProgressIndicator())
+                    : RefreshIndicator(
+                        onRefresh: () async {
+                          if (!_deleting) await _load();
+                        },
+                        child: ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+                          itemCount: _posts.length + 1,
+                          itemBuilder: (context, index) {
+                            if (index < _posts.length) {
+                              final post = _posts[index];
+                              return SocialPostCard(
+                                key: ValueKey(post['id']),
+                                post: post,
+                                actions: _mine
+                                    ? PopupMenuButton<String>(
+                                        tooltip: context.tr('Post options'),
+                                        enabled: !_busy && !_deleting,
+                                        onSelected: (action) {
+                                          if (action == 'edit') {
+                                            _edit(post);
+                                          } else {
+                                            _delete(post);
+                                          }
+                                        },
+                                        itemBuilder: (context) => [
+                                          PopupMenuItem(
+                                              value: 'edit',
+                                              child: Text(
+                                                  context.tr('Edit post'))),
+                                          PopupMenuItem(
+                                              value: 'delete',
+                                              child: Text(
+                                                  context.tr('Delete post'))),
+                                        ],
+                                      )
+                                    : null,
+                                onComment: () {
+                                  if (!mounted) return;
+                                  setState(() {
+                                    for (final current in _posts.where(
+                                        (entry) => entry['id'] == post['id'])) {
+                                      current['comments'] =
+                                          (current['comments'] as int? ?? 0) +
+                                              1;
+                                    }
+                                  });
+                                },
+                                react: _reacting.contains(post['id'])
+                                    ? null
+                                    : () => _react(post),
+                              );
+                            }
+                            if (_error != null) {
+                              return ListTile(
+                                title: Text(context.tr(_error!)),
+                                trailing: TextButton(
+                                  onPressed:
+                                      _busy || _deleting ? null : () => _load(),
+                                  child: Text(context.tr('Retry')),
+                                ),
+                              );
+                            }
+                            if (_cursor != null) {
+                              return TextButton(
+                                onPressed: _busy || _deleting
+                                    ? null
+                                    : () => _load(more: true),
+                                child: Text(_busy
+                                    ? context.tr('Loading…')
+                                    : context.tr('Load more')),
+                              );
+                            }
+                            if (_posts.isEmpty) {
+                              return ListTile(
+                                  title: Text(context.tr(_mine
+                                      ? 'You haven’t posted yet.'
+                                      : 'No posts yet.')));
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
+                      )),
+          ],
+        ),
       );
 }
 
-void showSocialError(BuildContext context, Object error) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(context.tr(error.toString()))),
-  );
-}
-
 class _ComposeScreen extends ConsumerStatefulWidget {
-  const _ComposeScreen();
+  const _ComposeScreen({this.post});
+
+  final SocialRow? post;
 
   @override
   ConsumerState<_ComposeScreen> createState() => _ComposeScreenState();
@@ -209,7 +334,15 @@ class _ComposeScreenState extends ConsumerState<_ComposeScreen> {
   final _clientId = newChatMessageId();
   PlatformFile? _file;
   String? _uploaded;
+  String? _existingMedia;
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _text.text = widget.post?['body'] as String? ?? '';
+    _existingMedia = widget.post?['mediaKey'] as String?;
+  }
 
   @override
   void dispose() {
@@ -227,23 +360,27 @@ class _ComposeScreenState extends ConsumerState<_ComposeScreen> {
       if (!mounted || result == null) return;
       final file = result.files.single;
       if (file.size > 25 * 1024 * 1024) {
-        showSocialError(context, 'Attachments can be up to 25 MB.');
+        showUserError(context, 'Attachments can be up to 25 MB.');
         return;
       }
       setState(() {
         _uploaded = null;
+        _existingMedia = null;
         _file = file;
       });
     } catch (error) {
-      if (mounted) showSocialError(context, error);
+      if (mounted) {
+        showUserError(context, error,
+            fallback: 'Could not open your files. Please try again.');
+      }
     }
   }
 
   Future<void> _publish() async {
     if (_busy) return;
     final body = _text.text.trim();
-    if (body.isEmpty && _file == null) {
-      showSocialError(context, 'Write something or attach an image or video.');
+    if (body.isEmpty && _file == null && _existingMedia == null) {
+      showUserError(context, 'Write something or attach an image or video.');
       return;
     }
     setState(() => _busy = true);
@@ -251,10 +388,23 @@ class _ComposeScreenState extends ConsumerState<_ComposeScreen> {
       final api = ref.read(socialApiProvider);
       final file = _file;
       if (file != null) _uploaded ??= await api.upload(file);
-      await api.post(body, _clientId, _uploaded);
-      if (mounted) Navigator.pop(context, true);
+      final media = _uploaded ?? _existingMedia;
+      final id = widget.post?['id'] as String?;
+      final SocialRow changes;
+      if (id == null) {
+        await api.post(body, _clientId, media);
+        changes = {};
+      } else {
+        changes = await api.editPost(id, body, media);
+      }
+      if (mounted) Navigator.pop(context, changes);
     } catch (error) {
-      if (mounted) showSocialError(context, error);
+      if (mounted) {
+        showUserError(context, error,
+            fallback: widget.post == null
+                ? 'Could not publish your post. Please try again.'
+                : 'Could not save your post. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -263,11 +413,12 @@ class _ComposeScreenState extends ConsumerState<_ComposeScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: Text(context.tr('New post')),
+          title:
+              Text(context.tr(widget.post == null ? 'New post' : 'Edit post')),
           actions: [
-              TextButton(
+            TextButton(
               onPressed: _busy ? null : _publish,
-              child: Text(_busy ? context.tr('Posting…') : context.tr('Publish')),
+              child: Text(context.tr(widget.post == null ? 'Publish' : 'Save')),
             ),
           ],
         ),
@@ -283,9 +434,9 @@ class _ComposeScreenState extends ConsumerState<_ComposeScreen> {
               decoration:
                   InputDecoration(hintText: context.tr('What’s on your mind?')),
             ),
-            if (_file case final file?)
+            if (_file != null || _existingMedia != null)
               ListTile(
-                title: Text(file.name),
+                title: Text(_file?.name ?? context.tr('Current attachment')),
                 trailing: IconButton(
                   tooltip: context.tr('Remove attachment'),
                   onPressed: _busy
@@ -293,6 +444,7 @@ class _ComposeScreenState extends ConsumerState<_ComposeScreen> {
                       : () => setState(() {
                             _file = null;
                             _uploaded = null;
+                            _existingMedia = null;
                           }),
                   icon: const Icon(Icons.close),
                 ),

@@ -68,6 +68,34 @@ func (h *Handler) inbox(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, 200, result)
 }
 
+func (h *Handler) markDirectRead(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Through int64 `json:"through"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if !validUUID(id) || in.Through < 1 {
+		bad(w, "Invalid conversation or read position.")
+		return
+	}
+	_, err := h.db.Exec(r.Context(), `WITH updated AS (
+        UPDATE direct_threads SET
+            read_a=CASE WHEN user_a=$2 THEN least(last_seq,$3) ELSE read_a END,
+            read_b=CASE WHEN user_b=$2 THEN least(last_seq,$3) ELSE read_b END
+        WHERE id=$1 AND $2 IN (user_a,user_b)
+            AND least(last_seq,$3)>CASE WHEN user_a=$2 THEN read_a ELSE read_b END
+        RETURNING CASE WHEN user_a=$2 THEN user_b ELSE user_a END AS peer
+    ) SELECT pg_notify('chat_changes',jsonb_build_object('kind','direct','id',peer)::text) FROM updated`,
+		id, viewer(r), in.Through)
+	if err != nil {
+		failure(w, err)
+		return
+	}
+	httpx.JSON(w, 200, map[string]bool{"ok": true})
+}
+
 func (h *Handler) findThread(w http.ResponseWriter, r *http.Request) {
 	peer := chi.URLParam(r, "id")
 	if !validUUID(peer) {
@@ -124,7 +152,14 @@ func (h *Handler) messages(w http.ResponseWriter, r *http.Request) {
 		failure(w, err)
 		return
 	}
-	result := map[string]any{"data": items}
+	var peerRead int64
+	err = h.db.QueryRow(r.Context(), `SELECT CASE WHEN user_a=$2 THEN read_b ELSE read_a END
+        FROM direct_threads WHERE id=$1 AND $2 IN (user_a,user_b)`, id, viewer(r)).Scan(&peerRead)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		failure(w, err)
+		return
+	}
+	result := map[string]any{"data": items, "peerReadThrough": peerRead}
 	if len(items) > messagePageSize {
 		result["data"] = items[:messagePageSize]
 		result["before"] = items[messagePageSize-1].Seq
@@ -160,7 +195,15 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		failure(w, err)
 		return
 	}
-	httpx.JSON(w, 201, map[string]string{"id": id})
+	var saved message
+	saved.SenderID, saved.Body = sender, body
+	if err := h.db.QueryRow(r.Context(), `SELECT seq,body,created_at FROM direct_messages
+        WHERE thread_id=$1 AND sender_id=$2 AND client_id=$3`, id, sender, in.ClientID).
+		Scan(&saved.Seq, &saved.Body, &saved.CreatedAt); err != nil {
+		failure(w, err)
+		return
+	}
+	httpx.JSON(w, 201, map[string]any{"id": id, "message": saved})
 }
 
 func (h *Handler) saveMessage(ctx context.Context, sender, peer, body, clientID string) (string, error) {

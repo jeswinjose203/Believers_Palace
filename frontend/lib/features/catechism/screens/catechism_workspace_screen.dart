@@ -7,8 +7,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../l10n/app_locale.dart';
-import '../../../core/api_client.dart';
 import '../services/catechism_api.dart';
+import '../../../widgets/user_error.dart';
 
 typedef _Row = Map<String, dynamic>;
 const _pageSize = 20;
@@ -1052,7 +1052,7 @@ class _WorkspaceData extends StatelessWidget {
 }
 
 String _errorMessage(Object? error) =>
-    error is ApiException ? error.message : 'Could not complete the request';
+    userErrorMessage(error, fallback: 'Could not complete the request');
 
 class _WorkspaceEditor extends StatefulWidget {
   const _WorkspaceEditor({

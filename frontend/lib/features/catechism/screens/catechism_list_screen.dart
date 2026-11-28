@@ -10,6 +10,7 @@ import '../widgets/class_card.dart';
 import 'catechism_detail_screen.dart';
 import 'manage_class_form_screen.dart';
 import 'my_enrollments_screen.dart';
+import '../../../widgets/user_error.dart';
 
 bool canManageCatechismContent(User? user, String churchId) {
   if (user == null) return false;
@@ -82,7 +83,7 @@ class _CatechismListScreenState extends ConsumerState<CatechismListScreen> {
     } catch (e) {
       if (!mounted || version != _loadVersion) return;
       setState(() {
-        _error = e.toString();
+        _error = userErrorMessage(e);
         _loading = false;
       });
     }
