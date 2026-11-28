@@ -40,7 +40,15 @@ func (h *Handler) ChurchRoutes() chi.Router {
 func (h *Handler) listTeacherCandidates(w http.ResponseWriter, r *http.Request) {
 	id := auth.MustFromContext(r.Context())
 	churchID := chi.URLParam(r, "churchId")
-	if !auth.CanManageChurch(id, churchID) { h.writeError(w, ErrForbidden); return }
+	allowed, err := h.canReviewTeacherRequests(r, id.UserID, churchID)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	if !allowed {
+		h.writeError(w, ErrForbidden)
+		return
+	}
 	classID := r.URL.Query().Get("classId")
 	rows, err := h.svc.repo.pool.Query(r.Context(), `SELECT u.id,u.name,u.email,EXISTS(SELECT 1 FROM catechism_teachers t JOIN catechism_classes c ON c.id=t.class_id WHERE t.user_id=u.id AND c.church_id=$1 AND ($2='' OR c.id::text=$2)) OR EXISTS(SELECT 1 FROM catechism_classes c WHERE c.teacher_user_id=u.id AND c.church_id=$1 AND ($2='' OR c.id::text=$2)) FROM users u WHERE u.church_id=$1 AND u.role='user' ORDER BY u.name,u.id`, churchID, classID)
 	if err != nil { h.writeError(w, err); return }; defer rows.Close()
@@ -51,11 +59,15 @@ func (h *Handler) listTeacherCandidates(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) assignTeacher(w http.ResponseWriter, r *http.Request) {
 	id := auth.MustFromContext(r.Context()); churchID := chi.URLParam(r,"churchId")
-	if !auth.CanManageChurch(id,churchID) { h.writeError(w,ErrForbidden); return }
+	allowed, err := h.canReviewTeacherRequests(r, id.UserID, churchID)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	if !allowed { h.writeError(w,ErrForbidden); return }
 	var in struct { UserID string `json:"userId"`; ClassID string `json:"classId"`; Remove bool `json:"remove"` }
 	if err:=httpx.DecodeJSON(r,&in); err!=nil || in.UserID=="" || in.ClassID=="" { h.writeError(w,invalid("select a member and class")); return }
 	var affected int64
-	var err error
 	if in.Remove {
 		var tag pgconn.CommandTag
 		tag, err = h.svc.repo.pool.Exec(r.Context(), `DELETE FROM catechism_teachers t USING catechism_classes c WHERE t.class_id=c.id AND c.id=$1 AND c.church_id=$2 AND t.user_id=$3`, in.ClassID, churchID, in.UserID)

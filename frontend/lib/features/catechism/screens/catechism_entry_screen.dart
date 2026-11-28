@@ -34,7 +34,8 @@ class CatechismEntryScreen extends ConsumerWidget {
                     context,
                     MaterialPageRoute(
                         builder: (_) => const CatechismTeacherScreen())))),
-        Card(
+        if (!isAdmin)
+          Card(
             child: ListTile(
                 leading: const Icon(Icons.family_restroom),
                 title: Text(context.tr('Enter as Student / Parent')),
@@ -121,24 +122,20 @@ class _TeacherAssignmentsState extends ConsumerState<_TeacherAssignments> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: Text(context.tr('Assign Catechism teachers')),
-          actions: [
-            IconButton(
-              tooltip: context.tr('Teacher requests'),
-              icon: const Icon(Icons.mark_email_unread_outlined),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      _TeacherRequestsScreen(churchId: widget.churchId),
-                ),
-              ),
-            ),
-          ],
-        ),
-        body: FutureBuilder<PaginatedResponse<CatechismClass>>(
+  Widget build(BuildContext context) => DefaultTabController(
+        length: 2,
+        child: Scaffold(
+        appBar: AppBar(title: Text(context.tr('Assign Catechism teachers'))),
+        body: Column(children: [
+          Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: TabBar(tabs: [
+              Tab(text: context.tr('Assignments')),
+              Tab(text: context.tr('Accept requests')),
+            ]),
+          ),
+          Expanded(child: TabBarView(children: [
+            FutureBuilder<PaginatedResponse<CatechismClass>>(
           future: _classes,
           builder: (context, classes) {
             if (classes.hasError) {
@@ -214,6 +211,10 @@ class _TeacherAssignmentsState extends ConsumerState<_TeacherAssignments> {
                       }))
             ]);
           },
+            ),
+            _TeacherRequestsScreen(churchId: widget.churchId),
+          ])),
+        ]),
         ),
       );
 }
@@ -264,9 +265,7 @@ class _TeacherRequestsScreenState
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(context.tr('Teacher requests'))),
-        body: FutureBuilder<Map<String, dynamic>>(
+  Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
           future: _requests,
           builder: (context, requestsSnapshot) {
             if (requestsSnapshot.hasError) {
@@ -375,6 +374,5 @@ class _TeacherRequestsScreenState
               },
             );
           },
-        ),
-      );
+        );
 }

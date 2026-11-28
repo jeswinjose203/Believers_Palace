@@ -8,7 +8,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../l10n/app_locale.dart';
 import '../../../core/api_client.dart';
-import '../../../core/auth_provider.dart';
 import '../services/catechism_api.dart';
 
 typedef _Row = Map<String, dynamic>;
@@ -98,13 +97,6 @@ class _CatechismTeacherScreenState
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
           title: Text(context.tr('Catechism teacher')),
-          actions: [
-            IconButton(
-              tooltip: context.tr('Sign out'),
-              icon: const Icon(Icons.logout),
-              onPressed: () => ref.read(authProvider.notifier).logout(),
-            ),
-          ],
         ),
         body: _WorkspaceData(
           future: _classes,
