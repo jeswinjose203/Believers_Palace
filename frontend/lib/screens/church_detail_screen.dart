@@ -131,24 +131,6 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
     }
   }
 
-  /// Heart action: make this the signed-in member's church.
-  Future<void> _setAsMyChurch() async {
-    final user = ref.read(authProvider).user;
-    if (user == null) return;
-    if (user.churchId == widget.church.id) {
-      _showSuccess('This is already your church');
-      return;
-    }
-    try {
-      await ref
-          .read(authProvider.notifier)
-          .updateProfile({'churchId': widget.church.id});
-      _showSuccess('Set as your church');
-    } catch (e) {
-      _showError(e.toString());
-    }
-  }
-
   void _openChangeChurch() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -175,7 +157,6 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
     final canManage = _canManage(user);
     final canManageContent = _canManageContent(user);
     final canBook = user?.role != 'super_admin';
-    final isMyChurch = user?.churchId == widget.church.id;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -189,13 +170,6 @@ class _ChurchDetailScreenState extends ConsumerState<ChurchDetailScreen>
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         actions: [
-          if (user?.role == 'user')
-            IconButton(
-              icon: Icon(isMyChurch ? Icons.favorite : Icons.favorite_border),
-              color: _kPurple,
-              tooltip: isMyChurch ? context.tr('Your church') : context.tr('Set as my church'),
-              onPressed: _setAsMyChurch,
-            ),
           PopupMenuButton<String>(
             tooltip: context.tr('More'),
             onSelected: (v) {
